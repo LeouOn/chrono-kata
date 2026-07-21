@@ -54,4 +54,15 @@ export interface LLMProvider {
     systemPrompt: string;
     signal?: AbortSignal;
   }): Promise<ChatResponse>;
+
+  /**
+   * Multi-message, tool-augmented completion. Reserved for v1.1 —
+   * throws UnimplementedError in v1 adapters.
+   */
+  chatWithTools?(input: {
+    messages: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>;
+    tools?: Array<{ name: string; description: string; input_schema: object }>;
+    systemPrompt?: string;
+    signal?: AbortSignal;
+  }): Promise<ChatResponse>;
 }

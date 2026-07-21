@@ -7,6 +7,33 @@ import { buildCoachUserText, buildWeeklyReflectionUserText } from './prompt-buil
 import { LLMException, LLMExceptionKind } from './types';
 import type { ProviderConfig } from './provider-config';
 
+const LLM_TIMEOUT_MS = 30_000;
+
+function combineSignals(signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
+  const defined = signals.filter((s): s is AbortSignal => s != null);
+  if (defined.length === 0) return undefined;
+  if (defined.length === 1) return defined[0]!;
+  // AbortSignal.any is supported in modern browsers and Node 20+.
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any(defined);
+  }
+  // Fallback: create a controller that aborts when any input aborts.
+  const controller = new AbortController();
+  for (const s of defined) {
+    if (s.aborted) {
+      controller.abort();
+      break;
+    }
+    s.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  return controller.signal;
+}
+
+function withTimeout(signal?: AbortSignal): AbortSignal | undefined {
+  const timeoutSignal = AbortSignal.timeout(LLM_TIMEOUT_MS);
+  return combineSignals([signal, timeoutSignal]);
+}
+
 export interface CoachCommentInput {
   currentSession: Session;
   recentSessions: Session[];
@@ -47,7 +74,7 @@ export async function generateCoachComment(
   const response = await provider.completeSingle({
     userText: buildCoachUserText(input.currentSession, input.recentSessions),
     systemPrompt,
-    signal: input.signal,
+    signal: withTimeout(input.signal),
   });
 
   if (!response.content) {
@@ -93,7 +120,7 @@ export async function generateWeeklyReflection(
   const response = await provider.completeSingle({
     userText: buildWeeklyReflectionUserText(input.sessions),
     systemPrompt,
-    signal: input.signal,
+    signal: withTimeout(input.signal),
   });
 
   if (!response.content) {
@@ -142,7 +169,7 @@ export async function suggestLabel(input: LabelSuggestionInput): Promise<string>
   const response = await provider.completeSingle({
     userText: `Note: "${input.note.slice(0, 500)}"\n\nSuggest a label:`,
     systemPrompt,
-    signal: input.signal,
+    signal: withTimeout(input.signal),
   });
 
   if (!response.content) throw new LLMException('Empty label response.');
