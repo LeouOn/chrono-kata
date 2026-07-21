@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { useNotificationReminder } from '@/hooks/useNotificationReminder';
+import { useNotificationReminderState } from '@/hooks/useNotificationReminder';
 import { parseTimeString, formatTimeString } from '@/lib/notifications/reminder';
 
 export function ReminderSettings() {
@@ -13,7 +13,7 @@ export function ReminderSettings() {
     setReminderTime,
     reminderTime,
     enabled,
-  } = useNotificationReminder();
+  } = useNotificationReminderState();
 
   const [pendingTime, setPendingTime] = useState<string>(reminderTime ?? '20:30');
 

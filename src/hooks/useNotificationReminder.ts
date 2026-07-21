@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { sessionRepo } from '@/lib/db/session.repo';
@@ -9,11 +9,23 @@ import { shouldFireReminder, getLastLogDate } from '@/lib/notifications/reminder
 
 type Permission = 'default' | 'granted' | 'denied' | 'unsupported';
 
-export function useNotificationReminder() {
+/**
+ * Module-level dedup state. Shared across ALL hook mounts so that even if
+ * `useNotificationReminderEffect` is somehow called more than once, only
+ * one notification fires per (date, time) slot.
+ */
+let lastFiredSlot: string | null = null;
+
+/**
+ * STATE hook — consumed by the Settings page UI. Returns permission,
+ * current reminder settings, and the actions to mutate them.
+ *
+ * Does NOT register an interval or focus listener.
+ */
+export function useNotificationReminderState() {
   const qc = useQueryClient();
   const { settings, updateSettings } = useSettings();
   const [permission, setPermission] = useState<Permission>('default');
-  const lastFiredKeyRef = useRef<string | null>(null);
 
   // Initialize permission state on mount.
   useEffect(() => {
@@ -37,7 +49,40 @@ export function useNotificationReminder() {
     return result;
   }, [updateSettings]);
 
-  // Check on tab focus + every 60s while open.
+  const setReminderTime = useCallback(async (time: string | null) => {
+    await updateSettings({ reminderTime: time });
+    qc.invalidateQueries({ queryKey: ['settings'] });
+  }, [updateSettings, qc]);
+
+  return {
+    permission,
+    requestPermission,
+    setReminderTime,
+    reminderTime: settings?.reminderTime ?? null,
+    enabled: settings?.notificationsEnabled ?? false,
+  };
+}
+
+/**
+ * EFFECT hook — consumed by `<NotificationRunner />` mounted in the (main) layout.
+ * Owns the interval + focus listener that fires `Notification` when the
+ * configured reminder time arrives and no session was logged today.
+ *
+ * Module-level `lastFiredSlot` dedupes across mounts. Safe to mount only once;
+ * mounting multiple times is harmless (both would compute the same slot key).
+ */
+export function useNotificationReminderEffect() {
+  const { settings } = useSettings();
+  const [permission, setPermission] = useState<Permission>('default');
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof Notification === 'undefined') {
+      setPermission('unsupported');
+      return;
+    }
+    setPermission(Notification.permission);
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     let cancelled = false;
@@ -58,10 +103,10 @@ export function useNotificationReminder() {
         lastSessionDate: lastDate,
         now,
       })) {
-        // Don't fire twice in the same (HH:MM) slot.
+        // Module-level dedup: same slot key means "already fired in this window".
         const slotKey = `${toLocalDateKey(now)} ${settings.reminderTime}`;
-        if (lastFiredKeyRef.current === slotKey) return;
-        lastFiredKeyRef.current = slotKey;
+        if (lastFiredSlot === slotKey) return;
+        lastFiredSlot = slotKey;
 
         new Notification('chrono-kata', {
           body: 'A small practice tonight — it counts.',
@@ -81,19 +126,6 @@ export function useNotificationReminder() {
       window.removeEventListener('focus', onFocus);
     };
   }, [settings, permission]);
-
-  const setReminderTime = useCallback(async (time: string | null) => {
-    await updateSettings({ reminderTime: time });
-    qc.invalidateQueries({ queryKey: ['settings'] });
-  }, [updateSettings, qc]);
-
-  return {
-    permission,
-    requestPermission,
-    setReminderTime,
-    reminderTime: settings?.reminderTime ?? null,
-    enabled: settings?.notificationsEnabled ?? false,
-  };
 }
 
 function toLocalDateKey(d: Date): string {
