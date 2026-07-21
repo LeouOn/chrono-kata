@@ -4,9 +4,15 @@ import { useSettings } from '@/hooks/useSettings';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { CalendarSettings } from '@/components/calendar/CalendarSettings';
+import {
+  type CoachPersonality,
+} from '@/lib/schemas/coach-personality';
+
+const DEFAULT_UNLOCKED: CoachPersonality[] = ['zen', 'hype', 'analyst', 'buddy'];
 
 export default function SettingsPage() {
   const { settings, updateSettings } = useSettings();
+  const unlocked = settings?.unlockedPersonalities ?? DEFAULT_UNLOCKED;
 
   return (
     <div className="space-y-4">
@@ -20,16 +26,22 @@ export default function SettingsPage() {
           {settings?.selectedCoachPersonality ?? '—'}
         </div>
         <div className="flex gap-2 flex-wrap">
-          {(['zen', 'hype', 'analyst', 'buddy'] as const).map((p) => (
+          {unlocked.map((p) => (
             <Button
               key={p}
               variant={settings?.selectedCoachPersonality === p ? 'primary' : 'ghost'}
               onClick={() => updateSettings({ selectedCoachPersonality: p })}
             >
               {p}
+              {p === 'athena' ? ' ✦' : ''}
             </Button>
           ))}
         </div>
+        {!unlocked.includes('athena') && (
+          <p className="text-text-muted text-xs mt-3 italic">
+            More voices may reveal themselves to the patient practitioner.
+          </p>
+        )}
       </Card>
 
       <CalendarSettings />
