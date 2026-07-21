@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { CalendarSettings } from '@/components/calendar/CalendarSettings';
 import { PWAInstallPrompt } from '@/components/ui/PWAInstallPrompt';
 import { DataTransfer } from '@/components/settings/DataTransfer';
+import { ReminderSettings } from '@/components/settings/ReminderSettings';
 import {
   type CoachPersonality,
 } from '@/lib/schemas/coach-personality';
@@ -49,6 +50,8 @@ export default function SettingsPage() {
       </Card>
 
       <CalendarSettings />
+
+      <ReminderSettings />
 
       <Card>
         <div className="text-text-muted text-xs uppercase tracking-wide mb-2">

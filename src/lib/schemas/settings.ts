@@ -9,6 +9,8 @@ export const SettingsSchema = z.object({
   googleCalendarId: z.string().nullable().optional(),
   googleCalendarSyncEnabled: z.boolean(),
   googleCalendarConnectedAt: z.date().nullable().optional(),
+  reminderTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  notificationsEnabled: z.boolean().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -22,4 +24,6 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   googleCalendarId: null,
   googleCalendarSyncEnabled: false,
   googleCalendarConnectedAt: null,
+  reminderTime: null,
+  notificationsEnabled: false,
 };
