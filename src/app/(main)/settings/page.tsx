@@ -4,6 +4,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { CalendarSettings } from '@/components/calendar/CalendarSettings';
+import { PWAInstallPrompt } from '@/components/ui/PWAInstallPrompt';
 import {
   type CoachPersonality,
 } from '@/lib/schemas/coach-personality';
@@ -17,6 +18,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <h1 className="font-serif text-2xl">Settings</h1>
+
+      <PWAInstallPrompt />
 
       <Card>
         <div className="text-text-muted text-xs uppercase tracking-wide mb-2">
