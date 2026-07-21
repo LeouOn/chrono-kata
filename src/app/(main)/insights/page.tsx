@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Heatmap } from '@/components/insights/Heatmap';
 import { ActivityBreakdown } from '@/components/insights/ActivityBreakdown';
 import { RatingTrends } from '@/components/insights/RatingTrends';
+import { MultiDimAverages } from '@/components/insights/MultiDimAverages';
 import { Card } from '@/components/ui/Card';
 import { sessionRepo } from '@/lib/db/session.repo';
 import { formatDuration } from '@/lib/utils/format';
@@ -47,6 +48,7 @@ export default function InsightsPage() {
 
       <Heatmap sessions={sessions} />
       <RatingTrends sessions={sessions} />
+      <MultiDimAverages sessions={sessions} />
       <ActivityBreakdown sessions={sessions} />
     </div>
   );
