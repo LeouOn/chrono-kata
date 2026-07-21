@@ -7,6 +7,7 @@ import { newId } from '@/lib/utils/id';
 export interface SessionRepository {
   getAll(): Promise<Session[]>;
   getByPeriod(start: Date, end: Date): Promise<Session[]>;
+  getById(id: string): Promise<Session | null>;
   watch(): { subscribe: (cb: (sessions: Session[]) => void) => () => void };
   save(input: SessionInput): Promise<Session>;
   update(id: string, patch: Partial<Session>): Promise<Session>;
@@ -23,6 +24,11 @@ export class DexieSessionRepository implements SessionRepository {
   async getByPeriod(start: Date, end: Date): Promise<Session[]> {
     const db = getDb();
     return db.sessions.where('startedAt').between(start, end, true, false).toArray();
+  }
+
+  async getById(id: string): Promise<Session | null> {
+    const result = await getDb().sessions.get(id);
+    return result ?? null;
   }
 
   watch() {
