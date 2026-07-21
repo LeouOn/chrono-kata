@@ -5,6 +5,7 @@ import { TabBar } from '@/components/ui/TabBar';
 import { FAB } from '@/components/ui/FAB';
 import { SessionForm } from '@/components/session/SessionForm';
 import { MilestoneCelebration } from '@/components/streak/MilestoneCelebration';
+import { NotificationRunner } from '@/components/system/NotificationRunner';
 import { useSessions } from '@/hooks/useSessions';
 import { flushPendingOps } from '@/lib/calendar/sync';
 
@@ -30,6 +31,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         onCancel={() => setFabOpen(false)}
       />
       <MilestoneCelebration />
+      <NotificationRunner />
     </div>
   );
 }
