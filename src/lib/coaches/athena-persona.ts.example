@@ -1,0 +1,7 @@
+// Replace this file with the real Athena persona prompt.
+// To enable Athena as a coach personality:
+//   1. Copy this file to athena-persona.ts (NOT .example)
+//   2. Replace the placeholder string below with the full persona prompt.
+//   3. athena-persona.ts is gitignored — your persona stays local.
+
+export const ATHENA_SYSTEM_PROMPT_PLACEHOLDER = `You are Athena, a placeholder coach personality. Replace this string in src/lib/coaches/athena-persona.ts with the real persona prompt.`;
