@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { RatingPicker } from './RatingPicker';
+import { MultiDimSlider } from './MultiDimSlider';
 import { Timer } from './Timer';
 import type { Session, SessionInput } from '@/lib/schemas/session';
-import type { Rating } from '@/lib/schemas/session';
+import type { Rating, MultiDimRating } from '@/lib/schemas/session';
 
 type Mode = 'timed' | 'reps';
 
@@ -25,6 +26,9 @@ export function SessionForm({ open, initial, onSave, onCancel }: Props) {
   );
   const [reps, setReps] = useState<number | null>(initial?.reps ?? null);
   const [rating, setRating] = useState<Rating | null>(initial?.rating ?? null);
+  const [focusRating, setFocusRating] = useState<MultiDimRating | null>(initial?.focusRating ?? null);
+  const [energyRating, setEnergyRating] = useState<MultiDimRating | null>(initial?.energyRating ?? null);
+  const [moodRating, setMoodRating] = useState<MultiDimRating | null>(initial?.moodRating ?? null);
   const [activityLabel, setActivityLabel] = useState(initial?.activityLabel ?? '');
   const [note, setNote] = useState(initial?.note ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +64,9 @@ export function SessionForm({ open, initial, onSave, onCancel }: Props) {
       rating,
       activityLabel: activityLabel.trim() || undefined,
       note: note.trim() || undefined,
+      focusRating,
+      energyRating,
+      moodRating,
     };
     onSave(input);
   }
@@ -162,6 +169,13 @@ export function SessionForm({ open, initial, onSave, onCancel }: Props) {
         <div>
           <div className="text-text-muted text-sm mb-2">Rating</div>
           <RatingPicker value={rating} onChange={setRating} />
+        </div>
+
+        {/* Multi-dimensional ratings */}
+        <div className="space-y-4 pt-2 border-t border-border">
+          <MultiDimSlider dimension="focus" value={focusRating} onChange={setFocusRating} />
+          <MultiDimSlider dimension="energy" value={energyRating} onChange={setEnergyRating} />
+          <MultiDimSlider dimension="mood" value={moodRating} onChange={setMoodRating} />
         </div>
 
         {/* Note */}
