@@ -4,6 +4,7 @@ import { type ReactNode, useState } from 'react';
 import { TabBar } from '@/components/ui/TabBar';
 import { FAB } from '@/components/ui/FAB';
 import { SessionForm } from '@/components/session/SessionForm';
+import { MilestoneCelebration } from '@/components/streak/MilestoneCelebration';
 import { useSessions } from '@/hooks/useSessions';
 
 export default function MainLayout({ children }: { children: ReactNode }) {
@@ -23,6 +24,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         }}
         onCancel={() => setFabOpen(false)}
       />
+      <MilestoneCelebration />
     </div>
   );
 }
