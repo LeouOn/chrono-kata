@@ -26,6 +26,7 @@ describe('ClaudeProvider', () => {
     });
 
     const provider = new ClaudeProvider({
+      providerName: 'claude',
       baseUrl: 'https://api.anthropic.com/v1',
       apiKey: 'sk-ant-test',
       model: 'claude-sonnet-4-20250514',
@@ -61,6 +62,7 @@ describe('ClaudeProvider', () => {
       )
     );
     const provider = new ClaudeProvider({
+      providerName: 'claude',
       baseUrl: 'https://api.anthropic.com/v1',
       apiKey: 'x',
       model: 'claude-sonnet-4-20250514',
@@ -76,6 +78,7 @@ describe('ClaudeProvider', () => {
   it('throws authFailed on 401', async () => {
     global.fetch = vi.fn(async () => new Response('', { status: 401 }));
     const provider = new ClaudeProvider({
+      providerName: 'claude',
       baseUrl: 'https://api.anthropic.com/v1',
       apiKey: 'bad',
       model: 'claude-sonnet-4-20250514',

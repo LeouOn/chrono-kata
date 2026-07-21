@@ -29,6 +29,7 @@ describe('OpenAICompatibleProvider', () => {
     });
 
     const provider = new OpenAICompatibleProvider({
+      providerName: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'sk-test',
       model: 'gpt-4o',
@@ -58,6 +59,7 @@ describe('OpenAICompatibleProvider', () => {
       new Response(JSON.stringify({ error: 'bad key' }), { status: 401 })
     );
     const provider = new OpenAICompatibleProvider({
+      providerName: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'bad',
       model: 'gpt-4o',
@@ -70,6 +72,7 @@ describe('OpenAICompatibleProvider', () => {
   it('throws rateLimited on 429', async () => {
     global.fetch = vi.fn(async () => new Response('', { status: 429 }));
     const provider = new OpenAICompatibleProvider({
+      providerName: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'x',
       model: 'gpt-4o',
@@ -92,6 +95,7 @@ describe('OpenAICompatibleProvider', () => {
       )
     );
     const provider = new OpenAICompatibleProvider({
+      providerName: 'deepseek',
       baseUrl: 'https://api.deepseek.com',
       apiKey: 'x',
       model: 'deepseek-v4-flash',
@@ -112,6 +116,7 @@ describe('OpenAICompatibleProvider', () => {
       )
     );
     const provider = new OpenAICompatibleProvider({
+      providerName: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'x',
       model: 'gpt-4o',

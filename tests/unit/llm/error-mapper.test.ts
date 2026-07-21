@@ -5,20 +5,21 @@ import { LLMExceptionKind } from '@/lib/llm/types';
 describe('mapResponseStatus', () => {
   it('401 → authFailed', () => {
     const e = mapResponseStatus(401, 'Unauthorized');
-    expect(e.kind).toBe(LLMExceptionKind.AuthFailed);
-    expect(e.message).toMatch(/Authentication failed/i);
+    expect(e).not.toBeNull();
+    expect(e!.kind).toBe(LLMExceptionKind.AuthFailed);
+    expect(e!.message).toMatch(/Authentication failed/i);
   });
 
   it('403 → authFailed', () => {
-    expect(mapResponseStatus(403, 'Forbidden').kind).toBe(LLMExceptionKind.AuthFailed);
+    expect(mapResponseStatus(403, 'Forbidden')!.kind).toBe(LLMExceptionKind.AuthFailed);
   });
 
   it('429 → rateLimited', () => {
-    expect(mapResponseStatus(429, 'Too Many Requests').kind).toBe(LLMExceptionKind.RateLimited);
+    expect(mapResponseStatus(429, 'Too Many Requests')!.kind).toBe(LLMExceptionKind.RateLimited);
   });
 
   it('500 → provider', () => {
-    expect(mapResponseStatus(500, 'Internal').kind).toBe(LLMExceptionKind.Provider);
+    expect(mapResponseStatus(500, 'Internal')!.kind).toBe(LLMExceptionKind.Provider);
   });
 
   it('200 → no throw (returns null)', () => {

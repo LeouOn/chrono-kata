@@ -28,6 +28,7 @@ describe('GeminiProvider', () => {
     });
 
     const provider = new GeminiProvider({
+      providerName: 'gemini',
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
       apiKey: 'gem-key',
       model: 'gemini-2.0-flash',
@@ -71,6 +72,7 @@ describe('GeminiProvider', () => {
       )
     );
     const provider = new GeminiProvider({
+      providerName: 'gemini',
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
       apiKey: 'x',
       model: 'gemini-2.0-flash',

@@ -1,5 +1,5 @@
 import type { ChatResponse, LLMProvider } from './types';
-import { LLMException } from './types';
+import { LLMException, StopReason } from './types';
 import { mapFetchError, mapResponseStatus } from './error-mapper';
 import type { ProviderConfig } from './provider-config';
 
@@ -97,7 +97,7 @@ export class ClaudeProvider implements LLMProvider {
 
     return {
       content: text,
-      stopReason: 'endTurn' as const,
+      stopReason: StopReason.EndTurn,
       thinking,
       usage: {
         promptTokens: json.usage?.input_tokens ?? 0,

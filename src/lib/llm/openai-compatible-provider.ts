@@ -1,5 +1,5 @@
 import type { ChatResponse, LLMProvider } from './types';
-import { LLMException } from './types';
+import { LLMException, StopReason } from './types';
 import { mapFetchError, mapResponseStatus } from './error-mapper';
 import type { ProviderConfig } from './provider-config';
 
@@ -93,7 +93,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     return {
       content: text,
-      stopReason: 'endTurn' as const,
+      stopReason: StopReason.EndTurn,
       thinking: thinking && thinking.trim() ? thinking : null,
       usage: {
         promptTokens: json.usage?.prompt_tokens ?? 0,
