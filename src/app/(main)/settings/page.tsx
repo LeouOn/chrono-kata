@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { CalendarSettings } from '@/components/calendar/CalendarSettings';
 import { PWAInstallPrompt } from '@/components/ui/PWAInstallPrompt';
+import { DataTransfer } from '@/components/settings/DataTransfer';
 import {
   type CoachPersonality,
 } from '@/lib/schemas/coach-personality';
@@ -58,6 +59,8 @@ export default function SettingsPage() {
           Wipes IndexedDB and reloads. Cannot be undone.
         </p>
       </Card>
+
+      <DataTransfer />
     </div>
   );
 }
