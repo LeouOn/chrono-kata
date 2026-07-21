@@ -53,7 +53,8 @@ describe('buildHeatmapData', () => {
     const empty = data.cells.find((c) => c.date === '2026-03-17')!;
     expect(empty.intensity).toBe(0);
     expect(mar16.intensity).toBe(4); // max
-    expect(mar15.intensity).toBeGreaterThan(0).and.toBeLessThan(4);
+    expect(mar15.intensity).toBeGreaterThan(0);
+    expect(mar15.intensity).toBeLessThan(4);
   });
 
   it('cells use local YYYY-MM-DD', () => {
