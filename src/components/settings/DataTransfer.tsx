@@ -76,6 +76,7 @@ export function DataTransfer() {
       <p className="text-text-muted text-sm mb-4">
         Export all data (sessions, reflections, settings) as JSON. API keys are stripped from exports for safety.
         Importing replaces ALL local data — existing API keys are preserved when the import file has empty key fields.
+        Any queued calendar-sync ops are also wiped (they&apos;re device-specific).
       </p>
       <div className="flex flex-wrap gap-2">
         <Button variant="ghost" onClick={handleExport}>Export JSON</Button>
@@ -94,7 +95,7 @@ export function DataTransfer() {
         title="Replace all data?"
         message={
           pendingImport
-            ? `This will WIPE all existing data and restore ${pendingImport.sessions} session${pendingImport.sessions === 1 ? '' : 's'} and ${pendingImport.reflections} reflection${pendingImport.reflections === 1 ? '' : 's'} from the file. Cannot be undone.`
+            ? `This will WIPE all existing data and restore ${pendingImport.sessions} session${pendingImport.sessions === 1 ? '' : 's'} and ${pendingImport.reflections} reflection${pendingImport.reflections === 1 ? '' : 's'} from the file. Any queued calendar-sync ops will also be discarded. Cannot be undone.`
             : ''
         }
         confirmLabel="Replace all"
