@@ -25,7 +25,7 @@ export default function ReflectPage() {
       <div className="space-y-3">
         {reflections.length === 0 && !isGenerating && (
           <p className="text-text-muted text-sm">
-            No reflections yet. Generate one based on your last 7 days of practice.
+            No reflections yet. After a week of practice, generate one to see your patterns mirrored back.
           </p>
         )}
         {reflections.map((r) => (
