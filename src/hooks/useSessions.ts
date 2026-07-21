@@ -8,6 +8,11 @@ import { settingsRepo } from '@/lib/db/settings.repo';
 import { computeStreak } from '@/lib/streak/compute-streak';
 import { generateCoachComment } from '@/lib/llm/llm-service';
 import { LLMException, LLMExceptionKind } from '@/lib/llm/types';
+import {
+  syncSessionCreateOrUpdate,
+  syncSessionDelete,
+  flushPendingOps,
+} from '@/lib/calendar/sync';
 import type { Session, SessionInput } from '@/lib/schemas/session';
 
 const KEY = ['sessions'] as const;
@@ -106,20 +111,31 @@ export function useSessions() {
       invalidateBoth();
       // Fire-and-forget coach comment (don't await; UI updates via liveQuery)
       void generateCoachCommentSideEffect(saved);
+      // Fire-and-forget calendar sync (enqueues on failure)
+      void syncSessionCreateOrUpdate(saved);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<Session> }) =>
       sessionRepo.update(id, patch),
-    onSettled: async () => {
+    onSettled: async (_data, _error, variables) => {
       await recomputeStreakSideEffect();
       invalidateBoth();
+      // Fire-and-forget: re-fetch the updated session and push to calendar
+      void (async () => {
+        const updated = await sessionRepo.getById(variables.id);
+        if (updated) void syncSessionCreateOrUpdate(updated);
+      })();
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => sessionRepo.delete(id),
+    mutationFn: async (id: string) => {
+      const session = await sessionRepo.getById(id);
+      if (session) void syncSessionDelete(session);
+      return sessionRepo.delete(id);
+    },
     onSettled: async () => {
       await recomputeStreakSideEffect();
       invalidateBoth();
