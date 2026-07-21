@@ -3,7 +3,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sessionRepo } from '@/lib/db/session.repo';
 import { streakRepo } from '@/lib/db/streak.repo';
+import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
+import { settingsRepo } from '@/lib/db/settings.repo';
 import { computeStreak } from '@/lib/streak/compute-streak';
+import { generateCoachComment } from '@/lib/llm/llm-service';
+import { LLMException, LLMExceptionKind } from '@/lib/llm/types';
 import type { Session, SessionInput } from '@/lib/schemas/session';
 
 const KEY = ['sessions'] as const;
@@ -20,6 +24,48 @@ async function recomputeStreakSideEffect() {
   });
   await streakRepo.save(next);
   return next;
+}
+
+async function generateCoachCommentSideEffect(session: Session): Promise<void> {
+  try {
+    const [llmSettings, appSettings, recent] = await Promise.all([
+      llmSettingsRepo.get(),
+      settingsRepo.get(),
+      sessionRepo.getAll(),
+    ]);
+
+    if (Object.keys(llmSettings.providers).length === 0) {
+      // No provider configured — leave coachComment null silently.
+      return;
+    }
+
+    const result = await generateCoachComment({
+      currentSession: session,
+      recentSessions: recent.filter((s) => s.id !== session.id).slice(0, 5),
+      personality: appSettings.selectedCoachPersonality,
+      displayName: appSettings.displayName,
+      llmSettings,
+    });
+
+    await sessionRepo.update(session.id, {
+      coachComment: result.comment,
+      coachPersonalityAtGeneration: result.personalityUsed,
+      failedLLM: false,
+    });
+    await llmSettingsRepo.incrementTokenUsage(result.promptTokens, result.completionTokens);
+  } catch (e) {
+    const failedLLM = true;
+    let errorMessage: string | undefined;
+    if (e instanceof LLMException) {
+      errorMessage = e.message;
+      // Don't log offline as a hard failure — it's expected.
+      if (e.kind === LLMExceptionKind.Offline) return;
+    } else {
+      errorMessage = e instanceof Error ? e.message : String(e);
+    }
+    console.warn('Coach comment generation failed:', errorMessage);
+    await sessionRepo.update(session.id, { failedLLM, coachComment: null });
+  }
 }
 
 export function useSessions() {
@@ -55,9 +101,11 @@ export function useSessions() {
     onError: (_e, _input, ctx) => {
       if (ctx) qc.setQueryData(KEY, ctx.previous);
     },
-    onSettled: async () => {
+    onSuccess: async (saved) => {
       await recomputeStreakSideEffect();
       invalidateBoth();
+      // Fire-and-forget coach comment (don't await; UI updates via liveQuery)
+      void generateCoachCommentSideEffect(saved);
     },
   });
 
@@ -84,5 +132,6 @@ export function useSessions() {
     createSession: createMutation.mutateAsync,
     updateSession: updateMutation.mutateAsync,
     deleteSession: deleteMutation.mutateAsync,
+    retryCoachComment: generateCoachCommentSideEffect,
   };
 }
