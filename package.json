@@ -1,0 +1,52 @@
+{
+  "name": "chrono-kata",
+  "version": "1.0.0",
+  "description": "A personal practice tracker. Time, reps, rating.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "precommit": "npm run typecheck && npm run test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
+    "dexie": "^4.4.4",
+    "lucide-react": "^1.25.0",
+    "motion": "^12.42.2",
+    "next": "^15.5.21",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-hook-form": "^7.82.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@serwist/next": "^9.5.11",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitest/ui": "^2.1.9",
+    "autoprefixer": "^10.5.4",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.11",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^29.1.1",
+    "postcss": "^8.5.21",
+    "serwist": "^9.5.11",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

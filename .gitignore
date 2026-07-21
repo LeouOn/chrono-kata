@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.codegraph/
+.env.local
+.env*.local
+*.log
+src/lib/coaches/athena-persona.ts
+.vscode/
+.idea/
+coverage/
+playwright-report/
+test-results/
