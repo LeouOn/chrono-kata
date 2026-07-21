@@ -1,0 +1,71 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { resetDbForTesting, type ChronoKataDB } from '@/lib/db/db';
+import { DexieSessionRepository } from '@/lib/db/session.repo';
+import type { SessionInput } from '@/lib/schemas/session';
+
+let db: ChronoKataDB;
+let repo: DexieSessionRepository;
+
+beforeEach(async () => {
+  db = await resetDbForTesting();
+  repo = new DexieSessionRepository();
+});
+
+const validInput: SessionInput = {
+  startedAt: new Date('2026-07-21T10:00:00Z'),
+  endedAt: new Date('2026-07-21T10:30:00Z'),
+  durationMinutes: 30,
+  reps: null,
+  rating: 4,
+  activityLabel: 'meditation',
+  note: 'still mind',
+};
+
+describe('DexieSessionRepository', () => {
+  it('saves a session and assigns id + timestamps', async () => {
+    const saved = await repo.save(validInput);
+    expect(saved.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(saved.createdAt).toBeInstanceOf(Date);
+    expect(saved.coachComment).toBeNull();
+    expect(saved.calendarEventId).toBeNull();
+  });
+
+  it('getAll returns sessions in reverse chronological order', async () => {
+    await repo.save({ ...validInput, startedAt: new Date('2026-07-20T10:00:00Z') });
+    await repo.save({ ...validInput, startedAt: new Date('2026-07-21T10:00:00Z') });
+    const all = await repo.getAll();
+    expect(all).toHaveLength(2);
+    expect(all[0]!.startedAt.getTime()).toBeGreaterThan(all[1]!.startedAt.getTime());
+  });
+
+  it('getByPeriod returns sessions in the date range', async () => {
+    await repo.save({ ...validInput, startedAt: new Date('2026-07-15T10:00:00Z') });
+    await repo.save({ ...validInput, startedAt: new Date('2026-07-20T10:00:00Z') });
+    const result = await repo.getByPeriod(
+      new Date('2026-07-18T00:00:00Z'),
+      new Date('2026-07-22T00:00:00Z')
+    );
+    expect(result).toHaveLength(1);
+  });
+
+  it('update mutates only patched fields and bumps updatedAt', async () => {
+    const saved = await repo.save(validInput);
+    const originalUpdatedAt = saved.updatedAt;
+    await new Promise((r) => setTimeout(r, 5));
+    const updated = await repo.update(saved.id, { rating: 5 });
+    expect(updated.rating).toBe(5);
+    expect(updated.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+    expect(updated.activityLabel).toBe('meditation'); // untouched
+  });
+
+  it('delete removes the session', async () => {
+    const saved = await repo.save(validInput);
+    await repo.delete(saved.id);
+    const all = await repo.getAll();
+    expect(all).toHaveLength(0);
+  });
+
+  it('update throws on unknown id', async () => {
+    await expect(repo.update('nonexistent', { rating: 5 })).rejects.toThrow();
+  });
+});
