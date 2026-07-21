@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// vi.mock is hoisted by vitest — keeps token-store from importing the real GIS client.
+vi.mock('@/lib/calendar/gis', () => ({
+  requestCalendarTokens: vi.fn(),
+  requestCalendarTokensSilent: vi.fn().mockResolvedValue(null),
+}));
+
 import { isTokenExpired, getValidAccessToken, resetTokenStoreForTesting } from '@/lib/calendar/token-store';
 import { tokensRepo } from '@/lib/db/tokens.repo';
 import { resetDbForTesting } from '@/lib/db/db';

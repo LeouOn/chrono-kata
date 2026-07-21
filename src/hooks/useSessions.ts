@@ -8,6 +8,7 @@ import { settingsRepo } from '@/lib/db/settings.repo';
 import { computeStreak } from '@/lib/streak/compute-streak';
 import { generateCoachComment } from '@/lib/llm/llm-service';
 import { LLMException, LLMExceptionKind } from '@/lib/llm/types';
+import { dispatchToast } from '@/components/ui/Toast';
 import {
   syncSessionCreateOrUpdate,
   syncSessionDelete,
@@ -61,15 +62,21 @@ async function generateCoachCommentSideEffect(session: Session): Promise<void> {
   } catch (e) {
     const failedLLM = true;
     let errorMessage: string | undefined;
+    let isOffline = false;
     if (e instanceof LLMException) {
       errorMessage = e.message;
       // Don't log offline as a hard failure — it's expected.
-      if (e.kind === LLMExceptionKind.Offline) return;
+      if (e.kind === LLMExceptionKind.Offline) {
+        isOffline = true;
+      }
     } else {
       errorMessage = e instanceof Error ? e.message : String(e);
     }
     console.warn('Coach comment generation failed:', errorMessage);
     await sessionRepo.update(session.id, { failedLLM, coachComment: null });
+    if (!isOffline && errorMessage) {
+      dispatchToast(errorMessage, 'error');
+    }
   }
 }
 

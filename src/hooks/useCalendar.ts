@@ -6,6 +6,7 @@ import { tokensRepo } from '@/lib/db/tokens.repo';
 import { requestCalendarTokens } from '@/lib/calendar/gis';
 import { createChronoKataCalendar, deleteCalendar } from '@/lib/calendar/client';
 import { flushPendingOps } from '@/lib/calendar/sync';
+import { dispatchToast } from '@/components/ui/Toast';
 
 const KEY = ['settings'] as const;
 
@@ -29,7 +30,16 @@ export function useCalendar() {
         googleCalendarConnectedAt: new Date(),
       });
     },
-    onSuccess: (updated) => qc.setQueryData(KEY, updated),
+    onSuccess: (updated) => {
+      qc.setQueryData(KEY, updated);
+      dispatchToast('Google Calendar connected.', 'success');
+    },
+    onError: (err) => {
+      dispatchToast(
+        err instanceof Error ? err.message : 'Calendar connect failed.',
+        'error',
+      );
+    },
   });
 
   const disconnect = useMutation({
@@ -46,7 +56,21 @@ export function useCalendar() {
         ...(alsoDeleteCalendar ? { googleCalendarId: null } : {}),
       });
     },
-    onSuccess: (updated) => qc.setQueryData(KEY, updated),
+    onSuccess: (updated, vars) => {
+      qc.setQueryData(KEY, updated);
+      dispatchToast(
+        vars.alsoDeleteCalendar
+          ? 'Calendar disconnected and removed.'
+          : 'Calendar disconnected.',
+        'success',
+      );
+    },
+    onError: (err) => {
+      dispatchToast(
+        err instanceof Error ? err.message : 'Calendar disconnect failed.',
+        'error',
+      );
+    },
   });
 
   const toggleSync = useMutation({

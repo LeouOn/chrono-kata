@@ -1,5 +1,5 @@
 import { tokensRepo } from '@/lib/db/tokens.repo';
-import { requestCalendarTokens } from './gis';
+import { requestCalendarTokensSilent } from './gis';
 
 const SAFETY_BUFFER_MS = 60_000;
 
@@ -9,11 +9,12 @@ export function isTokenExpired(expiresAt: Date, now: Date = new Date()): boolean
 }
 
 /**
- * Returns a valid access token, refreshing if necessary.
- * Returns null if no token is stored or refresh fails.
+ * Returns a valid access token, refreshing silently if necessary.
+ * Returns null if no token is stored or silent refresh fails.
  *
- * NOTE: GIS token client uses prompt='' for silent refresh. If the user
- * revoked access, this returns null (does not throw).
+ * Wave 5: GIS token client with `prompt: ''`. If the user revoked access
+ * or third-party cookies are blocked, silent refresh returns null and
+ * the caller sees the normal signed-out state — no UI popup.
  */
 export async function getValidAccessToken(): Promise<string | null> {
   const stored = await tokensRepo.get();
@@ -23,32 +24,20 @@ export async function getValidAccessToken(): Promise<string | null> {
     return stored.accessToken;
   }
 
-  // Try silent refresh via GIS (prompt='' — no UI if already consented).
-  try {
-    const fresh = await requestCalendarTokensSilent();
-    await tokensRepo.save({
-      id: 'google',
-      accessToken: fresh.accessToken,
-      refreshToken: stored.refreshToken ?? fresh.refreshToken,
-      expiresAt: fresh.expiresAt,
-    });
-    return fresh.accessToken;
-  } catch {
-    return null;
-  }
+  // Silent refresh — no popup. Returns null if it fails.
+  const fresh = await requestCalendarTokensSilent();
+  if (!fresh) return null;
+
+  await tokensRepo.save({
+    id: 'google',
+    accessToken: fresh.accessToken,
+    refreshToken: stored.refreshToken ?? fresh.refreshToken,
+    expiresAt: fresh.expiresAt,
+  });
+  return fresh.accessToken;
 }
 
-/**
- * Wave 4 fallback: re-runs the user-facing consent flow when the access
- * token has expired. True silent refresh (GIS with `prompt: ''`) is a
- * Wave 5 polish item; this may surface a popup to the user mid-session.
- */
-async function requestCalendarTokensSilent() {
-  return requestCalendarTokens();
-}
-
-/** Test helper — clears any in-module cache state. */
+/** Test helper — reserved hook for any future in-module caching. */
 export function resetTokenStoreForTesting(): void {
-  // No mutable state currently cached in-module; reserved for Wave 5
-  // when the silent GIS client is created lazily and reused.
+  // No-op. Reserved for future use if the silent client is ever cached.
 }

@@ -105,3 +105,44 @@ export async function requestCalendarTokens(): Promise<GoogleTokenSet> {
     client.requestAccessToken({ prompt: 'consent' });
   });
 }
+
+/**
+ * Request a token silently using `prompt: ''`. Returns null if the user is
+ * not reachable silently (revoked access, expired cookies, third-party
+ * cookies blocked, etc.) — does not throw. The caller falls back to
+ * "no token" which surfaces as a normal signed-out state.
+ *
+ * Wave 5 polish: avoids popping the consent UI on every refresh.
+ */
+export async function requestCalendarTokensSilent(): Promise<GoogleTokenSet | null> {
+  const clientId = GOOGLE_OAUTH_CLIENT_ID;
+  if (!clientId) return null;
+  try {
+    await loadGisScript();
+    const oauth2 = window.google?.accounts?.oauth2;
+    if (!oauth2) return null;
+
+    return await new Promise<GoogleTokenSet | null>((resolve) => {
+      const client = oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPE,
+        callback: (response) => {
+          if (response.error || !response.access_token) {
+            resolve(null);
+            return;
+          }
+          const expiresInSec = response.expires_in ?? 3600;
+          resolve({
+            accessToken: response.access_token,
+            expiresAt: new Date(Date.now() + expiresInSec * 1000),
+            scope: response.scope ?? SCOPE,
+          });
+        },
+        error_callback: () => resolve(null),
+      });
+      client.requestAccessToken({ prompt: '' });
+    });
+  } catch {
+    return null;
+  }
+}
