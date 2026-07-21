@@ -10,6 +10,15 @@ export const RatingSchema = z.union([
 ]);
 export type Rating = z.infer<typeof RatingSchema>;
 
+export const MultiDimRatingSchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+]);
+export type MultiDimRating = z.infer<typeof MultiDimRatingSchema>;
+
 const SessionBaseSchema = z.object({
   id: z.string().uuid(),
   startedAt: z.date(),
@@ -23,6 +32,9 @@ const SessionBaseSchema = z.object({
   coachPersonalityAtGeneration: CoachPersonalitySchema.optional(),
   failedLLM: z.boolean().optional(),
   calendarEventId: z.string().nullable().optional(),
+  focusRating: MultiDimRatingSchema.nullable().optional(),
+  energyRating: MultiDimRatingSchema.nullable().optional(),
+  moodRating: MultiDimRatingSchema.nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
