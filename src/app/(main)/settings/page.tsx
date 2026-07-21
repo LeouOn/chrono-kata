@@ -3,6 +3,7 @@
 import { useSettings } from '@/hooks/useSettings';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { CalendarSettings } from '@/components/calendar/CalendarSettings';
 
 export default function SettingsPage() {
   const { settings, updateSettings } = useSettings();
@@ -30,6 +31,8 @@ export default function SettingsPage() {
           ))}
         </div>
       </Card>
+
+      <CalendarSettings />
 
       <Card>
         <div className="text-text-muted text-xs uppercase tracking-wide mb-2">
