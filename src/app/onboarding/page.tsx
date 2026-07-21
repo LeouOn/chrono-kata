@@ -18,6 +18,7 @@ export default function OnboardingPage() {
     setError(null);
     try {
       await updateSettings({ selectedCoachPersonality: p });
+      localStorage.setItem('onboarding-completed', 'true');
       router.push('/');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save');
