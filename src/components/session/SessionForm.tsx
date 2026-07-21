@@ -124,8 +124,30 @@ export function SessionForm({ open, initial, onSave, onCancel }: Props) {
         )}
 
         {/* Activity label */}
-        <label className="block">
-          <span className="text-text-muted text-sm">Activity (optional)</span>
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="text-text-muted text-sm">Activity (optional)</span>
+            {note.trim().length > 20 && !activityLabel && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { suggestLabel } = await import('@/lib/llm/llm-service');
+                    const { llmSettingsRepo } = await import('@/lib/db/llm-settings.repo');
+                    const settings = await llmSettingsRepo.get();
+                    const label = await suggestLabel({ note, llmSettings: settings });
+                    setActivityLabel(label);
+                  } catch (e) {
+                    // Silent fail — label suggestion is optional convenience
+                    console.warn('Label suggestion failed:', e);
+                  }
+                }}
+                className="text-xs text-accent"
+              >
+                ✨ Suggest
+              </button>
+            )}
+          </div>
           <input
             type="text"
             maxLength={100}
@@ -134,7 +156,7 @@ export function SessionForm({ open, initial, onSave, onCancel }: Props) {
             placeholder="meditation, trading review, push-ups…"
             className="w-full mt-1 bg-surface-2 border border-border rounded-2xl px-4 py-3 text-text"
           />
-        </label>
+        </div>
 
         {/* Rating */}
         <div>
