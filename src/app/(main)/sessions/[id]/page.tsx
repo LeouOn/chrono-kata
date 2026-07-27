@@ -35,7 +35,9 @@ export default function SessionDetailPage() {
     );
   }
 
-  const { conversation, messages, isLoading } = useConversation(session.conversationId);
+  const { conversation, messages, isLoading, isStreaming, sendMessage } = useConversation(
+    session.conversationId,
+  );
 
   async function handleDelete() {
     await deleteSession(session!.id);
@@ -86,7 +88,7 @@ export default function SessionDetailPage() {
           ) : (
             <>
               <ConversationThread messages={messages} />
-              <FollowUpInput onSend={() => { /* wired by Task 7 */ }} />
+              <FollowUpInput disabled={isStreaming} onSend={(t) => void sendMessage(t)} />
             </>
           )}
         </Card>

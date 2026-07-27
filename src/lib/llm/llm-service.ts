@@ -149,6 +149,7 @@ export interface ConversationReplyInput {
   displayName?: string;
   llmSettings: LLMSettings;
   signal?: AbortSignal;
+  onToken?: (partial: string) => void;
 }
 
 export interface ConversationReplyResult {
@@ -185,6 +186,7 @@ export async function generateConversationReply(
       onChunk: (chunk: StreamChunk) => {
         if (chunk.content) {
           fullText += chunk.content;
+          input.onToken?.(filterStreamingText(fullText));
         }
       },
     });
