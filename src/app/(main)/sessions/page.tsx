@@ -8,7 +8,7 @@ import { groupSessionsByDay } from '@/lib/utils/date';
 import type { SessionInput } from '@/lib/schemas/session';
 
 export default function SessionsPage() {
-  const { sessions, createSession } = useSessions();
+  const { sessions, createSession, retryCoachComment } = useSessions();
   const [formOpen, setFormOpen] = useState(false);
 
   const grouped = groupSessionsByDay(sessions);
@@ -33,7 +33,7 @@ export default function SessionsPage() {
 
       {sessions.length === 0 ? (
         <p className="text-text-muted text-sm text-center py-12 italic">
-          No sessions logged yet. The first one is the hardest — and the simplest.
+          No sessions logged yet. The first one is the hardest  Eand the simplest.
         </p>
       ) : (
         <div className="divide-y divide-border">
@@ -43,7 +43,7 @@ export default function SessionsPage() {
                 {formatDayHeading(day)}
               </h2>
               {grouped.get(day)!.map((s) => (
-                <SessionCard key={s.id} session={s} pending={!s.calendarEventId && false} />
+                <SessionCard key={s.id} session={s} onRetry={retryCoachComment} />
               ))}
             </section>
           ))}

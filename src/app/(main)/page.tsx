@@ -16,7 +16,7 @@ import type { SessionInput } from '@/lib/schemas/session';
 
 export default function HomePage() {
   const router = useRouter();
-  const { sessions, createSession } = useSessions();
+  const { sessions, createSession, retryCoachComment } = useSessions();
   const { streak } = useStreak();
   const [formOpen, setFormOpen] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
@@ -83,7 +83,7 @@ export default function HomePage() {
           </div>
           <div className="divide-y divide-border">
             {recent.map((s) => (
-              <SessionCard key={s.id} session={s} />
+              <SessionCard key={s.id} session={s} onRetry={retryCoachComment} />
             ))}
           </div>
         </div>

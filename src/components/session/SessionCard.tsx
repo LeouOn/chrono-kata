@@ -20,10 +20,11 @@ const PERSONALITY_COLORS: Record<CoachPersonality, string> = {
 interface Props {
   session: Session;
   onClick?: (s: Session) => void;
+  onRetry?: (s: Session) => void;
   pending?: boolean;
 }
 
-export function SessionCard({ session, onClick, pending }: Props) {
+export function SessionCard({ session, onClick, onRetry, pending }: Props) {
   const time = session.startedAt.toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
@@ -72,8 +73,19 @@ export function SessionCard({ session, onClick, pending }: Props) {
           </div>
         )}
         {session.failedLLM && !session.coachComment && ageMs >= 60_000 && (
-          <div className="mt-2 text-xs text-hype border-l-2 border-hype pl-2">
-            Coach unavailable. Tap to retry.
+          <div className="mt-2 text-xs text-hype border-l-2 border-hype pl-2 flex items-center gap-2">
+            <span>Coach unavailable.</span>
+            {onRetry && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRetry(session);
+                }}
+                className="underline hover:text-accent transition-colors"
+              >
+                ↻ Retry
+              </button>
+            )}
           </div>
         )}
       </div>
