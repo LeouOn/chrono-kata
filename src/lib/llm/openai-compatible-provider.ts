@@ -109,13 +109,28 @@ export class OpenAICompatibleProvider implements LLMProvider {
     signal?: AbortSignal;
     onChunk: (chunk: StreamChunk) => void;
   }): Promise<{ promptTokens: number; completionTokens: number }> {
+    return this.streamChat({
+      messages: [{ role: 'user', content: input.userText }],
+      systemPrompt: input.systemPrompt,
+      signal: input.signal,
+      onChunk: input.onChunk,
+    });
+  }
+
+  async streamChat(input: {
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    systemPrompt: string;
+    signal?: AbortSignal;
+    onChunk: (chunk: StreamChunk) => void;
+  }): Promise<{ promptTokens: number; completionTokens: number }> {
     const url = `${this.baseUrl.replace(/\/$/, '')}/chat/completions`;
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: input.systemPrompt },
+      ...input.messages.filter((m) => m.role !== 'system'),
+    ];
     const body = {
       model: this.model,
-      messages: [
-        { role: 'system', content: input.systemPrompt },
-        { role: 'user', content: input.userText },
-      ],
+      messages,
       temperature: 0.7,
       stream: true,
       stream_options: { include_usage: true },

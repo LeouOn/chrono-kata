@@ -113,12 +113,32 @@ export class GeminiProvider implements LLMProvider {
     signal?: AbortSignal;
     onChunk: (chunk: StreamChunk) => void;
   }): Promise<{ promptTokens: number; completionTokens: number }> {
+    return this.streamChat({
+      messages: [{ role: 'user', content: input.userText }],
+      systemPrompt: input.systemPrompt,
+      signal: input.signal,
+      onChunk: input.onChunk,
+    });
+  }
+
+  async streamChat(input: {
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    systemPrompt: string;
+    signal?: AbortSignal;
+    onChunk: (chunk: StreamChunk) => void;
+  }): Promise<{ promptTokens: number; completionTokens: number }> {
     const url =
       `${this.baseUrl.replace(/\/$/, '')}/models/${encodeURIComponent(this.model)}` +
       `:streamGenerateContent?alt=sse&key=${encodeURIComponent(this.apiKey)}`;
 
+    const contents = input.messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
     const body = {
-      contents: [{ role: 'user', parts: [{ text: input.userText }] }],
+      contents,
       systemInstruction: { parts: [{ text: input.systemPrompt }] },
       generationConfig: { temperature: 0.7, maxOutputTokens: 800 },
     };

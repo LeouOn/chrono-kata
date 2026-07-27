@@ -86,4 +86,16 @@ export interface StreamingLLMProvider extends LLMProvider {
     signal?: AbortSignal;
     onChunk: (chunk: StreamChunk) => void;
   }): Promise<{ promptTokens: number; completionTokens: number }>;
+
+  /**
+   * Multi-turn streaming. Like streamCompleteSingle but takes a message history
+   * instead of a single userText. Adapters may fall back to streamCompleteSingle
+   * using the last user message if full multi-turn is not supported.
+   */
+  streamChat?(input: {
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    systemPrompt: string;
+    signal?: AbortSignal;
+    onChunk: (chunk: StreamChunk) => void;
+  }): Promise<{ promptTokens: number; completionTokens: number }>;
 }

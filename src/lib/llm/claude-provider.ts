@@ -113,12 +113,28 @@ export class ClaudeProvider implements LLMProvider {
     signal?: AbortSignal;
     onChunk: (chunk: StreamChunk) => void;
   }): Promise<{ promptTokens: number; completionTokens: number }> {
+    return this.streamChat({
+      messages: [{ role: 'user', content: input.userText }],
+      systemPrompt: input.systemPrompt,
+      signal: input.signal,
+      onChunk: input.onChunk,
+    });
+  }
+
+  async streamChat(input: {
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    systemPrompt: string;
+    signal?: AbortSignal;
+    onChunk: (chunk: StreamChunk) => void;
+  }): Promise<{ promptTokens: number; completionTokens: number }> {
     const url = `${this.baseUrl.replace(/\/$/, '')}/messages`;
     const body = {
       model: this.model,
       max_tokens: 800,
       system: input.systemPrompt,
-      messages: [{ role: 'user', content: input.userText }],
+      messages: input.messages
+        .filter((m) => m.role !== 'system')
+        .map((m) => ({ role: m.role, content: m.content })),
       stream: true,
     };
 

@@ -143,6 +143,95 @@ export async function generateCoachCommentStream(
   return result;
 }
 
+export interface ConversationReplyInput {
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  personality: CoachPersonality;
+  displayName?: string;
+  llmSettings: LLMSettings;
+  signal?: AbortSignal;
+}
+
+export interface ConversationReplyResult {
+  reply: string;
+  promptTokens: number;
+  completionTokens: number;
+  personalityUsed: CoachPersonality;
+}
+
+export async function generateConversationReply(
+  input: ConversationReplyInput,
+): Promise<ConversationReplyResult> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new LLMException('Offline — coach skipped.', LLMExceptionKind.Offline);
+  }
+
+  const config = resolveActiveProvider(input.llmSettings);
+  const provider = createLLMProvider(config);
+  const systemPrompt = personalizeSystemPrompt(
+    getCoachSystemPrompt(input.personality),
+    input.displayName,
+  );
+
+  if ('streamChat' in provider && typeof (provider as StreamingLLMProvider).streamChat === 'function') {
+    const streamingProvider = provider as StreamingLLMProvider;
+    if (!streamingProvider.streamChat) {
+      throw new LLMException('Provider does not support multi-turn streaming.');
+    }
+    let fullText = '';
+    const usage = await streamingProvider.streamChat({
+      messages: input.messages,
+      systemPrompt,
+      signal: withTimeout(input.signal),
+      onChunk: (chunk: StreamChunk) => {
+        if (chunk.content) {
+          fullText += chunk.content;
+        }
+      },
+    });
+    const cleaned = cleanLLMResponse(fullText);
+    if (!cleaned) {
+      throw new LLMException('Provider returned empty streaming response.');
+    }
+    return {
+      reply: cleaned,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      personalityUsed: input.personality,
+    };
+  }
+
+  if ('streamCompleteSingle' in provider && typeof (provider as StreamingLLMProvider).streamCompleteSingle === 'function') {
+    const lastUser = [...input.messages].reverse().find((m) => m.role === 'user');
+    if (!lastUser) {
+      throw new LLMException('Conversation has no user message to respond to.');
+    }
+    const streamingProvider = provider as StreamingLLMProvider;
+    let fullText = '';
+    const usage = await streamingProvider.streamCompleteSingle({
+      userText: lastUser.content,
+      systemPrompt,
+      signal: withTimeout(input.signal),
+      onChunk: (chunk: StreamChunk) => {
+        if (chunk.content) {
+          fullText += chunk.content;
+        }
+      },
+    });
+    const cleaned = cleanLLMResponse(fullText);
+    if (!cleaned) {
+      throw new LLMException('Provider returned empty streaming response.');
+    }
+    return {
+      reply: cleaned,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      personalityUsed: input.personality,
+    };
+  }
+
+  throw new LLMException('Provider does not support streaming.');
+}
+
 export interface WeeklyReflectionInput {
   sessions: Session[];
   personality: CoachPersonality;
