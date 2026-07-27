@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sessionRepo } from '@/lib/db/session.repo';
+import { conversationRepo } from '@/lib/db/conversation.repo';
+import { messageRepo } from '@/lib/db/message.repo';
 import { streakRepo } from '@/lib/db/streak.repo';
 import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { settingsRepo } from '@/lib/db/settings.repo';
@@ -41,9 +43,29 @@ async function generateCoachCommentSideEffect(session: Session): Promise<void> {
     ]);
 
     if (Object.keys(llmSettings.providers).length === 0) {
-      // No provider configured — leave coachComment null silently.
       return;
     }
+
+    const existingConv = session.conversationId
+      ? await conversationRepo.getById(session.conversationId)
+      : null;
+    const conversation = existingConv ?? (await conversationRepo.save({ sessionId: session.id }));
+
+    const rootUserMessage = await messageRepo.save({
+      conversationId: conversation.id,
+      parentId: null,
+      role: 'user',
+      content: buildCoachUserTextForConversation(session, recent),
+    });
+    await conversationRepo.update(conversation.id, { rootMessageId: rootUserMessage.id });
+
+    const placeholder = await messageRepo.save({
+      conversationId: conversation.id,
+      parentId: rootUserMessage.id,
+      role: 'assistant',
+      content: '',
+    });
+    await conversationRepo.update(conversation.id, { activeLeafId: placeholder.id });
 
     const result = await generateCoachCommentStream({
       currentSession: session,
@@ -52,11 +74,16 @@ async function generateCoachCommentSideEffect(session: Session): Promise<void> {
       displayName: appSettings.displayName,
       llmSettings,
       onToken: (visibleText) => {
+        void messageRepo.update(placeholder.id, { content: visibleText });
         void sessionRepo.update(session.id, { coachComment: visibleText });
       },
     });
 
+    await messageRepo.update(placeholder.id, { content: result.comment });
+    await conversationRepo.update(conversation.id, { activeLeafId: placeholder.id });
+
     await sessionRepo.update(session.id, {
+      conversationId: conversation.id,
       coachComment: result.comment,
       coachPersonalityAtGeneration: result.personalityUsed,
       failedLLM: false,
@@ -68,7 +95,6 @@ async function generateCoachCommentSideEffect(session: Session): Promise<void> {
     let isOffline = false;
     if (e instanceof LLMException) {
       errorMessage = e.message;
-      // Don't log offline as a hard failure — it's expected.
       if (e.kind === LLMExceptionKind.Offline) {
         isOffline = true;
       }
@@ -81,6 +107,21 @@ async function generateCoachCommentSideEffect(session: Session): Promise<void> {
       dispatchToast(errorMessage, 'error');
     }
   }
+}
+
+function buildCoachUserTextForConversation(session: Session, recent: Session[]): string {
+  const recentLines = recent
+    .filter((s) => s.id !== session.id)
+    .slice(0, 5)
+    .map((s) => {
+      const date = s.startedAt.toISOString().slice(0, 10);
+      const dur = s.durationMinutes != null ? `${s.durationMinutes}m` : `${s.reps ?? 0} reps`;
+      return `${date} | ${s.activityLabel ?? ''} | ${dur} | ${s.rating}/5`;
+    })
+    .join('\n');
+  const date = session.startedAt.toISOString().slice(0, 10);
+  const dur = session.durationMinutes != null ? `${session.durationMinutes}m` : `${session.reps ?? 0} reps`;
+  return `Session on ${date}: ${session.activityLabel ?? 'practice'} for ${dur}, rated ${session.rating}/5${session.note ? ` — note: ${session.note}` : ''}.\n\nRecent sessions:\n${recentLines}\n\nRespond with a 3-6 sentence reflection.`;
 }
 
 export function useSessions() {
