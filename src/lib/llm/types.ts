@@ -66,3 +66,24 @@ export interface LLMProvider {
     signal?: AbortSignal;
   }): Promise<ChatResponse>;
 }
+
+/** A single chunk from a streaming response. */
+export interface StreamChunk {
+  /** Text content delta, or null when stream is done. */
+  content: string | null;
+  /** Optional reasoning/thinking delta (kept separate). */
+  thinking?: string | null;
+}
+
+/**
+ * Optional streaming method. Adapters that support SSE streaming implement this;
+ * others leave it undefined and callers fall back to completeSingle.
+ */
+export interface StreamingLLMProvider extends LLMProvider {
+  streamCompleteSingle(input: {
+    userText: string;
+    systemPrompt: string;
+    signal?: AbortSignal;
+    onChunk: (chunk: StreamChunk) => void;
+  }): Promise<{ promptTokens: number; completionTokens: number }>;
+}

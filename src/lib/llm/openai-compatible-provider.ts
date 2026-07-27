@@ -1,7 +1,8 @@
-import type { ChatResponse, LLMProvider } from './types';
+import type { ChatResponse, LLMProvider, StreamChunk } from './types';
 import { LLMException, StopReason } from './types';
 import { mapFetchError, mapResponseStatus } from './error-mapper';
 import type { ProviderConfig } from './provider-config';
+import { parseSSELines, extractContentFromOpenAIChunk } from './sse-parser';
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant';
@@ -100,5 +101,83 @@ export class OpenAICompatibleProvider implements LLMProvider {
         completionTokens: json.usage?.completion_tokens ?? 0,
       },
     };
+  }
+
+  async streamCompleteSingle(input: {
+    userText: string;
+    systemPrompt: string;
+    signal?: AbortSignal;
+    onChunk: (chunk: StreamChunk) => void;
+  }): Promise<{ promptTokens: number; completionTokens: number }> {
+    const url = `${this.baseUrl.replace(/\/$/, '')}/chat/completions`;
+    const body = {
+      model: this.model,
+      messages: [
+        { role: 'system', content: input.systemPrompt },
+        { role: 'user', content: input.userText },
+      ],
+      temperature: 0.7,
+      stream: true,
+      stream_options: { include_usage: true },
+    };
+
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: input.signal,
+      });
+    } catch (e) {
+      throw mapFetchError(e);
+    }
+
+    const statusError = mapResponseStatus(resp.status, resp.statusText);
+    if (statusError) throw statusError;
+
+    if (!resp.body) throw new LLMException('No response body for streaming.');
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = parseSSELines(buffer);
+      const lastDoubleNewline = buffer.lastIndexOf('\n\n');
+      if (lastDoubleNewline >= 0) {
+        buffer = buffer.slice(lastDoubleNewline + 2);
+      }
+
+      for (const data of lines) {
+        const content = extractContentFromOpenAIChunk(data);
+        if (content === null) {
+          input.onChunk({ content: null });
+          continue;
+        }
+        if (content) {
+          input.onChunk({ content });
+        }
+        try {
+          const parsed = JSON.parse(data) as { usage?: { prompt_tokens?: number; completion_tokens?: number } };
+          if (parsed.usage) {
+            promptTokens = parsed.usage.prompt_tokens ?? promptTokens;
+            completionTokens = parsed.usage.completion_tokens ?? completionTokens;
+          }
+        } catch {
+          // Not JSON or no usage — fine.
+        }
+      }
+    }
+
+    return { promptTokens, completionTokens };
   }
 }
