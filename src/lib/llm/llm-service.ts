@@ -5,6 +5,7 @@ import { getCoachSystemPrompt } from '@/lib/coaches';
 import { createLLMProvider } from './provider-factory';
 import { buildCoachUserText, buildWeeklyReflectionUserText } from './prompt-builders';
 import { LLMException, LLMExceptionKind } from './types';
+import type { StreamChunk, StreamingLLMProvider } from './types';
 import type { ProviderConfig } from './provider-config';
 
 const LLM_TIMEOUT_MS = 30_000;
@@ -87,6 +88,59 @@ export async function generateCoachComment(
     completionTokens: response.usage?.completionTokens ?? 0,
     personalityUsed: input.personality,
   };
+}
+
+export interface GenerateCoachCommentStreamInput extends CoachCommentInput {
+  onToken: (token: string) => void;
+}
+
+export async function generateCoachCommentStream(
+  input: GenerateCoachCommentStreamInput,
+): Promise<GenerateCoachCommentResult> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new LLMException('Offline — coach skipped.', LLMExceptionKind.Offline);
+  }
+
+  const config = resolveActiveProvider(input.llmSettings);
+  const provider = createLLMProvider(config);
+
+  if ('streamCompleteSingle' in provider && typeof (provider as StreamingLLMProvider).streamCompleteSingle === 'function') {
+    const streamingProvider = provider as StreamingLLMProvider;
+    const systemPrompt = personalizeSystemPrompt(
+      getCoachSystemPrompt(input.personality),
+      input.displayName,
+    );
+
+    let fullText = '';
+    const usage = await streamingProvider.streamCompleteSingle({
+      userText: buildCoachUserText(input.currentSession, input.recentSessions),
+      systemPrompt,
+      signal: withTimeout(input.signal),
+      onChunk: (chunk: StreamChunk) => {
+        if (chunk.content) {
+          fullText += chunk.content;
+          input.onToken(chunk.content);
+        }
+      },
+    });
+
+    if (!fullText.trim()) {
+      throw new LLMException('Provider returned empty streaming response.');
+    }
+
+    fullText = fullText.trim().replace(/^["']|["']$/g, '');
+
+    return {
+      comment: fullText,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      personalityUsed: input.personality,
+    };
+  }
+
+  const result = await generateCoachComment(input);
+  input.onToken(result.comment);
+  return result;
 }
 
 export interface WeeklyReflectionInput {

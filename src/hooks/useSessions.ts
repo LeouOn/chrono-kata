@@ -6,7 +6,7 @@ import { streakRepo } from '@/lib/db/streak.repo';
 import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { computeStreak } from '@/lib/streak/compute-streak';
-import { generateCoachComment } from '@/lib/llm/llm-service';
+import { generateCoachCommentStream } from '@/lib/llm/llm-service';
 import { LLMException, LLMExceptionKind } from '@/lib/llm/types';
 import { dispatchToast } from '@/components/ui/Toast';
 import {
@@ -45,12 +45,17 @@ async function generateCoachCommentSideEffect(session: Session): Promise<void> {
       return;
     }
 
-    const result = await generateCoachComment({
+    let accumulated = '';
+    const result = await generateCoachCommentStream({
       currentSession: session,
       recentSessions: recent.filter((s) => s.id !== session.id).slice(0, 5),
       personality: appSettings.selectedCoachPersonality,
       displayName: appSettings.displayName,
       llmSettings,
+      onToken: (token) => {
+        accumulated += token;
+        void sessionRepo.update(session.id, { coachComment: accumulated });
+      },
     });
 
     await sessionRepo.update(session.id, {
