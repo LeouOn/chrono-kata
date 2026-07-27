@@ -1,7 +1,8 @@
-import type { ChatResponse, LLMProvider } from './types';
+import type { ChatResponse, LLMProvider, StreamChunk } from './types';
 import { LLMException, StopReason } from './types';
 import { mapFetchError, mapResponseStatus } from './error-mapper';
 import type { ProviderConfig } from './provider-config';
+import { parseSSELines, extractContentFromGeminiChunk } from './sse-parser';
 
 interface GeminiPart {
   text?: string;
@@ -104,5 +105,77 @@ export class GeminiProvider implements LLMProvider {
         completionTokens: json.usageMetadata?.candidatesTokenCount ?? 0,
       },
     };
+  }
+
+  async streamCompleteSingle(input: {
+    userText: string;
+    systemPrompt: string;
+    signal?: AbortSignal;
+    onChunk: (chunk: StreamChunk) => void;
+  }): Promise<{ promptTokens: number; completionTokens: number }> {
+    const url =
+      `${this.baseUrl.replace(/\/$/, '')}/models/${encodeURIComponent(this.model)}` +
+      `:streamGenerateContent?alt=sse&key=${encodeURIComponent(this.apiKey)}`;
+
+    const body = {
+      contents: [{ role: 'user', parts: [{ text: input.userText }] }],
+      systemInstruction: { parts: [{ text: input.systemPrompt }] },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 800 },
+    };
+
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: input.signal,
+      });
+    } catch (e) {
+      throw mapFetchError(e);
+    }
+
+    const statusError = mapResponseStatus(resp.status, resp.statusText);
+    if (statusError) throw statusError;
+
+    if (!resp.body) throw new LLMException('No response body for streaming.');
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = parseSSELines(buffer);
+      const lastDoubleNewline = buffer.lastIndexOf('\n\n');
+      if (lastDoubleNewline >= 0) {
+        buffer = buffer.slice(lastDoubleNewline + 2);
+      }
+
+      for (const data of lines) {
+        const content = extractContentFromGeminiChunk(data);
+        if (content) {
+          input.onChunk({ content });
+        }
+        try {
+          const parsed = JSON.parse(data) as {
+            usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+          };
+          if (parsed.usageMetadata) {
+            promptTokens = parsed.usageMetadata.promptTokenCount ?? promptTokens;
+            completionTokens = parsed.usageMetadata.candidatesTokenCount ?? completionTokens;
+          }
+        } catch {
+          // Fine.
+        }
+      }
+    }
+
+    input.onChunk({ content: null });
+    return { promptTokens, completionTokens };
   }
 }

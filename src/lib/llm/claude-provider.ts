@@ -1,7 +1,8 @@
-import type { ChatResponse, LLMProvider } from './types';
+import type { ChatResponse, LLMProvider, StreamChunk } from './types';
 import { LLMException, StopReason } from './types';
 import { mapFetchError, mapResponseStatus } from './error-mapper';
 import type { ProviderConfig } from './provider-config';
+import { parseSSELines, extractContentFromClaudeEvent } from './sse-parser';
 
 interface ClaudeContentBlock {
   type: string;
@@ -104,5 +105,87 @@ export class ClaudeProvider implements LLMProvider {
         completionTokens: json.usage?.output_tokens ?? 0,
       },
     };
+  }
+
+  async streamCompleteSingle(input: {
+    userText: string;
+    systemPrompt: string;
+    signal?: AbortSignal;
+    onChunk: (chunk: StreamChunk) => void;
+  }): Promise<{ promptTokens: number; completionTokens: number }> {
+    const url = `${this.baseUrl.replace(/\/$/, '')}/messages`;
+    const body = {
+      model: this.model,
+      max_tokens: 800,
+      system: input.systemPrompt,
+      messages: [{ role: 'user', content: input.userText }],
+      stream: true,
+    };
+
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(body),
+        signal: input.signal,
+      });
+    } catch (e) {
+      throw mapFetchError(e);
+    }
+
+    const statusError = mapResponseStatus(resp.status, resp.statusText);
+    if (statusError) throw statusError;
+
+    if (!resp.body) throw new LLMException('No response body for streaming.');
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = parseSSELines(buffer);
+      const lastDoubleNewline = buffer.lastIndexOf('\n\n');
+      if (lastDoubleNewline >= 0) {
+        buffer = buffer.slice(lastDoubleNewline + 2);
+      }
+
+      for (const data of lines) {
+        const content = extractContentFromClaudeEvent(data);
+        if (content === null) {
+          input.onChunk({ content: null });
+          continue;
+        }
+        if (content) {
+          input.onChunk({ content });
+        }
+        try {
+          const parsed = JSON.parse(data) as {
+            type?: string;
+            usage?: { input_tokens?: number; output_tokens?: number };
+            message?: { usage?: { input_tokens?: number; output_tokens?: number } };
+          };
+          if (parsed.type === 'message_start' && parsed.message?.usage) {
+            promptTokens = parsed.message.usage.input_tokens ?? 0;
+          }
+          if (parsed.type === 'message_delta' && parsed.usage) {
+            completionTokens = parsed.usage.output_tokens ?? 0;
+          }
+        } catch {
+          // Fine.
+        }
+      }
+    }
+
+    return { promptTokens, completionTokens };
   }
 }
