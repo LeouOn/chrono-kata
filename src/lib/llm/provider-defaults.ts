@@ -16,7 +16,7 @@ export const PROVIDER_DEFAULTS = {
   'deepseek-pro': { baseUrl: 'https://api.deepseek.com',                           model: 'deepseek-v4-pro' },
   openrouter:     { baseUrl: 'https://openrouter.ai/api/v1',                       model: 'anthropic/claude-sonnet-latest' },
   zai:            { baseUrl: 'https://open.bigmodel.cn/api/paas/v4',               model: 'glm-5.2' },
-  minimax:        { baseUrl: 'https://api.minimax.chat/v1',                        model: 'minimax-m3' },
+  minimax:        { baseUrl: 'https://api.minimax.io/v1',                            model: 'minimax-m3' },
   nemotron:       { baseUrl: 'https://integrate.api.nvidia.com/v1',                model: 'nvidia/llama-3.1-nemotron-ultra-253b-v1' },
   ollama:         { baseUrl: 'http://localhost:11434/v1',                          model: 'llama3.3' },
   gemini:         { baseUrl: 'https://generativelanguage.googleapis.com/v1beta',   model: 'gemini-2.0-flash' },

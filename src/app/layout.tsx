@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   description: 'A personal practice tracker. Time, reps, rating.',
   manifest: '/manifest.webmanifest',
   applicationName: 'chrono-kata',
+  icons: { icon: '/icons/192.png', apple: '/icons/192.png' },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

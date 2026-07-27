@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline'",
-              "connect-src 'self' https://api.openai.com https://api.deepseek.com https://openrouter.ai https://open.bigmodel.cn https://api.minimax.chat https://integrate.api.nvidia.com http://localhost:11434 https://generativelanguage.googleapis.com https://api.anthropic.com https://oauth2.googleapis.com https://www.googleapis.com",
+              "connect-src 'self' https: http://localhost:*",
               "img-src 'self' data: blob:",
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self' data:",
