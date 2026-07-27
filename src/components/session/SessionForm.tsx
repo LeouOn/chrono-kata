@@ -4,8 +4,11 @@ import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { RatingPicker } from './RatingPicker';
+import { SliderRatingPicker } from './SliderRatingPicker';
+import { DotsRatingPicker } from './DotsRatingPicker';
 import { MultiDimSlider } from './MultiDimSlider';
 import { Timer } from './Timer';
+import { useSettings } from '@/hooks/useSettings';
 import type { Session, SessionInput } from '@/lib/schemas/session';
 import type { Rating, MultiDimRating } from '@/lib/schemas/session';
 
@@ -19,6 +22,8 @@ interface Props {
 }
 
 export function SessionForm({ open, initial, onSave, onCancel }: Props) {
+  const { settings } = useSettings();
+  const ratingStyle = settings?.ratingStyle ?? 'slider';
   const [mode, setMode] = useState<Mode>('timed');
   const [timerStartedAt, setTimerStartedAt] = useState<Date | null>(null);
   const [durationMinutes, setDurationMinutes] = useState<number | null>(
@@ -168,7 +173,9 @@ export function SessionForm({ open, initial, onSave, onCancel }: Props) {
         {/* Rating */}
         <div>
           <div className="text-text-muted text-sm mb-2">Rating</div>
-          <RatingPicker value={rating} onChange={setRating} />
+          {ratingStyle === 'slider' && <SliderRatingPicker value={rating} onChange={setRating} />}
+          {ratingStyle === 'emoji' && <RatingPicker value={rating} onChange={setRating} />}
+          {ratingStyle === 'dots' && <DotsRatingPicker value={rating} onChange={setRating} />}
         </div>
 
         {/* Multi-dimensional ratings */}
