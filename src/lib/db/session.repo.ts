@@ -3,6 +3,8 @@ import type { Session, SessionInput } from '@/lib/schemas/session';
 import { SessionSchema } from '@/lib/schemas/session';
 import { getDb } from './db';
 import { newId } from '@/lib/utils/id';
+import { conversationRepo } from './conversation.repo';
+import { messageRepo } from './message.repo';
 
 export interface SessionRepository {
   getAll(): Promise<Session[]>;
@@ -28,7 +30,15 @@ export class DexieSessionRepository implements SessionRepository {
 
   async getById(id: string): Promise<Session | null> {
     const result = await getDb().sessions.get(id);
-    return result ?? null;
+    if (!result) return null;
+    // Lazy Wave 11 migration: if the session predates conversation tracking
+    // but has a coachComment, materialize a conversation + assistant message
+    // so the detail page can render the full thread.
+    if (!result.conversationId && result.coachComment) {
+      const migrated = await migrateToConversation(result);
+      return migrated;
+    }
+    return result;
   }
 
   watch() {
@@ -76,3 +86,24 @@ export class DexieSessionRepository implements SessionRepository {
 }
 
 export const sessionRepo: SessionRepository = new DexieSessionRepository();
+
+async function migrateToConversation(session: Session): Promise<Session> {
+  const conversation = await conversationRepo.save({ sessionId: session.id });
+  const assistantMessage = await messageRepo.save({
+    conversationId: conversation.id,
+    parentId: null,
+    role: 'assistant',
+    content: session.coachComment as string,
+  });
+  const updatedConversation = await conversationRepo.update(conversation.id, {
+    rootMessageId: assistantMessage.id,
+    activeLeafId: assistantMessage.id,
+  });
+  const updatedSession: Session = {
+    ...session,
+    conversationId: updatedConversation.id,
+    updatedAt: new Date(),
+  };
+  await getDb().sessions.put(updatedSession);
+  return updatedSession;
+}

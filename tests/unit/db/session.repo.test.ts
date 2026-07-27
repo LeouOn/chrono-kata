@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { resetDbForTesting, type ChronoKataDB } from '@/lib/db/db';
-import { DexieSessionRepository } from '@/lib/db/session.repo';
-import type { SessionInput } from '@/lib/schemas/session';
+import { DexieSessionRepository, sessionRepo } from '@/lib/db/session.repo';
+import { conversationRepo } from '@/lib/db/conversation.repo';
+import { messageRepo } from '@/lib/db/message.repo';
+import type { Session, SessionInput } from '@/lib/schemas/session';
 
 let db: ChronoKataDB;
 let repo: DexieSessionRepository;
@@ -67,5 +69,61 @@ describe('DexieSessionRepository', () => {
 
   it('update throws on unknown id', async () => {
     await expect(repo.update('nonexistent', { rating: 5 })).rejects.toThrow();
+  });
+});
+
+describe('Wave 11 lazy auto-migration', () => {
+  it('getById on a session with coachComment creates a conversation + assistant message', async () => {
+    const saved = await sessionRepo.save(validInput);
+    // Simulate a pre-Wave-11 session by writing coachComment + clearing conversationId.
+    const preWave11: Session = {
+      ...saved,
+      coachComment: 'an old coach comment',
+      conversationId: undefined,
+      coachPersonalityAtGeneration: 'zen',
+    };
+    await resetDbForTesting();
+    await (await import('@/lib/db/db')).getDb().sessions.put(preWave11);
+
+    const fetched = await sessionRepo.getById(preWave11.id);
+    expect(fetched).not.toBeNull();
+    expect(fetched!.conversationId).toBeDefined();
+    expect(fetched!.conversationId).not.toBeNull();
+
+    const conv = await conversationRepo.getById(fetched!.conversationId as string);
+    expect(conv).not.toBeNull();
+    expect(conv!.sessionId).toBe(preWave11.id);
+    expect(conv!.activeLeafId).not.toBeNull();
+
+    const path = await messageRepo.getPathToLeaf(conv!.id, conv!.activeLeafId as string);
+    expect(path).toHaveLength(1);
+    expect(path[0]?.role).toBe('assistant');
+    expect(path[0]?.content).toBe('an old coach comment');
+  });
+
+  it('getById on a session without coachComment does not migrate', async () => {
+    const saved = await sessionRepo.save(validInput);
+    // No coachComment; migration should be a no-op.
+    const preWave11: Session = { ...saved, coachComment: null, conversationId: undefined };
+    await resetDbForTesting();
+    await (await import('@/lib/db/db')).getDb().sessions.put(preWave11);
+
+    const fetched = await sessionRepo.getById(preWave11.id);
+    expect(fetched!.conversationId).toBeUndefined();
+  });
+
+  it('repeated getById is idempotent', async () => {
+    const saved = await sessionRepo.save(validInput);
+    const preWave11: Session = { ...saved, coachComment: 'msg', conversationId: undefined };
+    await resetDbForTesting();
+    await (await import('@/lib/db/db')).getDb().sessions.put(preWave11);
+
+    const first = await sessionRepo.getById(preWave11.id);
+    const firstConvId = first!.conversationId;
+    const second = await sessionRepo.getById(preWave11.id);
+    expect(second!.conversationId).toBe(firstConvId);
+
+    const convs = await (await import('@/lib/db/db')).getDb().conversations.where('sessionId').equals(preWave11.id).toArray();
+    expect(convs).toHaveLength(1);
   });
 });

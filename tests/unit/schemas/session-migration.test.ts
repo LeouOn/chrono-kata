@@ -12,6 +12,39 @@ const baseOldSession = {
   // no focusRating, energyRating, moodRating
 };
 
+describe('SessionSchema — Wave 11 backward compatibility', () => {
+  it('parses a Wave 10 session without conversationId', () => {
+    const result = SessionSchema.safeParse({
+      ...baseOldSession,
+      coachComment: 'old coach comment',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.conversationId).toBeUndefined();
+      expect(result.data.coachComment).toBe('old coach comment');
+    }
+  });
+
+  it('parses a Wave 11+ session with conversationId', () => {
+    const result = SessionSchema.safeParse({
+      ...baseOldSession,
+      conversationId: '123e4567-e89b-12d3-a456-426614174010',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.conversationId).toBe('123e4567-e89b-12d3-a456-426614174010');
+    }
+  });
+
+  it('accepts null conversationId', () => {
+    const result = SessionSchema.safeParse({
+      ...baseOldSession,
+      conversationId: null,
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
 describe('SessionSchema — Wave 8 backward compatibility', () => {
   it('parses a pre-Wave-8 session (no multi-dim fields)', () => {
     const result = SessionSchema.safeParse(baseOldSession);
