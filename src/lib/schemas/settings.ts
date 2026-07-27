@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { CoachPersonalitySchema } from './coach-personality';
 
+export const ThemeModeSchema = z.enum(['system', 'light', 'dark']);
+export type ThemeMode = z.infer<typeof ThemeModeSchema>;
+
+export const AccentColorSchema = z.enum(['amber', 'sage', 'magenta', 'cyan']);
+export type AccentColor = z.infer<typeof AccentColorSchema>;
+
 export const SettingsSchema = z.object({
   id: z.literal('singleton'),
   displayName: z.string().max(50).optional(),
@@ -11,6 +17,8 @@ export const SettingsSchema = z.object({
   googleCalendarConnectedAt: z.date().nullable().optional(),
   reminderTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   notificationsEnabled: z.boolean().optional(),
+  theme: ThemeModeSchema.optional(),
+  accentColor: AccentColorSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -26,4 +34,6 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   googleCalendarConnectedAt: null,
   reminderTime: null,
   notificationsEnabled: false,
+  theme: 'system',
+  accentColor: 'amber',
 };

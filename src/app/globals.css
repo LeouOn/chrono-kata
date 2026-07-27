@@ -1,22 +1,90 @@
 @import 'tailwindcss';
 
 @theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: 'Fraunces', Georgia, serif;
+}
+
+/* ============================================================
+   DARK THEME (default — matches Wave 1-8 design)
+   ============================================================ */
+:root,
+:root[data-theme="dark"] {
   --color-base: #0f0e0c;
   --color-surface: #1a1816;
   --color-surface-2: #252220;
   --color-text: #f5f0e8;
   --color-text-muted: #a89e94;
   --color-border: #2d2925;
+}
+
+/* ============================================================
+   LIGHT THEME
+   ============================================================ */
+:root[data-theme="light"] {
+  --color-base: #faf8f5;
+  --color-surface: #ffffff;
+  --color-surface-2: #f0ede8;
+  --color-text: #1a1816;
+  --color-text-muted: #6b635a;
+  --color-border: #e0dad2;
+}
+
+/* ============================================================
+   ACCENT COLORS (independent of light/dark)
+   ============================================================ */
+:root[data-accent="amber"],
+:root {
   --color-accent: #f5a623;
   --color-accent-hover: #ffb84d;
+}
+:root[data-accent="sage"] {
+  --color-accent: #7ba668;
+  --color-accent-hover: #8db97a;
+}
+:root[data-accent="magenta"] {
+  --color-accent: #d94977;
+  --color-accent-hover: #e85d8a;
+}
+:root[data-accent="cyan"] {
+  --color-accent: #4ba3c7;
+  --color-accent-hover: #5fb5d8;
+}
+
+/* Personality colors stay constant across themes */
+:root {
   --color-zen: #9caf88;
   --color-hype: #e85d75;
   --color-analyst: #6bb7d9;
   --color-buddy: #f5a623;
   --color-athena-from: #b39ddb;
   --color-athena-to: #e6c99a;
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-serif: 'Fraunces', Georgia, serif;
+}
+
+/* ============================================================
+   System preference — apply dark when system prefers dark
+   AND no explicit data-theme is set
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-base: #0f0e0c;
+    --color-surface: #1a1816;
+    --color-surface-2: #252220;
+    --color-text: #f5f0e8;
+    --color-text-muted: #a89e94;
+    --color-border: #2d2925;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --color-base: #faf8f5;
+    --color-surface: #ffffff;
+    --color-surface-2: #f0ede8;
+    --color-text: #1a1816;
+    --color-text-muted: #6b635a;
+    --color-border: #e0dad2;
+  }
 }
 
 html, body {
@@ -24,6 +92,7 @@ html, body {
   color: var(--color-text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 body {
