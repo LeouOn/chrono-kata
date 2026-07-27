@@ -7,6 +7,7 @@ import { buildCoachUserText, buildWeeklyReflectionUserText } from './prompt-buil
 import { LLMException, LLMExceptionKind } from './types';
 import type { StreamChunk, StreamingLLMProvider } from './types';
 import type { ProviderConfig } from './provider-config';
+import { cleanLLMResponse, filterStreamingText } from './clean-response';
 
 const LLM_TIMEOUT_MS = 30_000;
 
@@ -83,7 +84,7 @@ export async function generateCoachComment(
   }
 
   return {
-    comment: response.content,
+    comment: cleanLLMResponse(response.content),
     promptTokens: response.usage?.promptTokens ?? 0,
     completionTokens: response.usage?.completionTokens ?? 0,
     personalityUsed: input.personality,
@@ -119,19 +120,18 @@ export async function generateCoachCommentStream(
       onChunk: (chunk: StreamChunk) => {
         if (chunk.content) {
           fullText += chunk.content;
-          input.onToken(chunk.content);
+          input.onToken(filterStreamingText(fullText));
         }
       },
     });
 
-    if (!fullText.trim()) {
+    const cleaned = cleanLLMResponse(fullText);
+    if (!cleaned) {
       throw new LLMException('Provider returned empty streaming response.');
     }
 
-    fullText = fullText.trim().replace(/^["']|["']$/g, '');
-
     return {
-      comment: fullText,
+      comment: cleaned,
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
       personalityUsed: input.personality,

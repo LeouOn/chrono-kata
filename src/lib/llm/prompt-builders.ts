@@ -38,7 +38,7 @@ export function buildCoachUserText(current: Session, recent: Session[]): string 
     }
   }
   lines.push('');
-  lines.push('Respond with a 2-4 sentence reflection. No flattery. Address me by name if relevant. Match the personality.');
+  lines.push('Respond with a 3-6 sentence reflection. Be specific — reference the actual session details. No flattery. Address me by name if relevant. Match the personality voice.');
   return lines.join('\n');
 }
 

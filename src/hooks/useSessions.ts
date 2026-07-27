@@ -45,16 +45,14 @@ async function generateCoachCommentSideEffect(session: Session): Promise<void> {
       return;
     }
 
-    let accumulated = '';
     const result = await generateCoachCommentStream({
       currentSession: session,
       recentSessions: recent.filter((s) => s.id !== session.id).slice(0, 5),
       personality: appSettings.selectedCoachPersonality,
       displayName: appSettings.displayName,
       llmSettings,
-      onToken: (token) => {
-        accumulated += token;
-        void sessionRepo.update(session.id, { coachComment: accumulated });
+      onToken: (visibleText) => {
+        void sessionRepo.update(session.id, { coachComment: visibleText });
       },
     });
 
