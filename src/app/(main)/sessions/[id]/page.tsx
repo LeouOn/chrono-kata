@@ -3,10 +3,13 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSessions } from '@/hooks/useSessions';
+import { useConversation } from '@/hooks/useConversation';
 import { SessionForm } from '@/components/session/SessionForm';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ConversationThread } from '@/components/session/ConversationThread';
+import { FollowUpInput } from '@/components/session/FollowUpInput';
 import { formatDuration } from '@/lib/utils/format';
 
 const RATING_EMOJI: Record<number, string> = {
@@ -31,6 +34,8 @@ export default function SessionDetailPage() {
       </div>
     );
   }
+
+  const { conversation, messages, isLoading } = useConversation(session.conversationId);
 
   async function handleDelete() {
     await deleteSession(session!.id);
@@ -69,7 +74,23 @@ export default function SessionDetailPage() {
         </Card>
       )}
 
-      {session.coachComment && (
+      {conversation ? (
+        <Card>
+          <div className="text-xs uppercase tracking-wide text-text-muted mb-3">
+            Coach thread
+          </div>
+          {isLoading ? (
+            <div className="text-text-muted text-sm italic py-4 text-center animate-pulse">
+              Loading…
+            </div>
+          ) : (
+            <>
+              <ConversationThread messages={messages} />
+              <FollowUpInput onSend={() => { /* wired by Task 7 */ }} />
+            </>
+          )}
+        </Card>
+      ) : session.coachComment ? (
         <Card>
           <div className="text-xs uppercase tracking-wide text-text-muted mb-2">
             Coach
@@ -78,7 +99,7 @@ export default function SessionDetailPage() {
             {session.coachComment}
           </p>
         </Card>
-      )}
+      ) : null}
 
       <div className="flex gap-2 pt-2">
         <Button variant="ghost" onClick={() => setEditOpen(true)}>Edit</Button>
