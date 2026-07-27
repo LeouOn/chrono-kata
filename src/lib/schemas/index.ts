@@ -6,3 +6,5 @@ export * from './settings';
 export * from './llm-settings';
 export * from './pending-calendar-op';
 export * from './token';
+export * from './conversation';
+export * from './message';
