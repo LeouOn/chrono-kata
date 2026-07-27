@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { ToastProvider } from '@/components/ui/Toast';
+import { THEME_INLINE_SCRIPT } from '@/components/system/ThemeScript';
+import { ThemeApplier } from '@/components/system/ThemeApplier';
 
 export const metadata: Metadata = {
   title: 'chrono-kata',
@@ -27,9 +29,15 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INLINE_SCRIPT }} />
+      </head>
       <body>
         <QueryProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <ThemeApplier />
+            {children}
+          </ToastProvider>
         </QueryProvider>
       </body>
     </html>
