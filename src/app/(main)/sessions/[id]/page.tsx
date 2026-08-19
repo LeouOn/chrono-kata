@@ -35,9 +35,18 @@ export default function SessionDetailPage() {
     );
   }
 
-  const { conversation, messages, isLoading, isStreaming, sendMessage } = useConversation(
-    session.conversationId,
-  );
+  const {
+    conversation,
+    messages,
+    branchMap,
+    isLoading,
+    isStreaming,
+    sendMessage,
+    regenerateMessage,
+    editMessage,
+    deleteMessage,
+    switchBranch,
+  } = useConversation(session.conversationId);
 
   async function handleDelete() {
     await deleteSession(session!.id);
@@ -87,7 +96,15 @@ export default function SessionDetailPage() {
             </div>
           ) : (
             <>
-              <ConversationThread messages={messages} />
+              <ConversationThread
+                messages={messages}
+                branchMap={branchMap}
+                isStreaming={isStreaming}
+                onRegenerate={(id) => void regenerateMessage(id)}
+                onEdit={(id, text) => void editMessage(id, text)}
+                onDelete={(id) => void deleteMessage(id)}
+                onSwitchBranch={(id) => void switchBranch(id)}
+              />
               <FollowUpInput disabled={isStreaming} onSend={(t) => void sendMessage(t)} />
             </>
           )}
