@@ -55,7 +55,11 @@ export function computeBranchMap(allMessages: Message[]): Record<string, BranchI
   }
 
   for (const siblings of grouped.values()) {
-    siblings.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    siblings.sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+        a.id.localeCompare(b.id)
+    );
     const total = siblings.length;
     siblings.forEach((m, idx) => {
       map[m.id] = {
@@ -328,7 +332,11 @@ export function useConversation(conversationId: string | null | undefined): UseC
               ? m.parentId == null
               : m.parentId === target.parentId
           )
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          .sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+              a.id.localeCompare(b.id)
+          );
 
         const affectedIds = new Set<string>();
         const collect = (id: string) => {

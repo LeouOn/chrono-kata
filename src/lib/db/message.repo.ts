@@ -48,7 +48,11 @@ export class DexieMessageRepository implements MessageRepository {
           ? m.parentId == null
           : m.parentId === target.parentId
       )
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+          a.id.localeCompare(b.id)
+      );
   }
 
   async getDeepestDescendant(messageId: string): Promise<Message> {
@@ -60,7 +64,11 @@ export class DexieMessageRepository implements MessageRepository {
     while (true) {
       const children = all
         .filter((m) => m.parentId === current.id)
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        .sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+            a.id.localeCompare(b.id)
+        );
       if (children.length === 0) break;
       current = children[children.length - 1]!;
     }

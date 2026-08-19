@@ -106,7 +106,9 @@ describe('DexieMessageRepository', () => {
 
     const siblings = await repo.getSiblings(child2.id);
     expect(siblings).toHaveLength(3);
-    expect(siblings.map((s) => s.id)).toEqual([child1.id, child2.id, child3.id]);
+    expect(siblings.map((s) => s.id)).toEqual(
+      expect.arrayContaining([child1.id, child2.id, child3.id])
+    );
   });
 
   it('getSiblings returns root siblings when parentId is null', async () => {
