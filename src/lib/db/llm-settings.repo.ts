@@ -15,91 +15,173 @@ export function resolveEnvSeeds(): Record<string, { baseUrl: string; apiKey: str
   const envSeeds: Record<string, { baseUrl: string; apiKey: string; model: string }> = {};
 
   // OpenRouter
-  const openrouterKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || process.env.NEXT_PUBLIC_SEED_OPENROUTER_KEY;
+  const openrouterKey =
+    process.env.OPENROUTER_API_KEY ||
+    process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ||
+    process.env.NEXT_PUBLIC_SEED_OPENROUTER_KEY;
   if (openrouterKey) {
     envSeeds['openrouter'] = {
-      baseUrl: process.env.NEXT_PUBLIC_OPENROUTER_BASE_URL || PROVIDER_DEFAULTS.openrouter.baseUrl,
+      baseUrl:
+        process.env.OPENROUTER_BASE_URL ||
+        process.env.NEXT_PUBLIC_OPENROUTER_BASE_URL ||
+        PROVIDER_DEFAULTS.openrouter.baseUrl,
       apiKey: openrouterKey,
-      model: process.env.NEXT_PUBLIC_OPENROUTER_MODEL || PROVIDER_DEFAULTS.openrouter.model,
+      model:
+        process.env.OPENROUTER_MODEL ||
+        process.env.NEXT_PUBLIC_OPENROUTER_MODEL ||
+        PROVIDER_DEFAULTS.openrouter.model,
     };
   }
 
   // OpenAI
-  const openaiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.NEXT_PUBLIC_SEED_OPENAI_KEY;
+  const openaiKey =
+    process.env.OPENAI_API_KEY ||
+    process.env.NEXT_PUBLIC_OPENAI_API_KEY ||
+    process.env.NEXT_PUBLIC_SEED_OPENAI_KEY;
   if (openaiKey) {
     envSeeds['openai'] = {
-      baseUrl: process.env.NEXT_PUBLIC_OPENAI_BASE_URL || PROVIDER_DEFAULTS.openai.baseUrl,
+      baseUrl:
+        process.env.OPENAI_BASE_URL ||
+        process.env.NEXT_PUBLIC_OPENAI_BASE_URL ||
+        PROVIDER_DEFAULTS.openai.baseUrl,
       apiKey: openaiKey,
-      model: process.env.NEXT_PUBLIC_OPENAI_MODEL || PROVIDER_DEFAULTS.openai.model,
+      model:
+        process.env.OPENAI_MODEL ||
+        process.env.NEXT_PUBLIC_OPENAI_MODEL ||
+        PROVIDER_DEFAULTS.openai.model,
     };
   }
 
   // Claude / Anthropic
-  const claudeKey = process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY || process.env.NEXT_PUBLIC_CLAUDE_API_KEY;
+  const claudeKey =
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.CLAUDE_API_KEY ||
+    process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY ||
+    process.env.NEXT_PUBLIC_CLAUDE_API_KEY;
   if (claudeKey) {
     envSeeds['claude'] = {
-      baseUrl: process.env.NEXT_PUBLIC_CLAUDE_BASE_URL || PROVIDER_DEFAULTS.claude.baseUrl,
+      baseUrl:
+        process.env.CLAUDE_BASE_URL ||
+        process.env.NEXT_PUBLIC_CLAUDE_BASE_URL ||
+        PROVIDER_DEFAULTS.claude.baseUrl,
       apiKey: claudeKey,
-      model: process.env.NEXT_PUBLIC_CLAUDE_MODEL || PROVIDER_DEFAULTS.claude.model,
+      model:
+        process.env.CLAUDE_MODEL ||
+        process.env.NEXT_PUBLIC_CLAUDE_MODEL ||
+        PROVIDER_DEFAULTS.claude.model,
     };
   }
 
   // Gemini / Google
-  const geminiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+  const geminiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
   if (geminiKey) {
     envSeeds['gemini'] = {
-      baseUrl: process.env.NEXT_PUBLIC_GEMINI_BASE_URL || PROVIDER_DEFAULTS.gemini.baseUrl,
+      baseUrl:
+        process.env.GEMINI_BASE_URL ||
+        process.env.NEXT_PUBLIC_GEMINI_BASE_URL ||
+        PROVIDER_DEFAULTS.gemini.baseUrl,
       apiKey: geminiKey,
-      model: process.env.NEXT_PUBLIC_GEMINI_MODEL || PROVIDER_DEFAULTS.gemini.model,
+      model:
+        process.env.GEMINI_MODEL ||
+        process.env.NEXT_PUBLIC_GEMINI_MODEL ||
+        PROVIDER_DEFAULTS.gemini.model,
     };
   }
 
   // DeepSeek
-  const deepseekKey = process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY;
+  const deepseekKey =
+    process.env.DEEPSEEK_API_KEY ||
+    process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY;
   if (deepseekKey) {
     envSeeds['deepseek'] = {
-      baseUrl: process.env.NEXT_PUBLIC_DEEPSEEK_BASE_URL || PROVIDER_DEFAULTS.deepseek.baseUrl,
+      baseUrl:
+        process.env.DEEPSEEK_BASE_URL ||
+        process.env.NEXT_PUBLIC_DEEPSEEK_BASE_URL ||
+        PROVIDER_DEFAULTS.deepseek.baseUrl,
       apiKey: deepseekKey,
-      model: process.env.NEXT_PUBLIC_DEEPSEEK_MODEL || PROVIDER_DEFAULTS.deepseek.model,
+      model:
+        process.env.DEEPSEEK_MODEL ||
+        process.env.NEXT_PUBLIC_DEEPSEEK_MODEL ||
+        PROVIDER_DEFAULTS.deepseek.model,
     };
   }
 
   // Zhipu AI / GLM
-  const zaiKey = process.env.NEXT_PUBLIC_ZAI_API_KEY || process.env.NEXT_PUBLIC_SEED_ZAI_KEY;
+  const zaiKey =
+    process.env.ZAI_API_KEY ||
+    process.env.NEXT_PUBLIC_ZAI_API_KEY ||
+    process.env.NEXT_PUBLIC_SEED_ZAI_KEY;
   if (zaiKey) {
     envSeeds['zai'] = {
-      baseUrl: process.env.NEXT_PUBLIC_ZAI_BASE_URL || PROVIDER_DEFAULTS.zai.baseUrl,
+      baseUrl:
+        process.env.ZAI_BASE_URL ||
+        process.env.NEXT_PUBLIC_ZAI_BASE_URL ||
+        PROVIDER_DEFAULTS.zai.baseUrl,
       apiKey: zaiKey,
-      model: process.env.NEXT_PUBLIC_ZAI_MODEL || PROVIDER_DEFAULTS.zai.model,
+      model:
+        process.env.ZAI_MODEL ||
+        process.env.NEXT_PUBLIC_ZAI_MODEL ||
+        PROVIDER_DEFAULTS.zai.model,
     };
   }
 
   // MiniMax
-  const minimaxKey = process.env.NEXT_PUBLIC_MINIMAX_API_KEY;
+  const minimaxKey =
+    process.env.MINIMAX_API_KEY ||
+    process.env.NEXT_PUBLIC_MINIMAX_API_KEY;
   if (minimaxKey) {
     envSeeds['minimax'] = {
-      baseUrl: process.env.NEXT_PUBLIC_MINIMAX_BASE_URL || PROVIDER_DEFAULTS.minimax.baseUrl,
+      baseUrl:
+        process.env.MINIMAX_BASE_URL ||
+        process.env.NEXT_PUBLIC_MINIMAX_BASE_URL ||
+        PROVIDER_DEFAULTS.minimax.baseUrl,
       apiKey: minimaxKey,
-      model: process.env.NEXT_PUBLIC_MINIMAX_MODEL || PROVIDER_DEFAULTS.minimax.model,
+      model:
+        process.env.MINIMAX_MODEL ||
+        process.env.NEXT_PUBLIC_MINIMAX_MODEL ||
+        PROVIDER_DEFAULTS.minimax.model,
     };
   }
 
   // Nvidia Nemotron
-  const nemotronKey = process.env.NEXT_PUBLIC_NEMOTRON_API_KEY;
+  const nemotronKey =
+    process.env.NEMOTRON_API_KEY ||
+    process.env.NEXT_PUBLIC_NEMOTRON_API_KEY;
   if (nemotronKey) {
     envSeeds['nemotron'] = {
-      baseUrl: process.env.NEXT_PUBLIC_NEMOTRON_BASE_URL || PROVIDER_DEFAULTS.nemotron.baseUrl,
+      baseUrl:
+        process.env.NEMOTRON_BASE_URL ||
+        process.env.NEXT_PUBLIC_NEMOTRON_BASE_URL ||
+        PROVIDER_DEFAULTS.nemotron.baseUrl,
       apiKey: nemotronKey,
-      model: process.env.NEXT_PUBLIC_NEMOTRON_MODEL || PROVIDER_DEFAULTS.nemotron.model,
+      model:
+        process.env.NEMOTRON_MODEL ||
+        process.env.NEXT_PUBLIC_NEMOTRON_MODEL ||
+        PROVIDER_DEFAULTS.nemotron.model,
     };
   }
 
   // Ollama (Local)
-  if (process.env.NEXT_PUBLIC_OLLAMA_ENABLED === 'true' || process.env.NEXT_PUBLIC_OLLAMA_BASE_URL) {
+  if (
+    process.env.OLLAMA_ENABLED === 'true' ||
+    process.env.NEXT_PUBLIC_OLLAMA_ENABLED === 'true' ||
+    process.env.OLLAMA_BASE_URL ||
+    process.env.NEXT_PUBLIC_OLLAMA_BASE_URL
+  ) {
     envSeeds['ollama'] = {
-      baseUrl: process.env.NEXT_PUBLIC_OLLAMA_BASE_URL || PROVIDER_DEFAULTS.ollama.baseUrl,
+      baseUrl:
+        process.env.OLLAMA_BASE_URL ||
+        process.env.NEXT_PUBLIC_OLLAMA_BASE_URL ||
+        PROVIDER_DEFAULTS.ollama.baseUrl,
       apiKey: 'ollama',
-      model: process.env.NEXT_PUBLIC_OLLAMA_MODEL || PROVIDER_DEFAULTS.ollama.model,
+      model:
+        process.env.OLLAMA_MODEL ||
+        process.env.NEXT_PUBLIC_OLLAMA_MODEL ||
+        PROVIDER_DEFAULTS.ollama.model,
     };
   }
 
@@ -111,7 +193,7 @@ export class DexieLLMSettingsRepository implements LLMSettingsRepository {
     const db = getDb();
     const existing = await db.llmSettings.get('singleton');
     const envSeeds = resolveEnvSeeds();
-    const defaultProvider = process.env.NEXT_PUBLIC_DEFAULT_PROVIDER;
+    const defaultProvider = process.env.DEFAULT_PROVIDER || process.env.NEXT_PUBLIC_DEFAULT_PROVIDER;
 
     if (existing) {
       // Auto-merge any env seeds that aren't already configured.
