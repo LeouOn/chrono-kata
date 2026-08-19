@@ -7,6 +7,9 @@ export type ThemeMode = z.infer<typeof ThemeModeSchema>;
 export const AccentColorSchema = z.enum(['amber', 'sage', 'magenta', 'cyan']);
 export type AccentColor = z.infer<typeof AccentColorSchema>;
 
+export const RatingStyleSchema = z.enum(['slider', 'emoji', 'dots']);
+export type RatingStyle = z.infer<typeof RatingStyleSchema>;
+
 export const SettingsSchema = z.object({
   id: z.literal('singleton'),
   displayName: z.string().max(50).optional(),
@@ -19,6 +22,7 @@ export const SettingsSchema = z.object({
   notificationsEnabled: z.boolean().optional(),
   theme: ThemeModeSchema.optional(),
   accentColor: AccentColorSchema.optional(),
+  ratingStyle: RatingStyleSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -36,4 +40,5 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   notificationsEnabled: false,
   theme: 'system',
   accentColor: 'amber',
+  ratingStyle: 'slider',
 };

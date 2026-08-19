@@ -10,3 +10,5 @@ src/lib/coaches/athena-persona.ts
 coverage/
 playwright-report/
 test-results/
+.omo/
+*.tsbuildinfo
