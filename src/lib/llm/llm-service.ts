@@ -42,6 +42,7 @@ export interface CoachCommentInput {
   personality: CoachPersonality;
   displayName?: string;
   llmSettings: LLMSettings;
+  providerOverride?: string;
   signal?: AbortSignal;
 }
 
@@ -50,6 +51,11 @@ export interface GenerateCoachCommentResult {
   promptTokens: number;
   completionTokens: number;
   personalityUsed: CoachPersonality;
+  providerName: string;
+  model: string;
+  latencyMs: number;
+  systemPrompt: string;
+  userText: string;
 }
 
 /**
@@ -66,18 +72,24 @@ export async function generateCoachComment(
     );
   }
 
-  const config = resolveActiveProvider(input.llmSettings);
+  const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const config = resolveActiveProvider(input.llmSettings, input.providerOverride);
   const provider = createLLMProvider(config);
   const systemPrompt = personalizeSystemPrompt(
     getCoachSystemPrompt(input.personality),
     input.displayName,
   );
+  const userText = buildCoachUserText(input.currentSession, input.recentSessions);
 
   const response = await provider.completeSingle({
-    userText: buildCoachUserText(input.currentSession, input.recentSessions),
+    userText,
     systemPrompt,
     signal: withTimeout(input.signal),
   });
+
+  const latencyMs = Math.round(
+    (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime
+  );
 
   if (!response.content) {
     throw new LLMException('Provider returned empty response.');
@@ -88,6 +100,11 @@ export async function generateCoachComment(
     promptTokens: response.usage?.promptTokens ?? 0,
     completionTokens: response.usage?.completionTokens ?? 0,
     personalityUsed: input.personality,
+    providerName: config.providerName,
+    model: config.model,
+    latencyMs,
+    systemPrompt,
+    userText,
   };
 }
 
@@ -102,8 +119,10 @@ export async function generateCoachCommentStream(
     throw new LLMException('Offline — coach skipped.', LLMExceptionKind.Offline);
   }
 
-  const config = resolveActiveProvider(input.llmSettings);
+  const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const config = resolveActiveProvider(input.llmSettings, input.providerOverride);
   const provider = createLLMProvider(config);
+  const userText = buildCoachUserText(input.currentSession, input.recentSessions);
 
   if ('streamCompleteSingle' in provider && typeof (provider as StreamingLLMProvider).streamCompleteSingle === 'function') {
     const streamingProvider = provider as StreamingLLMProvider;
@@ -114,7 +133,7 @@ export async function generateCoachCommentStream(
 
     let fullText = '';
     const usage = await streamingProvider.streamCompleteSingle({
-      userText: buildCoachUserText(input.currentSession, input.recentSessions),
+      userText,
       systemPrompt,
       signal: withTimeout(input.signal),
       onChunk: (chunk: StreamChunk) => {
@@ -124,6 +143,10 @@ export async function generateCoachCommentStream(
         }
       },
     });
+
+    const latencyMs = Math.round(
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime
+    );
 
     const cleaned = cleanLLMResponse(fullText);
     if (!cleaned) {
@@ -135,6 +158,11 @@ export async function generateCoachCommentStream(
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
       personalityUsed: input.personality,
+      providerName: config.providerName,
+      model: config.model,
+      latencyMs,
+      systemPrompt,
+      userText,
     };
   }
 
@@ -148,6 +176,7 @@ export interface ConversationReplyInput {
   personality: CoachPersonality;
   displayName?: string;
   llmSettings: LLMSettings;
+  providerOverride?: string;
   signal?: AbortSignal;
   onToken?: (partial: string) => void;
 }
@@ -157,6 +186,10 @@ export interface ConversationReplyResult {
   promptTokens: number;
   completionTokens: number;
   personalityUsed: CoachPersonality;
+  providerName: string;
+  model: string;
+  latencyMs: number;
+  systemPrompt: string;
 }
 
 export async function generateConversationReply(
@@ -166,7 +199,8 @@ export async function generateConversationReply(
     throw new LLMException('Offline — coach skipped.', LLMExceptionKind.Offline);
   }
 
-  const config = resolveActiveProvider(input.llmSettings);
+  const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const config = resolveActiveProvider(input.llmSettings, input.providerOverride);
   const provider = createLLMProvider(config);
   const systemPrompt = personalizeSystemPrompt(
     getCoachSystemPrompt(input.personality),
@@ -190,6 +224,9 @@ export async function generateConversationReply(
         }
       },
     });
+    const latencyMs = Math.round(
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime
+    );
     const cleaned = cleanLLMResponse(fullText);
     if (!cleaned) {
       throw new LLMException('Provider returned empty streaming response.');
@@ -199,6 +236,10 @@ export async function generateConversationReply(
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
       personalityUsed: input.personality,
+      providerName: config.providerName,
+      model: config.model,
+      latencyMs,
+      systemPrompt,
     };
   }
 
@@ -219,6 +260,9 @@ export async function generateConversationReply(
         }
       },
     });
+    const latencyMs = Math.round(
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime
+    );
     const cleaned = cleanLLMResponse(fullText);
     if (!cleaned) {
       throw new LLMException('Provider returned empty streaming response.');
@@ -228,6 +272,10 @@ export async function generateConversationReply(
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
       personalityUsed: input.personality,
+      providerName: config.providerName,
+      model: config.model,
+      latencyMs,
+      systemPrompt,
     };
   }
 
@@ -322,8 +370,8 @@ export async function suggestLabel(input: LabelSuggestionInput): Promise<string>
   return response.content.split('\n')[0]!.trim().replace(/^["'#-]+|["'.]+$/g, '').slice(0, 50);
 }
 
-function resolveActiveProvider(settings: LLMSettings): ProviderConfig {
-  const name = settings.activeProviderName;
+function resolveActiveProvider(settings: LLMSettings, providerOverride?: string): ProviderConfig {
+  const name = providerOverride || settings.activeProviderName;
   const entry = settings.providers[name];
   if (!entry) {
     throw new LLMException(

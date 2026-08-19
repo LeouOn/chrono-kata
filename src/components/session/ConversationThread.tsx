@@ -1,7 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { RotateCw, Pencil, Trash2, ChevronLeft, ChevronRight, Check, X } from 'lucide-react';
+import {
+  RotateCw,
+  Pencil,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  X,
+  Wrench,
+} from 'lucide-react';
 import type { CoachPersonality } from '@/lib/schemas/coach-personality';
 import type { Message } from '@/lib/schemas/message';
 import type { BranchInfo } from '@/hooks/useConversation';
@@ -81,6 +90,7 @@ function MessageBubble({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   const handleSaveEdit = () => {
     if (editContent.trim() === '') return;
@@ -245,6 +255,18 @@ function MessageBubble({
             </button>
           )}
 
+          <button
+            type="button"
+            onClick={() => setShowDebug((prev) => !prev)}
+            className={`p-1 rounded hover:bg-surface-2 ${
+              showDebug ? 'text-accent' : 'hover:text-text'
+            }`}
+            title="Inspect debug metrics"
+            aria-label="Inspect debug metrics"
+          >
+            <Wrench size={12} />
+          </button>
+
           {onDelete && (
             <button
               type="button"
@@ -256,6 +278,99 @@ function MessageBubble({
             >
               <Trash2 size={12} />
             </button>
+          )}
+        </div>
+      )}
+
+      {/* Collapsible Debug Panel */}
+      {showDebug && (
+        <div className="mt-2 w-full max-w-[92%] bg-surface-2 border border-border rounded-xl p-3 text-xs space-y-2 font-mono shadow-sm">
+          <div className="flex items-center justify-between text-text-muted border-b border-border pb-1">
+            <span className="font-semibold text-text uppercase tracking-wider text-[10px]">
+              🔧 Diagnostics & LLM Inspector
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowDebug(false)}
+              className="text-text-muted hover:text-text text-[11px]"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+            <div>
+              <span className="text-text-muted">Role: </span>
+              <span className="text-text font-medium">{message.role}</span>
+            </div>
+            <div>
+              <span className="text-text-muted">Personality: </span>
+              <span className="text-text font-medium">{message.personality ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-text-muted">Provider: </span>
+              <span className="text-text font-medium">{message.provider ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-text-muted">Model: </span>
+              <span className="text-text font-medium">{message.model ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-text-muted">Latency: </span>
+              <span className="text-text font-medium">
+                {message.latencyMs != null
+                  ? `${message.latencyMs}ms (${(message.latencyMs / 1000).toFixed(2)}s)`
+                  : '—'}
+              </span>
+            </div>
+            <div>
+              <span className="text-text-muted">Tokens: </span>
+              <span className="text-text font-medium">
+                {message.tokensUsed
+                  ? `${message.tokensUsed.prompt}↑ / ${message.tokensUsed.completion}↓ (Total: ${
+                      message.tokensUsed.prompt + message.tokensUsed.completion
+                    })`
+                  : '—'}
+              </span>
+            </div>
+            <div>
+              <span className="text-text-muted">Edited: </span>
+              <span className="text-text font-medium">
+                {message.isEdited ? 'Yes' : 'No'}
+              </span>
+            </div>
+            <div>
+              <span className="text-text-muted">Timestamp: </span>
+              <span className="text-text font-medium">
+                {message.createdAt.toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })}
+              </span>
+            </div>
+          </div>
+
+          {message.systemPrompt && (
+            <div className="pt-1">
+              <div className="text-[10px] uppercase text-text-muted font-semibold mb-1">
+                System Prompt
+              </div>
+              <pre className="bg-surface p-2 rounded text-[10px] text-text whitespace-pre-wrap max-h-32 overflow-y-auto border border-border">
+                {message.systemPrompt}
+              </pre>
+            </div>
+          )}
+
+          {message.rawPrompt && (
+            <div className="pt-1">
+              <div className="text-[10px] uppercase text-text-muted font-semibold mb-1">
+                Raw Context Prompt
+              </div>
+              <pre className="bg-surface p-2 rounded text-[10px] text-text whitespace-pre-wrap max-h-32 overflow-y-auto border border-border">
+                {message.rawPrompt}
+              </pre>
+            </div>
           )}
         </div>
       )}

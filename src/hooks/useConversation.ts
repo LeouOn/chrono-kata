@@ -12,6 +12,7 @@ import { LLMException, LLMExceptionKind } from '@/lib/llm/types';
 import { dispatchToast } from '@/components/ui/Toast';
 import type { Conversation } from '@/lib/schemas/conversation';
 import type { Message } from '@/lib/schemas/message';
+import type { CoachPersonality } from '@/lib/schemas/coach-personality';
 
 export interface BranchInfo {
   currentIndex: number;
@@ -20,14 +21,24 @@ export interface BranchInfo {
   nextSiblingId: string | null;
 }
 
+export interface SendMessageOptions {
+  personalityOverride?: CoachPersonality;
+  providerOverride?: string;
+}
+
+export interface RegenerateMessageOptions {
+  personalityOverride?: CoachPersonality;
+  providerOverride?: string;
+}
+
 export interface UseConversationResult {
   conversation: Conversation | null;
   messages: Message[];
   branchMap: Record<string, BranchInfo>;
   isLoading: boolean;
   isStreaming: boolean;
-  sendMessage: (text: string) => Promise<void>;
-  regenerateMessage: (messageId: string) => Promise<void>;
+  sendMessage: (text: string, options?: SendMessageOptions) => Promise<void>;
+  regenerateMessage: (messageId: string, options?: RegenerateMessageOptions) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
   switchBranch: (targetSiblingId: string) => Promise<void>;
@@ -130,7 +141,7 @@ export function useConversation(conversationId: string | null | undefined): UseC
   }, [conversationId]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, options?: SendMessageOptions) => {
       if (!conversation || !conversationId) return;
       if (isStreaming) return;
 
@@ -164,24 +175,30 @@ export function useConversation(conversationId: string | null | undefined): UseC
         }
 
         const history = await messageRepo.getPathToLeaf(conversationId, userMessage.id);
+        const personalityToUse = options?.personalityOverride ?? appSettings.selectedCoachPersonality;
 
-        await generateConversationReply({
+        const result = await generateConversationReply({
           messages: history.map((m) => ({ role: m.role, content: m.content })),
-          personality: appSettings.selectedCoachPersonality,
+          personality: personalityToUse,
           displayName: appSettings.displayName,
           llmSettings,
+          providerOverride: options?.providerOverride,
           onToken: (partial) => {
             void messageRepo.update(placeholder.id, { content: partial });
           },
         });
 
-        const finalMsg = await messageRepo.getById(placeholder.id);
-        const personalityUsed = appSettings.selectedCoachPersonality;
         await messageRepo.update(placeholder.id, {
-          content: finalMsg?.content ?? '',
-          personality: personalityUsed,
+          content: result.reply,
+          personality: result.personalityUsed,
+          provider: result.providerName,
+          model: result.model,
+          tokensUsed: { prompt: result.promptTokens, completion: result.completionTokens },
+          latencyMs: result.latencyMs,
+          systemPrompt: result.systemPrompt,
         });
         await conversationRepo.update(conversationId, { activeLeafId: placeholder.id });
+        await llmSettingsRepo.incrementTokenUsage(result.promptTokens, result.completionTokens);
       } catch (e) {
         const msg = e instanceof LLMException ? e.message : e instanceof Error ? e.message : String(e);
         const isOffline = e instanceof LLMException && e.kind === LLMExceptionKind.Offline;
@@ -195,7 +212,7 @@ export function useConversation(conversationId: string | null | undefined): UseC
   );
 
   const regenerateMessage = useCallback(
-    async (messageId: string) => {
+    async (messageId: string, options?: RegenerateMessageOptions) => {
       if (!conversation || !conversationId) return;
       if (isStreaming) return;
 
@@ -227,24 +244,31 @@ export function useConversation(conversationId: string | null | undefined): UseC
         const history = target.parentId
           ? await messageRepo.getPathToLeaf(conversationId, target.parentId)
           : [];
+        const personalityToUse =
+          options?.personalityOverride ?? target.personality ?? appSettings.selectedCoachPersonality;
 
-        await generateConversationReply({
+        const result = await generateConversationReply({
           messages: history.map((m) => ({ role: m.role, content: m.content })),
-          personality: appSettings.selectedCoachPersonality,
+          personality: personalityToUse,
           displayName: appSettings.displayName,
           llmSettings,
+          providerOverride: options?.providerOverride,
           onToken: (partial) => {
             void messageRepo.update(placeholder.id, { content: partial });
           },
         });
 
-        const finalMsg = await messageRepo.getById(placeholder.id);
-        const personalityUsed = appSettings.selectedCoachPersonality;
         await messageRepo.update(placeholder.id, {
-          content: finalMsg?.content ?? '',
-          personality: personalityUsed,
+          content: result.reply,
+          personality: result.personalityUsed,
+          provider: result.providerName,
+          model: result.model,
+          tokensUsed: { prompt: result.promptTokens, completion: result.completionTokens },
+          latencyMs: result.latencyMs,
+          systemPrompt: result.systemPrompt,
         });
         await conversationRepo.update(conversationId, { activeLeafId: placeholder.id });
+        await llmSettingsRepo.incrementTokenUsage(result.promptTokens, result.completionTokens);
       } catch (e) {
         const msg = e instanceof LLMException ? e.message : e instanceof Error ? e.message : String(e);
         const isOffline = e instanceof LLMException && e.kind === LLMExceptionKind.Offline;

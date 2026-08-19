@@ -1,4 +1,4 @@
-﻿import { z } from 'zod';
+import { z } from 'zod';
 import { CoachPersonalitySchema } from './coach-personality';
 
 export const MessageRoleSchema = z.enum(['user', 'assistant']);
@@ -25,6 +25,8 @@ export const MessageSchema = z.object({
   personality: CoachPersonalitySchema.optional(),
   tokensUsed: TokenUsageSchema.optional(),
   latencyMs: z.number().int().nonnegative().optional(),
+  systemPrompt: z.string().optional(),
+  rawPrompt: z.string().optional(),
   isEdited: z.boolean().optional(),
   createdAt: z.date(),
   editedAt: z.date().optional(),

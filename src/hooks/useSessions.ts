@@ -79,7 +79,16 @@ async function generateCoachCommentSideEffect(session: Session): Promise<void> {
       },
     });
 
-    await messageRepo.update(placeholder.id, { content: result.comment });
+    await messageRepo.update(placeholder.id, {
+      content: result.comment,
+      provider: result.providerName,
+      model: result.model,
+      personality: result.personalityUsed,
+      tokensUsed: { prompt: result.promptTokens, completion: result.completionTokens },
+      latencyMs: result.latencyMs,
+      systemPrompt: result.systemPrompt,
+      rawPrompt: result.userText,
+    });
     await conversationRepo.update(conversation.id, { activeLeafId: placeholder.id });
 
     await sessionRepo.update(session.id, {

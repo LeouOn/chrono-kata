@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { Share2, Copy, Download, FileText } from 'lucide-react';
 import { useSessions } from '@/hooks/useSessions';
 import { useConversation } from '@/hooks/useConversation';
 import { SessionForm } from '@/components/session/SessionForm';
@@ -11,6 +12,13 @@ import { Card } from '@/components/ui/Card';
 import { ConversationThread } from '@/components/session/ConversationThread';
 import { FollowUpInput } from '@/components/session/FollowUpInput';
 import { formatDuration } from '@/lib/utils/format';
+import { dispatchToast } from '@/components/ui/Toast';
+import {
+  exportConversationAsJson,
+  exportConversationAsMarkdown,
+  downloadFile,
+  copyToClipboard,
+} from '@/lib/utils/conversation-export';
 
 const RATING_EMOJI: Record<number, string> = {
   5: '😄', 4: '🙂', 3: '😐', 2: '😕', 1: '😢',
@@ -22,6 +30,7 @@ export default function SessionDetailPage() {
   const { sessions, updateSession, deleteSession } = useSessions();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const session = sessions.find((s) => s.id === params.id);
   if (!session) {
@@ -52,6 +61,36 @@ export default function SessionDetailPage() {
     await deleteSession(session!.id);
     setDeleteOpen(false);
     router.push('/sessions');
+  }
+
+  async function handleCopyMarkdown() {
+    if (!conversation) return;
+    const md = exportConversationAsMarkdown(session!, conversation, messages);
+    const ok = await copyToClipboard(md);
+    if (ok) {
+      dispatchToast('Conversation copied to clipboard as Markdown!', 'success');
+    } else {
+      dispatchToast('Failed to copy to clipboard', 'error');
+    }
+    setExportOpen(false);
+  }
+
+  function handleDownloadMarkdown() {
+    if (!conversation) return;
+    const md = exportConversationAsMarkdown(session!, conversation, messages);
+    const dateTag = session!.startedAt.toISOString().slice(0, 10);
+    downloadFile(md, `chrono-kata-${dateTag}-${session!.id.slice(0, 8)}.md`, 'text/markdown');
+    dispatchToast('Downloaded Markdown export', 'success');
+    setExportOpen(false);
+  }
+
+  function handleDownloadJson() {
+    if (!conversation) return;
+    const jsonStr = exportConversationAsJson(session!, conversation, messages);
+    const dateTag = session!.startedAt.toISOString().slice(0, 10);
+    downloadFile(jsonStr, `chrono-kata-${dateTag}-${session!.id.slice(0, 8)}.json`, 'application/json');
+    dispatchToast('Downloaded JSON export', 'success');
+    setExportOpen(false);
   }
 
   return (
@@ -87,9 +126,52 @@ export default function SessionDetailPage() {
 
       {conversation ? (
         <Card>
-          <div className="text-xs uppercase tracking-wide text-text-muted mb-3">
-            Coach thread
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs uppercase tracking-wide text-text-muted">
+              Coach thread
+            </div>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setExportOpen((prev) => !prev)}
+                className="text-xs text-text-muted hover:text-text px-2 py-1 rounded bg-surface-2 hover:bg-surface flex items-center gap-1.5 transition-colors"
+                title="Export conversation"
+              >
+                <Share2 size={13} />
+                <span>Export</span>
+              </button>
+
+              {exportOpen && (
+                <div className="absolute right-0 mt-1 w-48 bg-surface-2 border border-border rounded-xl shadow-lg p-1.5 z-20 space-y-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={handleCopyMarkdown}
+                    className="w-full text-left px-2.5 py-1.5 rounded hover:bg-surface text-text flex items-center gap-2"
+                  >
+                    <Copy size={13} className="text-text-muted" />
+                    <span>Copy Markdown</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadMarkdown}
+                    className="w-full text-left px-2.5 py-1.5 rounded hover:bg-surface text-text flex items-center gap-2"
+                  >
+                    <FileText size={13} className="text-text-muted" />
+                    <span>Download (.md)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadJson}
+                    className="w-full text-left px-2.5 py-1.5 rounded hover:bg-surface text-text flex items-center gap-2"
+                  >
+                    <Download size={13} className="text-text-muted" />
+                    <span>Download (.json)</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
+
           {isLoading ? (
             <div className="text-text-muted text-sm italic py-4 text-center animate-pulse">
               Loading…
@@ -105,7 +187,10 @@ export default function SessionDetailPage() {
                 onDelete={(id) => void deleteMessage(id)}
                 onSwitchBranch={(id) => void switchBranch(id)}
               />
-              <FollowUpInput disabled={isStreaming} onSend={(t) => void sendMessage(t)} />
+              <FollowUpInput
+                disabled={isStreaming}
+                onSend={(t, opts) => void sendMessage(t, opts)}
+              />
             </>
           )}
         </Card>
