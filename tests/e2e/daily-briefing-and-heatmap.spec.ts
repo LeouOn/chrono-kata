@@ -23,9 +23,9 @@ test.describe('Daily AI Coach Briefing & Yearly Heatmap', () => {
     await expect(page.getByText(/days active/i)).toBeVisible();
 
     // Verify month labels
-    await expect(page.getByText('Jan')).toBeVisible();
-    await expect(page.getByText('Dec')).toBeVisible();
-    await expect(page.getByText('Less')).toBeVisible();
-    await expect(page.getByText('More')).toBeVisible();
+    await expect(page.getByText('Jan').first()).toBeVisible();
+    await expect(page.getByText('Dec').first()).toBeVisible();
+    await expect(page.getByText('Less').first()).toBeVisible();
+    await expect(page.getByText('More').first()).toBeVisible();
   });
 });

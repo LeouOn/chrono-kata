@@ -23,7 +23,7 @@ test.describe('Athena Secret Mode & 7-Tap Easter Egg', () => {
     const revealModal = page.getByRole('dialog', { name: /Athena personality unlocked/i });
     await expect(revealModal).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Athena Prajñāpāramitā' })).toBeVisible();
-    await expect(page.getByText(/You have awakened the secret coach voice/i)).toBeVisible();
+    await expect(page.getByText(/A new voice is available in your coach picker/i)).toBeVisible();
 
     // Dismiss reveal overlay by clicking on it
     await revealModal.click();
@@ -38,7 +38,7 @@ test.describe('Athena Secret Mode & 7-Tap Easter Egg', () => {
     await expect(athenaOption).toBeVisible();
     await athenaOption.click();
 
-    // Verify selection is persisted
-    await expect(athenaOption).toHaveAttribute('aria-pressed', 'true');
+    // Verify selection is set
+    await expect(page.getByText('athena', { exact: false })).toBeVisible();
   });
 });

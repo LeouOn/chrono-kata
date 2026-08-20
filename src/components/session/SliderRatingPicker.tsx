@@ -62,14 +62,18 @@ export function SliderRatingPicker({ value, onChange }: Props) {
         aria-label="Session rating"
         aria-valuetext={value ? `${value} out of 5, ${LABELS[value]}` : 'No rating selected'}
       />
-      <div className="flex justify-between mt-1 px-0.5">
+      <div className="flex justify-between mt-1.5 px-0.5">
         {([1, 2, 3, 4, 5] as const).map((n) => (
-          <span
+          <button
             key={n}
-            className={`text-[10px] ${value === n ? 'text-accent font-medium' : 'text-text-muted'}`}
+            type="button"
+            onClick={() => onChange(n)}
+            className={`text-xs py-0.5 px-2 rounded-lg font-medium transition-all ${
+              value === n ? 'text-accent font-semibold bg-accent/20 border border-accent/40' : 'text-text-muted hover:text-text'
+            }`}
           >
             {n}
-          </span>
+          </button>
         ))}
       </div>
     </div>

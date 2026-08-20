@@ -110,7 +110,12 @@ export default function HomePage() {
           </div>
           <div className="divide-y divide-border">
             {recent.map((s) => (
-              <SessionCard key={s.id} session={s} onRetry={retryCoachComment} />
+              <SessionCard
+                key={s.id}
+                session={s}
+                onClick={(sess) => router.push(`/sessions/${sess.id}`)}
+                onRetry={retryCoachComment}
+              />
             ))}
           </div>
         </div>

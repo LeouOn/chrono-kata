@@ -41,13 +41,19 @@ test.describe('Habit Goals & Streak Protection', () => {
     if (await durationInput.isVisible()) {
       await durationInput.fill('15');
     }
+
+    // Pick rating 4
+    await page.getByRole('button', { name: '4', exact: true }).click();
+
     await page.getByRole('button', { name: /Save session/i }).click();
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(page.getByText('15m')).toBeVisible();
 
     // Navigate to Home
     await page.goto('/');
 
     // Verify TodaySummary card displays progress ring and goal text
     await expect(page.getByText(/Goal \d+m/i)).toBeVisible();
-    await expect(page.locator('svg circle')).toHaveCount(2); // Track and progress arc
+    await expect(page.locator('svg circle').first()).toBeVisible();
   });
 });

@@ -17,7 +17,7 @@ test.describe('Onboarding & Navigation', () => {
     await zenCard.click();
 
     // Should redirect to home page
-    await expect(page).toHaveURL('http://localhost:3000/');
+    await expect(page).toHaveURL(/.*:(3000|3008)\/?$/);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 

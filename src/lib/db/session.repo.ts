@@ -54,9 +54,12 @@ export class DexieSessionRepository implements SessionRepository {
 
   async save(input: SessionInput): Promise<Session> {
     const now = new Date();
+    const sessionId = newId();
+    const conversation = await conversationRepo.save({ sessionId });
     const session: Session = {
       ...input,
-      id: newId(),
+      id: sessionId,
+      conversationId: conversation.id,
       createdAt: now,
       updatedAt: now,
       coachComment: null,
@@ -89,19 +92,21 @@ export const sessionRepo: SessionRepository = new DexieSessionRepository();
 
 async function migrateToConversation(session: Session): Promise<Session> {
   const conversation = await conversationRepo.save({ sessionId: session.id });
-  const assistantMessage = await messageRepo.save({
-    conversationId: conversation.id,
-    parentId: null,
-    role: 'assistant',
-    content: session.coachComment as string,
-  });
-  const updatedConversation = await conversationRepo.update(conversation.id, {
-    rootMessageId: assistantMessage.id,
-    activeLeafId: assistantMessage.id,
-  });
+  if (session.coachComment) {
+    const assistantMessage = await messageRepo.save({
+      conversationId: conversation.id,
+      parentId: null,
+      role: 'assistant',
+      content: session.coachComment as string,
+    });
+    await conversationRepo.update(conversation.id, {
+      rootMessageId: assistantMessage.id,
+      activeLeafId: assistantMessage.id,
+    });
+  }
   const updatedSession: Session = {
     ...session,
-    conversationId: updatedConversation.id,
+    conversationId: conversation.id,
     updatedAt: new Date(),
   };
   await getDb().sessions.put(updatedSession);

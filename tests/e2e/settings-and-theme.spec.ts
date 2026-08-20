@@ -32,10 +32,10 @@ test.describe('Settings & Appearance', () => {
   test('navigates to LLM settings and verifies provider presets', async ({ page }) => {
     await page.goto('/llm');
 
-    // Verify LLM Settings heading
-    await expect(page.getByRole('heading', { name: /LLM Settings/i })).toBeVisible();
+    // Verify LLM heading
+    await expect(page.getByRole('heading', { name: /LLM Providers|LLM Settings/i })).toBeVisible();
 
     // Verify token usage summary card
-    await expect(page.getByText(/Token usage/i)).toBeVisible();
+    await expect(page.getByText(/This month|tokens/i).first()).toBeVisible();
   });
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSessions } from '@/hooks/useSessions';
 import { SessionCard } from '@/components/session/SessionCard';
 import { SessionForm } from '@/components/session/SessionForm';
@@ -8,6 +9,7 @@ import { groupSessionsByDay } from '@/lib/utils/date';
 import type { SessionInput } from '@/lib/schemas/session';
 
 export default function SessionsPage() {
+  const router = useRouter();
   const { sessions, createSession, retryCoachComment } = useSessions();
   const [formOpen, setFormOpen] = useState(false);
 
@@ -43,7 +45,12 @@ export default function SessionsPage() {
                 {formatDayHeading(day)}
               </h2>
               {grouped.get(day)!.map((s) => (
-                <SessionCard key={s.id} session={s} onRetry={retryCoachComment} />
+                <SessionCard
+                  key={s.id}
+                  session={s}
+                  onClick={(sess) => router.push(`/sessions/${sess.id}`)}
+                  onRetry={retryCoachComment}
+                />
               ))}
             </section>
           ))}
