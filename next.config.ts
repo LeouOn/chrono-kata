@@ -42,6 +42,15 @@ const nextConfig: NextConfig = {
     OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
     OLLAMA_MODEL: process.env.OLLAMA_MODEL,
   },
+  webpack: (config, { dev }) => {
+    if (dev) {
+      // Use in-memory caching in development to prevent OneDrive file lock/packfile sync collisions
+      config.cache = {
+        type: 'memory',
+      };
+    }
+    return config;
+  },
   async headers() {
     return [
       {
