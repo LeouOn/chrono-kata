@@ -33,7 +33,7 @@ export default function SessionsPage() {
 
       {sessions.length === 0 ? (
         <p className="text-text-muted text-sm text-center py-12 italic">
-          No sessions logged yet. The first one is the hardest  Eand the simplest.
+          No sessions logged yet. The first one is the hardest — and the simplest.
         </p>
       ) : (
         <div className="divide-y divide-border">
