@@ -21,14 +21,17 @@ import type { Session, SessionInput } from '@/lib/schemas/session';
 const KEY = ['sessions'] as const;
 
 async function recomputeStreakSideEffect() {
-  const [current, sessions] = await Promise.all([
+  const [current, sessions, settings] = await Promise.all([
     streakRepo.get(),
     sessionRepo.getAll(),
+    settingsRepo.get(),
   ]);
   const next = computeStreak({
     sessions,
     previousStreak: current,
     now: new Date(),
+    restDays: settings?.restDays ?? [],
+    streakFreezeTokens: settings?.streakFreezeTokens ?? 0,
   });
   await streakRepo.save(next);
   return next;

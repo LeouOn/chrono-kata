@@ -9,6 +9,7 @@ import { DataTransfer } from '@/components/settings/DataTransfer';
 import { ReminderSettings } from '@/components/settings/ReminderSettings';
 import { ThemeSettings } from '@/components/settings/ThemeSettings';
 import { KataTemplateSettings } from '@/components/settings/KataTemplateSettings';
+import { GoalSettings } from '@/components/settings/GoalSettings';
 import {
   type CoachPersonality,
 } from '@/lib/schemas/coach-personality';
@@ -50,6 +51,8 @@ export default function SettingsPage() {
           </p>
         )}
       </Card>
+
+      <GoalSettings />
 
       <KataTemplateSettings />
 

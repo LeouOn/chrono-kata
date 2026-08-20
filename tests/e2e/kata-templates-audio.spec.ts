@@ -20,8 +20,8 @@ test.describe('Quick-Start Kata Templates & Practice Audio', () => {
 
     // Verify SessionForm modal opens pre-filled
     await expect(page.getByRole('heading', { name: /Start Morning Zazen|New session/i })).toBeVisible();
-    await expect(page.getByDisplayValue('Meditation')).toBeVisible();
-    await expect(page.getByDisplayValue(/Stillness, posture, and breath awareness/i)).toBeVisible();
+    await expect(page.locator('input[value="Meditation"]')).toBeVisible();
+    await expect(page.locator('textarea')).toHaveValue(/Stillness, posture, and breath awareness/i);
   });
 
   test('creates a custom Kata template in Settings', async ({ page }) => {

@@ -10,6 +10,9 @@ export type AccentColor = z.infer<typeof AccentColorSchema>;
 export const RatingStyleSchema = z.enum(['slider', 'emoji', 'dots']);
 export type RatingStyle = z.infer<typeof RatingStyleSchema>;
 
+export const DayOfWeekSchema = z.enum(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
+export type DayOfWeek = z.infer<typeof DayOfWeekSchema>;
+
 export const SettingsSchema = z.object({
   id: z.literal('singleton'),
   displayName: z.string().max(50).optional(),
@@ -23,6 +26,11 @@ export const SettingsSchema = z.object({
   theme: ThemeModeSchema.optional(),
   accentColor: AccentColorSchema.optional(),
   ratingStyle: RatingStyleSchema.optional(),
+  dailyGoalMinutes: z.number().int().min(1).max(1440).optional(),
+  weeklyGoalDays: z.number().int().min(1).max(7).optional(),
+  restDays: z.array(DayOfWeekSchema).optional(),
+  streakFreezeTokens: z.number().int().min(0).max(5).optional(),
+  lastStreakFreezeUsedAt: z.date().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -41,4 +49,9 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   theme: 'system',
   accentColor: 'amber',
   ratingStyle: 'slider',
+  dailyGoalMinutes: 20,
+  weeklyGoalDays: 5,
+  restDays: [],
+  streakFreezeTokens: 1,
+  lastStreakFreezeUsedAt: null,
 };
