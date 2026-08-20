@@ -3,7 +3,11 @@ import type { LLMSettings } from '@/lib/schemas/llm-settings';
 import type { CoachPersonality } from '@/lib/schemas/coach-personality';
 import { getCoachSystemPrompt } from '@/lib/coaches';
 import { createLLMProvider } from './provider-factory';
-import { buildCoachUserText, buildWeeklyReflectionUserText } from './prompt-builders';
+import {
+  buildCoachUserText,
+  buildWeeklyReflectionUserText,
+  buildDailyBriefingUserText,
+} from './prompt-builders';
 import { LLMException, LLMExceptionKind } from './types';
 import type { StreamChunk, StreamingLLMProvider } from './types';
 import type { ProviderConfig } from './provider-config';
@@ -368,6 +372,64 @@ export async function suggestLabel(input: LabelSuggestionInput): Promise<string>
   if (!response.content) throw new LLMException('Empty label response.');
   // Strip to single line, trim quotes/punctuation.
   return response.content.split('\n')[0]!.trim().replace(/^["'#-]+|["'.]+$/g, '').slice(0, 50);
+}
+
+export interface DailyBriefingInput {
+  streakDays: number;
+  recentSessions: Session[];
+  personality: CoachPersonality;
+  displayName?: string;
+  isRestDayToday?: boolean;
+  llmSettings: LLMSettings;
+  signal?: AbortSignal;
+}
+
+export interface GenerateDailyBriefingResult {
+  briefing: string;
+  providerName: string;
+  model: string;
+  personalityUsed: CoachPersonality;
+}
+
+export async function generateDailyBriefing(
+  input: DailyBriefingInput
+): Promise<GenerateDailyBriefingResult> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new LLMException('Offline — briefing skipped.', LLMExceptionKind.Offline);
+  }
+
+  const config = resolveActiveProvider(input.llmSettings);
+  const provider = createLLMProvider(config);
+  const rawSystemPrompt = getCoachSystemPrompt(input.personality);
+  const systemPrompt = personalizeSystemPrompt(rawSystemPrompt, input.displayName);
+  const userText = buildDailyBriefingUserText({
+    streakDays: input.streakDays,
+    recentSessions: input.recentSessions,
+    displayName: input.displayName,
+    isRestDayToday: input.isRestDayToday,
+  });
+
+  const response = await provider.completeSingle({
+    systemPrompt,
+    userText,
+    signal: withTimeout(input.signal),
+  });
+
+  if (!response.content) {
+    throw new LLMException('Empty briefing response from model.');
+  }
+
+  const briefing = cleanLLMResponse(response.content);
+  if (!briefing) {
+    throw new LLMException('Empty briefing response after cleaning.');
+  }
+
+  return {
+    briefing,
+    providerName: config.providerName,
+    model: config.model,
+    personalityUsed: input.personality,
+  };
 }
 
 function resolveActiveProvider(settings: LLMSettings, providerOverride?: string): ProviderConfig {

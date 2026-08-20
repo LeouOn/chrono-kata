@@ -69,3 +69,37 @@ export function buildWeeklyReflectionUserText(sessions: Session[]): string {
   lines.push('Respond with 2-3 observations about patterns you notice, followed by ONE specific question for me to sit with next week. Format as JSON: { "observations": ["...","..."], "question": "..." }');
   return lines.join('\n');
 }
+
+export interface DailyBriefingContext {
+  streakDays: number;
+  recentSessions: Session[];
+  displayName?: string;
+  isRestDayToday?: boolean;
+}
+
+export function buildDailyBriefingUserText({
+  streakDays,
+  recentSessions,
+  displayName,
+  isRestDayToday,
+}: DailyBriefingContext): string {
+  const greetingName = displayName ? `, ${displayName}` : '';
+  const lines: string[] = [
+    `Current streak: ${streakDays} day${streakDays === 1 ? '' : 's'}.`,
+    isRestDayToday ? 'Today is a designated rest day.' : 'Today is a practice day.',
+  ];
+
+  if (recentSessions.length > 0) {
+    lines.push('');
+    lines.push('Recent practice sessions:');
+    for (const s of recentSessions.slice(0, 3)) {
+      lines.push(buildSessionContextSummary(s));
+    }
+  }
+
+  lines.push('');
+  lines.push(
+    `Provide a short, motivating daily briefing (2-3 sentences) directly addressing me${greetingName}, highlighting consistency, and suggesting an intentional focal point for today's practice. Match your personality voice.`
+  );
+  return lines.join('\n');
+}

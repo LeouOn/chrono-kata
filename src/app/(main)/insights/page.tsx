@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Heatmap } from '@/components/insights/Heatmap';
+import { YearlyConsistencyHeatmap } from '@/components/insights/YearlyConsistencyHeatmap';
 import { ActivityBreakdown } from '@/components/insights/ActivityBreakdown';
 import { RatingTrends } from '@/components/insights/RatingTrends';
 import { MultiDimAverages } from '@/components/insights/MultiDimAverages';
@@ -46,6 +47,7 @@ export default function InsightsPage() {
         </div>
       </Card>
 
+      <YearlyConsistencyHeatmap sessions={sessions} />
       <Heatmap sessions={sessions} />
       <RatingTrends sessions={sessions} />
       <MultiDimAverages sessions={sessions} />

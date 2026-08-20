@@ -10,6 +10,7 @@ import { useKataTemplates } from '@/hooks/useKataTemplates';
 import { TodaySummary } from '@/components/dashboard/TodaySummary';
 import { WeekChart } from '@/components/dashboard/WeekChart';
 import { StreakFlame } from '@/components/streak/StreakFlame';
+import { DailyBriefingCard } from '@/components/dashboard/DailyBriefingCard';
 import { KataQuickStart } from '@/components/kata/KataQuickStart';
 import { SessionForm } from '@/components/session/SessionForm';
 import { SessionCard } from '@/components/session/SessionCard';
@@ -75,6 +76,11 @@ export default function HomePage() {
 
       <div>
         <StreakFlame days={streak?.currentStreakDays ?? 0} />
+      </div>
+
+      {/* AI Coach Daily Briefing */}
+      <div>
+        <DailyBriefingCard />
       </div>
 
       {/* Quick Start Katas */}
