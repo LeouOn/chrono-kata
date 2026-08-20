@@ -1,4 +1,4 @@
-﻿import Dexie, { type Table } from 'dexie';
+import Dexie, { type Table } from 'dexie';
 import type { Session } from '@/lib/schemas/session';
 import type { Reflection } from '@/lib/schemas/reflection';
 import type { Streak } from '@/lib/schemas/streak';
@@ -8,6 +8,7 @@ import type { PendingCalendarOp } from '@/lib/schemas/pending-calendar-op';
 import type { Token } from '@/lib/schemas/token';
 import type { Conversation } from '@/lib/schemas/conversation';
 import type { Message } from '@/lib/schemas/message';
+import type { KataTemplate } from '@/lib/schemas/kata-template';
 
 export class ChronoKataDB extends Dexie {
   sessions!: Table<Session, string>;
@@ -19,6 +20,7 @@ export class ChronoKataDB extends Dexie {
   tokens!: Table<Token, 'google'>;
   conversations!: Table<Conversation, string>;
   messages!: Table<Message, string>;
+  kataTemplates!: Table<KataTemplate, string>;
 
   constructor() {
     super('chrono-kata');
@@ -42,6 +44,19 @@ export class ChronoKataDB extends Dexie {
       tokens: 'id',
       conversations: 'id, sessionId',
       messages: 'id, conversationId, parentId',
+    });
+    // Wave 14: add kataTemplates table for quick-start practice routines.
+    this.version(3).stores({
+      sessions: 'id, startedAt, calendarEventId, conversationId',
+      reflections: 'id, periodStart, periodEnd',
+      streak: 'id',
+      settings: 'id',
+      llmSettings: 'id',
+      pendingCalendarOps: 'id, sessionId',
+      tokens: 'id',
+      conversations: 'id, sessionId',
+      messages: 'id, conversationId, parentId',
+      kataTemplates: 'id, name, order, createdAt',
     });
   }
 }
