@@ -17,6 +17,27 @@ interface OpenAIResponse {
 }
 
 /**
+ * Fetch with automatic backoff retry on HTTP 429 (Rate Limit) or 503 (Service Unavailable).
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 2
+): Promise<Response> {
+  let attempt = 0;
+  while (true) {
+    const resp = await fetch(url, options);
+    if ((resp.status === 429 || resp.status === 503) && attempt < maxRetries) {
+      attempt++;
+      const delayMs = Math.min(3000, 1000 * Math.pow(1.5, attempt));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      continue;
+    }
+    return resp;
+  }
+}
+
+/**
  * Adapter for OpenAI-compatible providers: openai, deepseek, deepseek-pro,
  * openrouter, zai (GLM), minimax, nemotron (NVIDIA NIM), ollama.
  *
@@ -51,7 +72,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     let resp: Response;
     try {
-      resp = await fetch(url, {
+      resp = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +159,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     let resp: Response;
     try {
-      resp = await fetch(url, {
+      resp = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -173,22 +194,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
 
       for (const data of lines) {
-        const content = extractContentFromOpenAIChunk(data);
-        if (content === null) {
+        const text = extractContentFromOpenAIChunk(data);
+        if (text === null) {
           input.onChunk({ content: null });
           continue;
         }
-        if (content) {
-          input.onChunk({ content });
-        }
-        try {
-          const parsed = JSON.parse(data) as { usage?: { prompt_tokens?: number; completion_tokens?: number } };
-          if (parsed.usage) {
-            promptTokens = parsed.usage.prompt_tokens ?? promptTokens;
-            completionTokens = parsed.usage.completion_tokens ?? completionTokens;
-          }
-        } catch {
-          // Not JSON or no usage — fine.
+        if (text) {
+          input.onChunk({ content: text });
         }
       }
     }

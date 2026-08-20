@@ -69,7 +69,7 @@ describe('OpenAICompatibleProvider', () => {
     ).rejects.toMatchObject({ kind: LLMExceptionKind.AuthFailed });
   });
 
-  it('throws rateLimited on 429', async () => {
+  it('throws rateLimited on 429 after retries exhausted', async () => {
     global.fetch = vi.fn(async () => new Response('', { status: 429 }));
     const provider = new OpenAICompatibleProvider({
       providerName: 'openai',
@@ -80,6 +80,34 @@ describe('OpenAICompatibleProvider', () => {
     await expect(
       provider.completeSingle({ userText: 'hi', systemPrompt: 'sys' })
     ).rejects.toMatchObject({ kind: LLMExceptionKind.RateLimited });
+  });
+
+  it('retries on transient 429 and succeeds when second attempt returns 200', async () => {
+    let callCount = 0;
+    global.fetch = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response('', { status: 429 });
+      }
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'Recovered after rate limit' } }],
+          usage: { prompt_tokens: 5, completion_tokens: 5 },
+        }),
+        { status: 200 }
+      );
+    });
+
+    const provider = new OpenAICompatibleProvider({
+      providerName: 'zai',
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      apiKey: 'test-key',
+      model: 'glm-4-flash',
+    });
+
+    const result = await provider.completeSingle({ userText: 'hi', systemPrompt: 'sys' });
+    expect(callCount).toBe(2);
+    expect(result.content).toBe('Recovered after rate limit');
   });
 
   it('handles reasoning_content (DeepSeek / GLM)', async () => {
