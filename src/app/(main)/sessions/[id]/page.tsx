@@ -35,17 +35,8 @@ export default function SessionDetailPage() {
   const [exportOpen, setExportOpen] = useState(false);
 
   const session = sessions.find((s) => s.id === params.id);
-  if (!session) {
-    return (
-      <div className="text-text-muted text-sm">
-        Session not found.{' '}
-        <button onClick={() => router.push('/sessions')} className="text-accent">
-          Back to list
-        </button>
-      </div>
-    );
-  }
-
+  // Keep all hooks above the early return: on hard loads the sessions query
+  // starts empty, so hook order must not change between renders.
   const {
     conversation,
     messages,
@@ -57,7 +48,17 @@ export default function SessionDetailPage() {
     editMessage,
     deleteMessage,
     switchBranch,
-  } = useConversation(session.conversationId);
+  } = useConversation(session?.conversationId ?? null);
+  if (!session) {
+    return (
+      <div className="text-text-muted text-sm">
+        Session not found.{' '}
+        <button onClick={() => router.push('/sessions')} className="text-accent">
+          Back to list
+        </button>
+      </div>
+    );
+  }
 
   async function handleDelete(dontAskAgain: boolean) {
     if (dontAskAgain) await updateSettings({ confirmSessionDelete: false });
