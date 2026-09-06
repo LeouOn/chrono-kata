@@ -1,7 +1,7 @@
 'use client';
 
+import React, { type ButtonHTMLAttributes, forwardRef } from 'react';
 import { motion } from 'motion/react';
-import { type ButtonHTMLAttributes, forwardRef } from 'react';
 
 type Variant = 'primary' | 'ghost' | 'danger';
 
