@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Share2, Copy, Download, FileText } from 'lucide-react';
 import { useSessions } from '@/hooks/useSessions';
 import { useConversation } from '@/hooks/useConversation';
+import { useSettings } from '@/hooks/useSettings';
 import { SessionForm } from '@/components/session/SessionForm';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Button } from '@/components/ui/Button';
@@ -28,6 +29,7 @@ export default function SessionDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { sessions, updateSession, deleteSession } = useSessions();
+  const { settings, updateSettings } = useSettings();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -57,10 +59,19 @@ export default function SessionDetailPage() {
     switchBranch,
   } = useConversation(session.conversationId);
 
-  async function handleDelete() {
+  async function handleDelete(dontAskAgain: boolean) {
+    if (dontAskAgain) await updateSettings({ confirmSessionDelete: false });
     await deleteSession(session!.id);
     setDeleteOpen(false);
     router.push('/sessions');
+  }
+
+  function handleDeleteClick() {
+    if (settings?.confirmSessionDelete === false) {
+      void handleDelete(false);
+    } else {
+      setDeleteOpen(true);
+    }
   }
 
   async function handleCopyMarkdown() {
@@ -207,7 +218,7 @@ export default function SessionDetailPage() {
 
       <div className="flex gap-2 pt-2">
         <Button variant="ghost" onClick={() => setEditOpen(true)}>Edit</Button>
-        <Button variant="danger" onClick={() => setDeleteOpen(true)}>Delete</Button>
+        <Button variant="danger" onClick={handleDeleteClick}>Delete</Button>
       </div>
 
       <SessionForm
@@ -225,6 +236,7 @@ export default function SessionDetailPage() {
         title="Delete session?"
         message="This cannot be undone."
         confirmLabel="Delete"
+        showDontAskAgain
         onConfirm={handleDelete}
         onCancel={() => setDeleteOpen(false)}
       />
