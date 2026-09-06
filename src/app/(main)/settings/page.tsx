@@ -9,6 +9,8 @@ import { DataTransfer } from '@/components/settings/DataTransfer';
 import { ReminderSettings } from '@/components/settings/ReminderSettings';
 import { ThemeSettings } from '@/components/settings/ThemeSettings';
 import { KataTemplateSettings } from '@/components/settings/KataTemplateSettings';
+import { ConfirmationSettings } from '@/components/settings/ConfirmationSettings';
+import { ClearDataSettings } from '@/components/settings/ClearDataSettings';
 import { GoalSettings } from '@/components/settings/GoalSettings';
 import {
   type CoachPersonality,
@@ -56,21 +58,15 @@ export default function SettingsPage() {
 
       <KataTemplateSettings />
 
+      <ConfirmationSettings />
+
       <ThemeSettings />
 
       <CalendarSettings />
 
       <ReminderSettings />
 
-      <Card>
-        <div className="text-text-muted text-xs uppercase tracking-wide mb-2">
-          Data
-        </div>
-        <Button variant="danger">Clear all data</Button>
-        <p className="text-text-muted text-xs mt-2">
-          Wipes IndexedDB and reloads. Cannot be undone.
-        </p>
-      </Card>
+      <ClearDataSettings />
 
       <DataTransfer />
     </div>
