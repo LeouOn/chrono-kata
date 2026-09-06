@@ -4,7 +4,7 @@ A personal, mobile-first practice tracker. Log time-on-task, reps, and a 1–5 s
 
 ## Status
 
-**Wave 1: Foundation** — runnable PWA skeleton with local DB, schemas, repository layer, onboarding, and tab-bar shell. No business logic yet.
+**Feature-complete through Wave 16** — the full practice loop ships: timed/reps sessions with 1–5 ratings and focus/energy/mood state, kata quick-start templates, a multi-provider AI coach (branching chat, daily briefing, weekly reflections), insights (rating trends, activity breakdown, heatmap, 365-day consistency matrix), habit goals with streak protection and rest days, Google Calendar export, themes, notifications, and JSON export/import. Local-first: all data lives in IndexedDB. Hardened with Vitest unit tests and Playwright e2e suites.
 
 ## Tech stack
 
