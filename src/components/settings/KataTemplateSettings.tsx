@@ -5,16 +5,19 @@ import { Plus, Trash2, Edit2, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useKataTemplates } from '@/hooks/useKataTemplates';
+import { useSettings } from '@/hooks/useSettings';
 import type { KataTemplate, KataTemplateInput } from '@/lib/schemas/kata-template';
 import { formatDuration } from '@/lib/utils/format';
-
-const ICON_CHOICES = ['🥋', '🧘', '⚡', '📖', '💻', '🏃', '🎨', '🎯', '🌊', '🔥'];
+import { KATA_ICON_CATEGORIES } from '@/lib/kata/icons';
 
 export function KataTemplateSettings() {
   const { templates, createTemplate, updateTemplate, deleteTemplate, reorderTemplates } = useKataTemplates();
+  const { settings, updateSettings } = useSettings();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<KataTemplate | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<KataTemplate | null>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -37,6 +40,20 @@ export function KataTemplateSettings() {
     setIcon('🥋');
     setError(null);
     setModalOpen(true);
+  }
+
+  function handleDeleteClick(t: KataTemplate) {
+    if (settings?.confirmKataDelete === false) {
+      void deleteTemplate(t.id);
+    } else {
+      setDeleteTarget(t);
+    }
+  }
+
+  async function handleDeleteConfirm(dontAskAgain: boolean) {
+    if (dontAskAgain) await updateSettings({ confirmKataDelete: false });
+    if (deleteTarget) await deleteTemplate(deleteTarget.id);
+    setDeleteTarget(null);
   }
 
   function openEdit(t: KataTemplate) {
@@ -163,7 +180,7 @@ export function KataTemplateSettings() {
               </button>
               <button
                 type="button"
-                onClick={() => void deleteTemplate(t.id)}
+                onClick={() => handleDeleteClick(t)}
                 className="p-1 text-text-muted hover:text-hype transition-colors"
                 title="Delete kata"
               >
@@ -183,18 +200,29 @@ export function KataTemplateSettings() {
           {/* Icon picker */}
           <div>
             <label className="text-text-muted block mb-1">Icon</label>
-            <div className="flex gap-2 flex-wrap">
-              {ICON_CHOICES.map((ic) => (
-                <button
-                  key={ic}
-                  type="button"
-                  onClick={() => setIcon(ic)}
-                  className={`text-xl p-1.5 rounded-xl transition-transform ${
-                    icon === ic ? 'bg-accent/20 scale-110 border border-accent' : 'bg-surface-2'
-                  }`}
-                >
-                  {ic}
-                </button>
+            <div className="max-h-44 overflow-y-auto pr-1">
+              {KATA_ICON_CATEGORIES.map((category) => (
+                <div key={category.label} className="mb-2">
+                  <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">
+                    {category.label}
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {category.icons.map((ic) => (
+                      <button
+                        key={ic}
+                        type="button"
+                        onClick={() => setIcon(ic)}
+                        className={`text-xl p-1.5 rounded-xl transition-transform ${
+                          icon === ic
+                            ? 'bg-accent/20 scale-110 border border-accent'
+                            : 'bg-surface-2'
+                        }`}
+                      >
+                        {ic}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -296,6 +324,20 @@ export function KataTemplateSettings() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={deleteTarget != null}
+        title="Delete kata?"
+        message={
+          deleteTarget
+            ? `Delete "${deleteTarget.name}"? Past sessions keep their labels.`
+            : ''
+        }
+        confirmLabel="Delete"
+        showDontAskAgain
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </Card>
   );
 }
