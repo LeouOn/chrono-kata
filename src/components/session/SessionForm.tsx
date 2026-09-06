@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { Sparkles } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { RatingPicker } from './RatingPicker';
@@ -9,6 +10,12 @@ import { DotsRatingPicker } from './DotsRatingPicker';
 import { MultiDimSlider } from './MultiDimSlider';
 import { Timer } from './Timer';
 import { useSettings } from '@/hooks/useSettings';
+import { useSessions } from '@/hooks/useSessions';
+import { useKataTemplates } from '@/hooks/useKataTemplates';
+import { useLLMSettings } from '@/hooks/useLLMSettings';
+import { suggestLabel } from '@/lib/llm/llm-service';
+import { buildLabelSuggestions } from '@/lib/utils/labels';
+import { dispatchToast } from '@/components/ui/Toast';
 import type { Session, SessionInput } from '@/lib/schemas/session';
 import type { Rating, MultiDimRating } from '@/lib/schemas/session';
 import type { KataTemplate } from '@/lib/schemas/kata-template';
@@ -26,6 +33,10 @@ interface Props {
 export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }: Props) {
   const { settings } = useSettings();
   const ratingStyle = settings?.ratingStyle ?? 'slider';
+  const { sessions } = useSessions();
+  const { templates } = useKataTemplates();
+  const { settings: llmSettings, configuredProviderNames } = useLLMSettings();
+  const [suggesting, setSuggesting] = useState(false);
   const [mode, setMode] = useState<Mode>(
     initial?.durationMinutes != null
       ? 'timed'
@@ -49,6 +60,13 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
   );
   const [note, setNote] = useState(initial?.note ?? initialTemplate?.defaultNote ?? '');
   const [error, setError] = useState<string | null>(null);
+
+  const labelSuggestions = useMemo(
+    () => buildLabelSuggestions(sessions, templates, activityLabel),
+    [sessions, templates, activityLabel]
+  );
+  const canSuggest =
+    note.trim().length > 0 && configuredProviderNames.length > 0 && !suggesting;
 
   useEffect(() => {
     if (open) {
@@ -92,6 +110,22 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
     setDurationMinutes(minutes);
     setTimerStartedAt(null);
     if (mode !== 'timed') setMode('timed');
+  }
+
+  async function handleSuggest() {
+    if (!llmSettings || suggesting) return;
+    setSuggesting(true);
+    try {
+      const label = await suggestLabel({ note, llmSettings });
+      if (label) setActivityLabel(label.slice(0, 50));
+    } catch (e) {
+      dispatchToast(
+        e instanceof Error ? e.message : 'Label suggestion failed',
+        'error'
+      );
+    } finally {
+      setSuggesting(false);
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -243,14 +277,44 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
           <label className="text-xs uppercase tracking-wide text-text-muted block mb-1">
             Activity label (optional)
           </label>
-          <input
-            type="text"
-            placeholder="e.g. meditation, kata, deep work"
-            value={activityLabel}
-            onChange={(e) => setActivityLabel(e.target.value)}
-            maxLength={50}
-            className="w-full bg-surface-2 rounded-xl px-4 py-2.5 text-text text-sm border border-border focus:border-accent outline-none"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="e.g. meditation, kata, deep work"
+              value={activityLabel}
+              onChange={(e) => setActivityLabel(e.target.value)}
+              maxLength={50}
+              className="flex-1 bg-surface-2 rounded-xl px-4 py-2.5 text-text text-sm border border-border focus:border-accent outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => void handleSuggest()}
+              disabled={!canSuggest}
+              title={
+                configuredProviderNames.length === 0
+                  ? 'Configure an LLM provider to suggest labels'
+                  : 'Suggest a label from your note'
+              }
+              aria-label="Suggest activity label"
+              className="flex-shrink-0 w-10 rounded-xl bg-surface-2 border border-border text-text-muted hover:text-accent hover:border-accent/40 disabled:opacity-30 disabled:hover:text-text-muted disabled:hover:border-border transition-colors flex items-center justify-center"
+            >
+              <Sparkles size={15} className={suggesting ? 'animate-pulse' : ''} />
+            </button>
+          </div>
+          {labelSuggestions.length > 0 && (
+            <div className="flex gap-1.5 flex-wrap mt-1.5">
+              {labelSuggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setActivityLabel(s)}
+                  className="text-xs px-2.5 py-1 rounded-full bg-surface-2 text-text-muted hover:text-text border border-border transition-colors"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Note */}
