@@ -8,7 +8,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { getDb } from '@/lib/db/db';
 
 export function ClearDataSettings() {
-  const { settings, updateSettings } = useSettings();
+  const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [wiping, setWiping] = useState(false);
 
@@ -29,10 +29,9 @@ export function ClearDataSettings() {
     }
   }
 
-  async function handleConfirm(dontAskAgain: boolean) {
-    if (dontAskAgain) await updateSettings({ confirmClearData: false });
+  function handleConfirm() {
     setOpen(false);
-    await wipe();
+    void wipe();
   }
 
   return (
@@ -51,8 +50,7 @@ export function ClearDataSettings() {
         title="Clear all data?"
         message="Every session, kata, conversation, and setting will be permanently deleted."
         confirmLabel="Wipe everything"
-        showDontAskAgain
-        onConfirm={handleConfirm}
+        onConfirm={() => void handleConfirm()}
         onCancel={() => setOpen(false)}
       />
     </Card>
