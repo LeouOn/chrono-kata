@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Dexie from 'dexie';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -15,7 +16,8 @@ export function ClearDataSettings() {
   async function wipe(): Promise<void> {
     setWiping(true);
     try {
-      await getDb().delete();
+      getDb().close();
+      await Dexie.delete('chrono-kata');
     } finally {
       window.location.reload();
     }

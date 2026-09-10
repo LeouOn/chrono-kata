@@ -61,10 +61,15 @@ export default function SessionDetailPage() {
   }
 
   async function handleDelete(dontAskAgain: boolean) {
-    if (dontAskAgain) await updateSettings({ confirmSessionDelete: false });
-    await deleteSession(session!.id);
-    setDeleteOpen(false);
-    router.push('/sessions');
+    try {
+      if (dontAskAgain) await updateSettings({ confirmSessionDelete: false });
+      await deleteSession(session!.id);
+      setDeleteOpen(false);
+      router.push('/sessions');
+    } catch (e) {
+      dispatchToast(e instanceof Error ? e.message : 'Failed to delete session', 'error');
+      setDeleteOpen(false);
+    }
   }
 
   function handleDeleteClick() {

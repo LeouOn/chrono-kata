@@ -1,6 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui/Card';
+import { dispatchToast } from '@/components/ui/Toast';
 import { useSettings } from '@/hooks/useSettings';
 
 export function ConfirmationSettings() {
@@ -10,17 +11,26 @@ export function ConfirmationSettings() {
     {
       label: 'Before deleting a kata',
       checked: settings?.confirmKataDelete ?? true,
-      onChange: (v: boolean) => updateSettings({ confirmKataDelete: v }),
+      onChange: (v: boolean) =>
+        updateSettings({ confirmKataDelete: v }).catch((e: unknown) =>
+          dispatchToast(e instanceof Error ? e.message : 'Failed to save setting', 'error')
+        ),
     },
     {
       label: 'Before deleting a session',
       checked: settings?.confirmSessionDelete ?? true,
-      onChange: (v: boolean) => updateSettings({ confirmSessionDelete: v }),
+      onChange: (v: boolean) =>
+        updateSettings({ confirmSessionDelete: v }).catch((e: unknown) =>
+          dispatchToast(e instanceof Error ? e.message : 'Failed to save setting', 'error')
+        ),
     },
     {
       label: 'Before clearing all data',
       checked: settings?.confirmClearData ?? true,
-      onChange: (v: boolean) => updateSettings({ confirmClearData: v }),
+      onChange: (v: boolean) =>
+        updateSettings({ confirmClearData: v }).catch((e: unknown) =>
+          dispatchToast(e instanceof Error ? e.message : 'Failed to save setting', 'error')
+        ),
     },
   ];
 

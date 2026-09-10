@@ -59,6 +59,11 @@ export function Modal({ open, onClose, children, title, layer = 1 }: Props) {
         const first = focusables[0]!;
         const last = focusables[focusables.length - 1]!;
         const active = document.activeElement;
+        if (!panel.contains(active)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+          return;
+        }
         if (e.shiftKey && (active === first || active === panel)) {
           e.preventDefault();
           last.focus();

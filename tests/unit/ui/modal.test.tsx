@@ -63,4 +63,21 @@ describe('Modal', () => {
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(last);
   });
+
+  it('pulls focus back into the panel when it leaked to body', () => {
+    render(
+      <div>
+        <button>outside</button>
+        <Modal open onClose={() => {}} title="T">
+          <button>first</button>
+          <button>last</button>
+        </Modal>
+      </div>
+    );
+    const dialog = screen.getByRole('dialog');
+    const outside = screen.getByText('outside');
+    outside.focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(document.activeElement).toBe(dialog.querySelectorAll('button')[0]);
+  });
 });

@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useKataTemplates } from '@/hooks/useKataTemplates';
 import { useSettings } from '@/hooks/useSettings';
+import { dispatchToast } from '@/components/ui/Toast';
 import type { KataTemplate, KataTemplateInput } from '@/lib/schemas/kata-template';
 import { formatDuration } from '@/lib/utils/format';
 import { KATA_ICON_CATEGORIES } from '@/lib/kata/icons';
@@ -51,9 +52,14 @@ export function KataTemplateSettings() {
   }
 
   async function handleDeleteConfirm(dontAskAgain: boolean) {
-    if (dontAskAgain) await updateSettings({ confirmKataDelete: false });
-    if (deleteTarget) await deleteTemplate(deleteTarget.id);
-    setDeleteTarget(null);
+    try {
+      if (dontAskAgain) await updateSettings({ confirmKataDelete: false });
+      if (deleteTarget) await deleteTemplate(deleteTarget.id);
+    } catch (e) {
+      dispatchToast(e instanceof Error ? e.message : 'Failed to delete kata', 'error');
+    } finally {
+      setDeleteTarget(null);
+    }
   }
 
   function openEdit(t: KataTemplate) {
