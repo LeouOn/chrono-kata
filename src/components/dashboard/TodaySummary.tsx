@@ -1,17 +1,20 @@
 'use client';
 
+import React from 'react';
 import { Card } from '@/components/ui/Card';
 import { formatDuration } from '@/lib/utils/format';
 import { useSettings } from '@/hooks/useSettings';
+import { StreakFlame } from '@/components/streak/StreakFlame';
 import { GoalProgressRing } from './GoalProgressRing';
 import type { Session } from '@/lib/schemas/session';
 
 interface Props {
   sessions: Session[];
+  streakDays: number;
   goalMinutes?: number;
 }
 
-export function TodaySummary({ sessions, goalMinutes }: Props) {
+export function TodaySummary({ sessions, streakDays, goalMinutes }: Props) {
   const { settings } = useSettings();
   const effectiveGoal = goalMinutes ?? settings?.dailyGoalMinutes ?? 20;
 
@@ -29,6 +32,10 @@ export function TodaySummary({ sessions, goalMinutes }: Props) {
     <Card>
       <div className="flex items-center justify-between gap-4">
         <div className="grid grid-cols-2 gap-y-3 gap-x-6 flex-1">
+          {/* Flame in place of a fifth stat — first cell. */}
+          <div>
+            <StreakFlame variant="compact" days={streakDays} />
+          </div>
           <div>
             <div className="text-xs uppercase tracking-wide text-text-muted">Today</div>
             <div className="font-serif text-xl text-text">{formatDuration(totalMinutes)}</div>

@@ -9,7 +9,6 @@ import { useStreak } from '@/hooks/useStreak';
 import { useKataTemplates } from '@/hooks/useKataTemplates';
 import { TodaySummary } from '@/components/dashboard/TodaySummary';
 import { WeekChart } from '@/components/dashboard/WeekChart';
-import { StreakFlame } from '@/components/streak/StreakFlame';
 import { DailyBriefingCard } from '@/components/dashboard/DailyBriefingCard';
 import { KataQuickStart } from '@/components/kata/KataQuickStart';
 import { SessionForm } from '@/components/session/SessionForm';
@@ -49,6 +48,9 @@ export default function HomePage() {
   });
   const recent = sessions.slice(0, 3);
 
+  const streakDays = streak?.currentStreakDays ?? 0;
+  const hasSummary = todaySessions.length > 0 || streakDays > 0;
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
@@ -64,7 +66,7 @@ export default function HomePage() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4">
       <div>
         <h1 className="font-serif text-2xl text-text mb-1">{greeting}.</h1>
         <p className="text-text-muted text-sm">
@@ -72,10 +74,6 @@ export default function HomePage() {
             ? 'No sessions yet. The first step is the whole path.'
             : `${todaySessions.length} session${todaySessions.length === 1 ? '' : 's'} today.`}
         </p>
-      </div>
-
-      <div>
-        <StreakFlame days={streak?.currentStreakDays ?? 0} />
       </div>
 
       {/* AI Coach Daily Briefing */}
@@ -91,20 +89,20 @@ export default function HomePage() {
         />
       )}
 
-      {todaySessions.length > 0 && (
+      {hasSummary && (
         <div>
-          <TodaySummary sessions={todaySessions} />
+          <TodaySummary sessions={todaySessions} streakDays={streakDays} />
         </div>
       )}
 
       <div>
-        <div className="text-xs uppercase tracking-wide text-text-muted mb-2">This week</div>
+        <div className="text-xs uppercase tracking-wide text-text-muted mb-1">This week</div>
         <WeekChart sessions={last7} />
       </div>
 
       {recent.length > 0 && (
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-1">
             <div className="text-xs uppercase tracking-wide text-text-muted">Recent</div>
             <Link href="/sessions" className="text-xs text-accent">View all</Link>
           </div>
