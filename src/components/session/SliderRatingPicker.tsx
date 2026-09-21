@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import type { Rating } from '@/lib/schemas/session';
 
 const LABELS: Record<Rating, string> = {

@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { PROVIDER_DEFAULTS, PROVIDER_NAMES } from '@/lib/llm/provider-defaults';
 
+import type { ProviderEntry } from '@/lib/schemas/llm-settings';
+
 const KEY = ['llmSettings'] as const;
 
 export function useLLMSettings() {
@@ -14,8 +16,8 @@ export function useLLMSettings() {
   });
 
   const addProvider = useMutation({
-    mutationFn: ({ name, apiKey, model, baseUrl }: { name: string; apiKey: string; model: string; baseUrl: string }) =>
-      llmSettingsRepo.addProvider(name, { apiKey, model, baseUrl }),
+    mutationFn: ({ name, ...config }: ProviderEntry & { name: string }) =>
+      llmSettingsRepo.addProvider(name, config),
     onSuccess: (updated) => qc.setQueryData(KEY, updated),
   });
 

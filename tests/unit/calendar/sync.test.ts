@@ -61,4 +61,18 @@ describe('buildEventFromSession', () => {
     const s = ses({ durationMinutes: 30, reps: null });
     expect(buildEventFromSession(s).summary).toBe('chrono-kata session');
   });
+
+  it('spans exactly 210000 ms for a 3.5 minute session', () => {
+    const startedAt = new Date('2026-09-21T12:00:00Z');
+    const s = ses({
+      startedAt,
+      durationMinutes: 3.5,
+      reps: null,
+      activityLabel: 'Daily stretches',
+    });
+    const event = buildEventFromSession(s);
+    expect(new Date(event.end.dateTime).getTime() - new Date(event.start.dateTime).getTime()).toBe(
+      210_000
+    );
+  });
 });

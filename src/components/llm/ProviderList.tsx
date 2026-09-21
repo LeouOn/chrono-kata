@@ -2,9 +2,14 @@
 
 import { Card } from '@/components/ui/Card';
 import { PROVIDER_NAMES, PROVIDER_DEFAULTS, type ProviderName } from '@/lib/llm/provider-defaults';
+import type { ProviderEntry } from '@/lib/schemas/llm-settings';
 
 interface Props {
-  configuredProviders: Record<string, { baseUrl: string; apiKey: string; model: string }>;
+  configuredProviders: Record<string, ProviderEntry>;
+  environmentProviders?: Record<string, ProviderEntry>;
+  onUseEnvironment?: (name: ProviderName) => void;
+  onTest?: (name: ProviderName) => void;
+  testing?: string | null;
   activeProviderName: string;
   onSelect: (name: ProviderName) => void;
   onConfigure: (name: ProviderName) => void;
@@ -17,6 +22,7 @@ export function ProviderList({
   onSelect,
   onConfigure,
   onRemove,
+  environmentProviders = {}, onUseEnvironment, onTest, testing,
 }: Props) {
   return (
     <div className="space-y-2">
@@ -42,7 +48,12 @@ export function ProviderList({
                   )}
                 </div>
                 <div className="text-xs text-text-muted truncate mt-0.5">
-                  {defaults.model} · {defaults.baseUrl}
+                  {configuredProviders[name]?.model ?? defaults.model} · {configuredProviders[name]?.baseUrl ?? defaults.baseUrl}
+                </div>
+                {configuredProviders[name]?.credentialSource === 'environment' && <p className="text-xs text-accent mt-1">Desktop environment key</p>}
+                <div className="flex flex-wrap gap-3 mt-2">
+                  {environmentProviders[name] && configuredProviders[name]?.credentialSource !== 'environment' && <button type="button" className="text-xs text-accent" onClick={() => onUseEnvironment?.(name)}>Use desktop key</button>}
+                  {isConfigured && <button type="button" className="text-xs text-accent disabled:opacity-40" disabled={!!testing} onClick={() => onTest?.(name)}>{testing === name ? 'Testing…' : 'Test connection'}</button>}
                 </div>
               </div>
               <div className="flex gap-1 shrink-0">

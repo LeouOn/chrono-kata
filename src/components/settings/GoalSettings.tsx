@@ -2,6 +2,7 @@
 
 import { Card } from '@/components/ui/Card';
 import { useSettings } from '@/hooks/useSettings';
+import { useStreak } from '@/hooks/useStreak';
 import type { DayOfWeek } from '@/lib/schemas/settings';
 import { Flame, ShieldCheck } from 'lucide-react';
 
@@ -19,18 +20,24 @@ const DAILY_PRESETS = [15, 20, 30, 45, 60];
 
 export function GoalSettings() {
   const { settings, updateSettings } = useSettings();
+  const { streak, recompute } = useStreak();
 
   const dailyGoal = settings?.dailyGoalMinutes ?? 20;
   const weeklyGoal = settings?.weeklyGoalDays ?? 5;
   const restDays = settings?.restDays ?? [];
   const freezeTokens = settings?.streakFreezeTokens ?? 1;
+  const usedFreezes = streak?.freezeUsedOn?.length ?? 0;
+  const remainingFreezes = Math.max(0, freezeTokens - usedFreezes);
 
   function toggleRestDay(day: DayOfWeek) {
     const isSelected = restDays.includes(day);
     const updated = isSelected
       ? restDays.filter((d) => d !== day)
       : [...restDays, day];
-    void updateSettings({ restDays: updated });
+    void (async () => {
+      await updateSettings({ restDays: updated });
+      await recompute();
+    })();
   }
 
   return (
@@ -136,12 +143,14 @@ export function GoalSettings() {
             <div>
               <div className="font-medium text-text">Streak Freeze</div>
               <div className="text-[11px] text-text-muted">
-                Forgives 1 unplanned missed day automatically
+                {remainingFreezes > 0
+                  ? 'Forgives 1 unplanned missed day automatically'
+                  : 'All freezes in use — they return once they stop protecting this streak'}
               </div>
             </div>
           </div>
           <div className="text-xs font-semibold px-2.5 py-1 rounded-full bg-surface-2 text-accent">
-            {freezeTokens} ❄️ Token
+            {remainingFreezes} ❄️ of {freezeTokens}
           </div>
         </div>
       </div>

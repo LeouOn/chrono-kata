@@ -23,7 +23,7 @@ const SessionBaseSchema = z.object({
   id: z.string().uuid(),
   startedAt: z.date(),
   endedAt: z.date().nullable().optional(),
-  durationMinutes: z.number().int().positive().nullable().optional(),
+  durationMinutes: z.number().finite().positive().nullable().optional(),
   reps: z.number().int().positive().nullable().optional(),
   rating: RatingSchema,
   activityLabel: z.string().max(100).optional(),

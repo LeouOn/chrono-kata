@@ -2,8 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { streakRepo } from '@/lib/db/streak.repo';
-import { sessionRepo } from '@/lib/db/session.repo';
-import { computeStreak } from '@/lib/streak/compute-streak';
+import { recomputeStreakSideEffect } from '@/hooks/useSessions';
 
 const KEY = ['streak'] as const;
 
@@ -15,19 +14,7 @@ export function useStreak() {
   });
 
   const recompute = useMutation({
-    mutationFn: async () => {
-      const [current, sessions] = await Promise.all([
-        streakRepo.get(),
-        sessionRepo.getAll(),
-      ]);
-      const next = computeStreak({
-        sessions,
-        previousStreak: current,
-        now: new Date(),
-      });
-      await streakRepo.save(next);
-      return next;
-    },
+    mutationFn: () => recomputeStreakSideEffect(),
     onSuccess: (updated) => qc.setQueryData(KEY, updated),
   });
 

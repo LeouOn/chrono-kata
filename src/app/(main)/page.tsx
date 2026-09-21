@@ -11,6 +11,8 @@ import { TodaySummary } from '@/components/dashboard/TodaySummary';
 import { WeekChart } from '@/components/dashboard/WeekChart';
 import { DailyBriefingCard } from '@/components/dashboard/DailyBriefingCard';
 import { KataQuickStart } from '@/components/kata/KataQuickStart';
+import { StretchRoutine } from '@/components/kata/StretchRoutine';
+import { HabitCheckIn } from '@/components/habits/HabitCheckIn';
 import { SessionForm } from '@/components/session/SessionForm';
 import { SessionCard } from '@/components/session/SessionCard';
 import { toLocalDateString } from '@/lib/utils/date';
@@ -80,6 +82,10 @@ export default function HomePage() {
       <div>
         <DailyBriefingCard />
       </div>
+
+      <StretchRoutine onSave={createSession} />
+
+      <HabitCheckIn />
 
       {/* Quick Start Katas */}
       {templates.length > 0 && (

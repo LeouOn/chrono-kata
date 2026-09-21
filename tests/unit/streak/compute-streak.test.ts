@@ -19,6 +19,7 @@ const emptyStreak = (overrides: Partial<Streak> = {}): Streak => ({
   longestStreakDays: 0,
   lastSessionDate: '1970-01-01',
   milestonesAchieved: [],
+  freezeUsedOn: [],
   updatedAt: new Date(),
   ...overrides,
 });

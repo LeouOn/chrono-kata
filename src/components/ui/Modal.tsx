@@ -22,8 +22,15 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 
+/** Ids of currently open modals, in open order. Only the topmost one handles keys. */
+const openModalIds: string[] = [];
+
+/** Body overflow captured when the FIRST modal opened; restored when the LAST closes. */
+let savedBodyOverflow: string | null = null;
+
 export function Modal({ open, onClose, children, title, layer = 1 }: Props) {
   const titleId = useId();
+  const stackId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   // Keep a ref to onClose so the effect does not resubscribe when callers
@@ -35,14 +42,21 @@ export function Modal({ open, onClose, children, title, layer = 1 }: Props) {
   useEffect(() => {
     if (!open) return;
 
-    restoreFocusRef.current = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
+    openModalIds.push(stackId);
+    const isTopmost = () => openModalIds[openModalIds.length - 1] === stackId;
+
+    if (openModalIds.length === 1 && savedBodyOverflow === null) {
+      savedBodyOverflow = document.body.style.overflow;
+    }
     document.body.style.overflow = 'hidden';
+
+    restoreFocusRef.current = document.activeElement as HTMLElement | null;
 
     const panel = panelRef.current;
     panel?.focus();
 
     function onKeyDown(e: KeyboardEvent) {
+      if (!isTopmost()) return;
       if (e.key === 'Escape') {
         onCloseRef.current();
         return;
@@ -76,11 +90,16 @@ export function Modal({ open, onClose, children, title, layer = 1 }: Props) {
 
     document.addEventListener('keydown', onKeyDown);
     return () => {
+      const idx = openModalIds.indexOf(stackId);
+      if (idx !== -1) openModalIds.splice(idx, 1);
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      if (openModalIds.length === 0 && savedBodyOverflow !== null) {
+        document.body.style.overflow = savedBodyOverflow;
+        savedBodyOverflow = null;
+      }
       restoreFocusRef.current?.focus();
     };
-  }, [open]);
+  }, [open, stackId]);
 
   return (
     <AnimatePresence>

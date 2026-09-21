@@ -24,6 +24,40 @@ npm run dev
 
 Visit http://localhost:3000.
 
+## Desktop environment keys and Android setup
+
+Run `npm run dev:local` on your computer to discover provider keys from the
+launching shell or `.env.local`. This starts a loopback-only Next.js server at
+`http://127.0.0.1:3000`. Open the LLM tab to see detected providers, select
+**Use desktop key** for an existing configuration, or **Test connection** to
+make a small real request. Existing pasted keys and chosen models are preserved.
+`DEFAULT_PROVIDER` selects the initial provider; otherwise preference is
+DeepSeek, then ZAI, then OpenRouter. DeepSeek uses `deepseek-flash` (V4.1 Flash),
+OpenRouter uses `deepseek/deepseek-v4.1-flash`, and ZAI uses `glm-5.3` at
+`https://api.z.ai/api/coding/paas/v4`. `Z_AI_API_KEY` and `ZAI_API_KEY` both
+configure ZAI. Custom environment model/URL overrides take precedence.
+Older saved presets are upgraded once: DeepSeek V4 Flash to `deepseek-flash`,
+ZAI's old `bigmodel.cn` URL / GLM 5.2 to the coding endpoint / GLM 5.3, and
+OpenRouter's old Sonnet preset to DeepSeek V4.1 Flash. Other saved values remain.
+
+Environment keys stay on the server; only provider metadata reaches the browser.
+Set `PROVIDER_MODEL` / `PROVIDER_BASE_URL` in the environment as shown in
+`.env.example`; the model can also be edited in the LLM tab. Restart the local
+server after changing environment variables. A detected key is not necessarily
+a valid key or a working model—use Test connection to verify.
+
+On Android (or a hosted website), open **LLM → Add**, paste your key, enter the
+model, and test the connection. Pasted keys stay in that browser’s IndexedDB and
+are sent directly to the provider. A hosted page cannot read your desktop shell.
+Desktop environment connections are excluded from backups; pasted keys are
+stripped, so they must be re-entered after restoring on a new device.
+
+Do not put API keys in `NEXT_PUBLIC_*` variables or `next.config.ts`'s `env` map:
+those values become public JavaScript. Older builds used that map; rebuild and
+replace any old deployed assets/service-worker caches before sharing the app.
+The local AI endpoint is disabled for normal `npm run dev` / `npm start`; the
+local launcher enables it and binds to loopback. It is not a hosted AI gateway.
+
 ## Athena coach setup
 
 The Athena persona prompt is gitignored. To enable:

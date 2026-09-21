@@ -19,6 +19,11 @@ describe('formatDuration', () => {
   it('formats 0 minutes as "0m"', () => {
     expect(formatDuration(0)).toBe('0m');
   });
+
+  it('formats fractional minutes without rounding', () => {
+    expect(formatDuration(3.5)).toBe('3.5m');
+    expect(formatDuration(63.5)).toBe('1h 3.5m');
+  });
 });
 
 describe('formatSessionSummary', () => {
@@ -49,5 +54,13 @@ describe('formatSessionSummary', () => {
     expect(formatSessionSummary(base({ durationMinutes: 30, reps: null }))).toBe(
       '30m'
     );
+  });
+
+  it('returns "3.5m · Daily stretches" without rounding the duration', () => {
+    expect(
+      formatSessionSummary(
+        base({ durationMinutes: 3.5, reps: null, activityLabel: 'Daily stretches' })
+      )
+    ).toBe('3.5m · Daily stretches');
   });
 });

@@ -1,214 +1,48 @@
 import type { LLMSettings } from '@/lib/schemas/llm-settings';
-import { PROVIDER_DEFAULTS } from '@/lib/llm/provider-defaults';
+import { discoverLocalProviders } from '@/lib/llm/local-discovery';
+import type { ProviderEntry } from '@/lib/schemas/llm-settings';
+import { refreshLegacyPreset } from '@/lib/llm/provider-defaults';
 import { getDb } from './db';
 
 export interface LLMSettingsRepository {
   get(): Promise<LLMSettings>;
   save(settings: LLMSettings): Promise<void>;
-  addProvider(name: string, config: { baseUrl: string; apiKey: string; model: string }): Promise<LLMSettings>;
+  addProvider(name: string, config: ProviderEntry): Promise<LLMSettings>;
   removeProvider(name: string): Promise<LLMSettings>;
   setActive(name: string): Promise<LLMSettings>;
   incrementTokenUsage(promptTokens: number, completionTokens: number): Promise<void>;
 }
 
-export function resolveEnvSeeds(): Record<string, { baseUrl: string; apiKey: string; model: string }> {
-  const envSeeds: Record<string, { baseUrl: string; apiKey: string; model: string }> = {};
-
-  // OpenRouter
-  const openrouterKey =
-    process.env.OPENROUTER_API_KEY ||
-    process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ||
-    process.env.NEXT_PUBLIC_SEED_OPENROUTER_KEY;
-  if (openrouterKey) {
-    envSeeds['openrouter'] = {
-      baseUrl:
-        process.env.OPENROUTER_BASE_URL ||
-        process.env.NEXT_PUBLIC_OPENROUTER_BASE_URL ||
-        PROVIDER_DEFAULTS.openrouter.baseUrl,
-      apiKey: openrouterKey,
-      model:
-        process.env.OPENROUTER_MODEL ||
-        process.env.NEXT_PUBLIC_OPENROUTER_MODEL ||
-        PROVIDER_DEFAULTS.openrouter.model,
-    };
-  }
-
-  // OpenAI
-  const openaiKey =
-    process.env.OPENAI_API_KEY ||
-    process.env.NEXT_PUBLIC_OPENAI_API_KEY ||
-    process.env.NEXT_PUBLIC_SEED_OPENAI_KEY;
-  if (openaiKey) {
-    envSeeds['openai'] = {
-      baseUrl:
-        process.env.OPENAI_BASE_URL ||
-        process.env.NEXT_PUBLIC_OPENAI_BASE_URL ||
-        PROVIDER_DEFAULTS.openai.baseUrl,
-      apiKey: openaiKey,
-      model:
-        process.env.OPENAI_MODEL ||
-        process.env.NEXT_PUBLIC_OPENAI_MODEL ||
-        PROVIDER_DEFAULTS.openai.model,
-    };
-  }
-
-  // Claude / Anthropic
-  const claudeKey =
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.CLAUDE_API_KEY ||
-    process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY ||
-    process.env.NEXT_PUBLIC_CLAUDE_API_KEY;
-  if (claudeKey) {
-    envSeeds['claude'] = {
-      baseUrl:
-        process.env.CLAUDE_BASE_URL ||
-        process.env.NEXT_PUBLIC_CLAUDE_BASE_URL ||
-        PROVIDER_DEFAULTS.claude.baseUrl,
-      apiKey: claudeKey,
-      model:
-        process.env.CLAUDE_MODEL ||
-        process.env.NEXT_PUBLIC_CLAUDE_MODEL ||
-        PROVIDER_DEFAULTS.claude.model,
-    };
-  }
-
-  // Gemini / Google
-  const geminiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-    process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
-  if (geminiKey) {
-    envSeeds['gemini'] = {
-      baseUrl:
-        process.env.GEMINI_BASE_URL ||
-        process.env.NEXT_PUBLIC_GEMINI_BASE_URL ||
-        PROVIDER_DEFAULTS.gemini.baseUrl,
-      apiKey: geminiKey,
-      model:
-        process.env.GEMINI_MODEL ||
-        process.env.NEXT_PUBLIC_GEMINI_MODEL ||
-        PROVIDER_DEFAULTS.gemini.model,
-    };
-  }
-
-  // DeepSeek
-  const deepseekKey =
-    process.env.DEEPSEEK_API_KEY ||
-    process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY;
-  if (deepseekKey) {
-    envSeeds['deepseek'] = {
-      baseUrl:
-        process.env.DEEPSEEK_BASE_URL ||
-        process.env.NEXT_PUBLIC_DEEPSEEK_BASE_URL ||
-        PROVIDER_DEFAULTS.deepseek.baseUrl,
-      apiKey: deepseekKey,
-      model:
-        process.env.DEEPSEEK_MODEL ||
-        process.env.NEXT_PUBLIC_DEEPSEEK_MODEL ||
-        PROVIDER_DEFAULTS.deepseek.model,
-    };
-  }
-
-  // Zhipu AI / GLM
-  const zaiKey =
-    process.env.ZAI_API_KEY ||
-    process.env.NEXT_PUBLIC_ZAI_API_KEY ||
-    process.env.NEXT_PUBLIC_SEED_ZAI_KEY;
-  if (zaiKey) {
-    envSeeds['zai'] = {
-      baseUrl:
-        process.env.ZAI_BASE_URL ||
-        process.env.NEXT_PUBLIC_ZAI_BASE_URL ||
-        PROVIDER_DEFAULTS.zai.baseUrl,
-      apiKey: zaiKey,
-      model:
-        process.env.ZAI_MODEL ||
-        process.env.NEXT_PUBLIC_ZAI_MODEL ||
-        PROVIDER_DEFAULTS.zai.model,
-    };
-  }
-
-  // MiniMax
-  const minimaxKey =
-    process.env.MINIMAX_API_KEY ||
-    process.env.NEXT_PUBLIC_MINIMAX_API_KEY;
-  if (minimaxKey) {
-    envSeeds['minimax'] = {
-      baseUrl:
-        process.env.MINIMAX_BASE_URL ||
-        process.env.NEXT_PUBLIC_MINIMAX_BASE_URL ||
-        PROVIDER_DEFAULTS.minimax.baseUrl,
-      apiKey: minimaxKey,
-      model:
-        process.env.MINIMAX_MODEL ||
-        process.env.NEXT_PUBLIC_MINIMAX_MODEL ||
-        PROVIDER_DEFAULTS.minimax.model,
-    };
-  }
-
-  // Nvidia Nemotron
-  const nemotronKey =
-    process.env.NEMOTRON_API_KEY ||
-    process.env.NEXT_PUBLIC_NEMOTRON_API_KEY;
-  if (nemotronKey) {
-    envSeeds['nemotron'] = {
-      baseUrl:
-        process.env.NEMOTRON_BASE_URL ||
-        process.env.NEXT_PUBLIC_NEMOTRON_BASE_URL ||
-        PROVIDER_DEFAULTS.nemotron.baseUrl,
-      apiKey: nemotronKey,
-      model:
-        process.env.NEMOTRON_MODEL ||
-        process.env.NEXT_PUBLIC_NEMOTRON_MODEL ||
-        PROVIDER_DEFAULTS.nemotron.model,
-    };
-  }
-
-  // Ollama (Local)
-  if (
-    process.env.OLLAMA_ENABLED === 'true' ||
-    process.env.NEXT_PUBLIC_OLLAMA_ENABLED === 'true' ||
-    process.env.OLLAMA_BASE_URL ||
-    process.env.NEXT_PUBLIC_OLLAMA_BASE_URL
-  ) {
-    envSeeds['ollama'] = {
-      baseUrl:
-        process.env.OLLAMA_BASE_URL ||
-        process.env.NEXT_PUBLIC_OLLAMA_BASE_URL ||
-        PROVIDER_DEFAULTS.ollama.baseUrl,
-      apiKey: 'ollama',
-      model:
-        process.env.OLLAMA_MODEL ||
-        process.env.NEXT_PUBLIC_OLLAMA_MODEL ||
-        PROVIDER_DEFAULTS.ollama.model,
-    };
-  }
-
-  return envSeeds;
-}
-
 export class DexieLLMSettingsRepository implements LLMSettingsRepository {
   async get(): Promise<LLMSettings> {
     const db = getDb();
-    const existing = await db.llmSettings.get('singleton');
-    const envSeeds = resolveEnvSeeds();
-    const defaultProvider = process.env.DEFAULT_PROVIDER || process.env.NEXT_PUBLIC_DEFAULT_PROVIDER;
+    let existing = await db.llmSettings.get('singleton');
+    if (existing) {
+      const providers = Object.fromEntries(Object.entries(existing.providers).map(([name, entry]) => [name,
+        entry.credentialSource ? entry : { ...entry, ...refreshLegacyPreset(name, entry), credentialSource: 'browser' as const },
+      ]));
+      if (JSON.stringify(providers) !== JSON.stringify(existing.providers)) {
+        existing = { ...existing, providers, updatedAt: new Date() };
+        await db.llmSettings.put(existing);
+      }
+    }
+    const discovered = await discoverLocalProviders();
+    const envSeeds = discovered.providers;
+    const defaultProvider = discovered.defaultProvider;
 
     if (existing) {
       // Auto-merge any env seeds that aren't already configured.
       const envSeedNames = Object.keys(envSeeds);
-      const missingSeeds = envSeedNames.filter((n) => !existing.providers[n]);
+      const missingSeeds = envSeedNames.filter((n) => !existing.providers[n] && !existing.dismissedEnvironmentProviders?.includes(n));
       if (missingSeeds.length > 0) {
         const providers = { ...existing.providers };
         for (const name of missingSeeds) {
           providers[name] = envSeeds[name]!;
         }
         let activeProviderName = existing.activeProviderName;
-        if (defaultProvider && defaultProvider in providers) {
-          activeProviderName = defaultProvider;
-        } else if (!activeProviderName || !(activeProviderName in providers)) {
-          activeProviderName = missingSeeds[0] ?? existing.activeProviderName;
+        if (!activeProviderName || !(activeProviderName in providers)) {
+          activeProviderName = defaultProvider && defaultProvider in providers
+            ? defaultProvider : missingSeeds[0] ?? existing.activeProviderName;
         }
 
         const updated: LLMSettings = {
@@ -245,7 +79,7 @@ export class DexieLLMSettingsRepository implements LLMSettingsRepository {
     await getDb().llmSettings.put(settings);
   }
 
-  async addProvider(name: string, config: { baseUrl: string; apiKey: string; model: string }): Promise<LLMSettings> {
+  async addProvider(name: string, config: ProviderEntry): Promise<LLMSettings> {
     const current = await this.get();
     const providers = { ...current.providers, [name]: config };
     const currentActiveExists = current.activeProviderName in providers;
@@ -273,6 +107,7 @@ export class DexieLLMSettingsRepository implements LLMSettingsRepository {
       ...current,
       providers,
       activeProviderName,
+      dismissedEnvironmentProviders: [...new Set([...(current.dismissedEnvironmentProviders ?? []), name])],
       updatedAt: new Date(),
     };
     await getDb().llmSettings.put(updated);

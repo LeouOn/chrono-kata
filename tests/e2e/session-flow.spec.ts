@@ -47,4 +47,25 @@ test.describe('Session Logging Flow', () => {
     await expect(page).toHaveURL(/.*sessions\/.+/);
     await expect(page.getByText('Calm and focused meditation session.').first()).toBeVisible();
   });
+
+  test('warns before discarding a running timer on backdrop tap', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'New session' }).click();
+    await page.getByRole('button', { name: /^start$/i }).click();
+
+    // Tap the backdrop above the bottom sheet.
+    await page.mouse.click(10, 100);
+
+    await expect(page.getByText('Discard unsaved practice?')).toBeVisible();
+    await page.getByRole('button', { name: /keep editing/i }).click();
+    await expect(page.getByText('Discard unsaved practice?')).toBeHidden();
+
+    // Form (and timer) still open.
+    await expect(page.getByRole('heading', { name: /new session/i })).toBeVisible();
+
+    // Discard via Cancel -> confirm.
+    await page.getByRole('button', { name: /^cancel$/i }).click();
+    await page.getByRole('button', { name: /discard practice/i }).click();
+    await expect(page.getByRole('heading', { name: /new session/i })).toBeHidden();
+  });
 });

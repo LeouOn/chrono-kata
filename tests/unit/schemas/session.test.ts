@@ -19,6 +19,27 @@ describe('SessionSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts a 3.5 minute session with reps null', () => {
+    const result = SessionSchema.safeParse({
+      ...validBase,
+      durationMinutes: 3.5,
+      reps: null,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.durationMinutes).toBe(3.5);
+  });
+
+  it('rejects zero, negative, NaN, and infinite durations', () => {
+    for (const durationMinutes of [0, -1, -3.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const result = SessionSchema.safeParse({
+        ...validBase,
+        durationMinutes,
+        reps: null,
+      });
+      expect(result.success).toBe(false);
+    }
+  });
+
   it('accepts a reps session (reps set, durationMinutes null)', () => {
     const result = SessionSchema.safeParse({
       ...validBase,

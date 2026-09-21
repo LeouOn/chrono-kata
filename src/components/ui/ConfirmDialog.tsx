@@ -14,6 +14,8 @@ interface Props {
   onConfirm: (dontAskAgain: boolean) => void;
   onCancel: () => void;
   children?: ReactNode;
+  /** Stack layer: pass 2 when rendered above another open modal. */
+  layer?: 1 | 2;
 }
 
 export function ConfirmDialog({
@@ -26,6 +28,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   children,
+  layer = 1,
 }: Props) {
   const [dontAskAgain, setDontAskAgain] = useState(false);
 
@@ -34,7 +37,7 @@ export function ConfirmDialog({
   }, [open]);
 
   return (
-    <Modal open={open} onClose={onCancel} title={title}>
+    <Modal open={open} onClose={onCancel} title={title} layer={layer}>
       <p className="text-text-muted mb-4">{message}</p>
       {children && <div className="mb-4">{children}</div>}
       {showDontAskAgain && (

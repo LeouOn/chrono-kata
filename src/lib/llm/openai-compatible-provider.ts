@@ -1,3 +1,4 @@
+import { providerFetch } from './provider-fetch';
 import type { ChatResponse, LLMProvider, StreamChunk } from './types';
 import { LLMException, StopReason } from './types';
 import { mapFetchError, mapResponseStatus } from './error-mapper';
@@ -20,13 +21,14 @@ interface OpenAIResponse {
  * Fetch with automatic backoff retry on HTTP 429 (Rate Limit) or 503 (Service Unavailable).
  */
 async function fetchWithRetry(
+  config: ProviderConfig,
   url: string,
   options: RequestInit,
   maxRetries = 2
 ): Promise<Response> {
   let attempt = 0;
   while (true) {
-    const resp = await fetch(url, options);
+    const resp = await providerFetch(config, url, options);
     if ((resp.status === 429 || resp.status === 503) && attempt < maxRetries) {
       attempt++;
       const delayMs = Math.min(3000, 1000 * Math.pow(1.5, attempt));
@@ -49,10 +51,17 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private readonly apiKey: string;
   private readonly model: string;
 
-  constructor(config: ProviderConfig) {
+  constructor(private readonly config: ProviderConfig) {
     this.baseUrl = config.baseUrl;
     this.apiKey = config.apiKey;
     this.model = config.model;
+  }
+
+  private requestOptions() {
+    if (this.config.providerName === 'deepseek') return { thinking: { type: 'disabled' }, max_tokens: 800 };
+    if (this.config.providerName === 'zai' && this.model === 'glm-5.3') return { thinking: { type: 'enabled' }, reasoning_effort: 'low', max_tokens: 2048 };
+    if (this.config.providerName === 'openrouter' && this.model === 'deepseek/deepseek-v4.1-flash') return { reasoning: { enabled: false }, max_tokens: 800 };
+    return {};
   }
 
   async completeSingle(input: {
@@ -68,11 +77,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
         { role: 'user', content: input.userText },
       ] satisfies OpenAIMessage[],
       temperature: 0.7,
+      ...this.requestOptions(),
     };
 
     let resp: Response;
     try {
-      resp = await fetchWithRetry(url, {
+      resp = await fetchWithRetry(this.config, url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -153,13 +163,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
       model: this.model,
       messages,
       temperature: 0.7,
+      ...this.requestOptions(),
       stream: true,
       stream_options: { include_usage: true },
     };
 
     let resp: Response;
     try {
-      resp = await fetchWithRetry(url, {
+      resp = await fetchWithRetry(this.config, url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -194,6 +205,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
 
       for (const data of lines) {
+        try {
+          const chunk = JSON.parse(data) as OpenAIResponse;
+          promptTokens = chunk.usage?.prompt_tokens ?? promptTokens;
+          completionTokens = chunk.usage?.completion_tokens ?? completionTokens;
+        } catch { /* [DONE] is not JSON. */ }
         const text = extractContentFromOpenAIChunk(data);
         if (text === null) {
           input.onChunk({ content: null });

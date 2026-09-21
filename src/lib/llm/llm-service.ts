@@ -446,6 +446,7 @@ function resolveActiveProvider(settings: LLMSettings, providerOverride?: string)
     baseUrl: entry.baseUrl,
     apiKey: entry.apiKey,
     model: entry.model,
+    credentialSource: entry.credentialSource,
   };
 }
 

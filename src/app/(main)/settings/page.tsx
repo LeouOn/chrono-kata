@@ -9,6 +9,7 @@ import { DataTransfer } from '@/components/settings/DataTransfer';
 import { ReminderSettings } from '@/components/settings/ReminderSettings';
 import { ThemeSettings } from '@/components/settings/ThemeSettings';
 import { KataTemplateSettings } from '@/components/settings/KataTemplateSettings';
+import { HabitSettings } from '@/components/settings/HabitSettings';
 import { ConfirmationSettings } from '@/components/settings/ConfirmationSettings';
 import { ClearDataSettings } from '@/components/settings/ClearDataSettings';
 import { GoalSettings } from '@/components/settings/GoalSettings';
@@ -55,6 +56,8 @@ export default function SettingsPage() {
       </Card>
 
       <GoalSettings />
+
+      <HabitSettings />
 
       <KataTemplateSettings />
 

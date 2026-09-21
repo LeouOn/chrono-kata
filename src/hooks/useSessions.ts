@@ -16,11 +16,20 @@ import {
   syncSessionDelete,
   flushPendingOps,
 } from '@/lib/calendar/sync';
+import {
+  syncHabitLogsForSession,
+  removeHabitLogsForSession,
+} from '@/lib/habits/session-sync';
 import type { Session, SessionInput } from '@/lib/schemas/session';
 
 const KEY = ['sessions'] as const;
 
-async function recomputeStreakSideEffect() {
+/**
+ * Recompute and persist the streak from all sessions + settings.
+ * Called after every session mutation and once on app open so the
+ * displayed streak stays truthful after missed days.
+ */
+export async function recomputeStreakSideEffect() {
   const [current, sessions, settings] = await Promise.all([
     streakRepo.get(),
     sessionRepo.getAll(),
@@ -176,6 +185,8 @@ export function useSessions() {
       void generateCoachCommentSideEffect(saved);
       // Fire-and-forget calendar sync (enqueues on failure)
       void syncSessionCreateOrUpdate(saved);
+      // Fire-and-forget habit progress sync (idempotent per session)
+      void syncHabitLogsForSession(saved);
     },
   });
 
@@ -188,7 +199,10 @@ export function useSessions() {
       // Fire-and-forget: re-fetch the updated session and push to calendar
       void (async () => {
         const updated = await sessionRepo.getById(variables.id);
-        if (updated) void syncSessionCreateOrUpdate(updated);
+        if (updated) {
+          void syncSessionCreateOrUpdate(updated);
+          void syncHabitLogsForSession(updated);
+        }
       })();
     },
   });
@@ -197,6 +211,7 @@ export function useSessions() {
     mutationFn: async (id: string) => {
       const session = await sessionRepo.getById(id);
       if (session) void syncSessionDelete(session);
+      await removeHabitLogsForSession(id);
       return sessionRepo.delete(id);
     },
     onSettled: async () => {

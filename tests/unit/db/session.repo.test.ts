@@ -32,6 +32,15 @@ describe('DexieSessionRepository', () => {
     expect(saved.calendarEventId).toBeNull();
   });
 
+  it('round-trips a 3.5 minute duration through IndexedDB', async () => {
+    const saved = await repo.save({ ...validInput, durationMinutes: 3.5, reps: null });
+    expect(saved.durationMinutes).toBe(3.5);
+    const fetched = await repo.getById(saved.id);
+    expect(fetched?.durationMinutes).toBe(3.5);
+    const stored = await db.sessions.get(saved.id);
+    expect(stored?.durationMinutes).toBe(3.5);
+  });
+
   it('getAll returns sessions in reverse chronological order', async () => {
     await repo.save({ ...validInput, startedAt: new Date('2026-07-20T10:00:00Z') });
     await repo.save({ ...validInput, startedAt: new Date('2026-07-21T10:00:00Z') });

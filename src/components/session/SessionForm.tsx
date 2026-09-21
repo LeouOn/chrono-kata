@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { RatingPicker } from './RatingPicker';
 import { SliderRatingPicker } from './SliderRatingPicker';
 import { DotsRatingPicker } from './DotsRatingPicker';
@@ -15,6 +16,7 @@ import { useKataTemplates } from '@/hooks/useKataTemplates';
 import { useLLMSettings } from '@/hooks/useLLMSettings';
 import { suggestLabel } from '@/lib/llm/llm-service';
 import { buildLabelSuggestions } from '@/lib/utils/labels';
+import { toDateTimeLocalValue } from '@/lib/utils/date';
 import { dispatchToast } from '@/components/ui/Toast';
 import type { Session, SessionInput } from '@/lib/schemas/session';
 import type { Rating, MultiDimRating } from '@/lib/schemas/session';
@@ -45,6 +47,10 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
         : initialTemplate?.mode ?? 'timed'
   );
   const [timerStartedAt, setTimerStartedAt] = useState<Date | null>(null);
+  const [timerStoppedUnsaved, setTimerStoppedUnsaved] = useState(false);
+  const [startedAt, setStartedAt] = useState<Date>(new Date());
+  const [startedAtTouched, setStartedAtTouched] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState<number | null>(
     initial?.durationMinutes ?? initialTemplate?.defaultDurationMinutes ?? null
   );
@@ -80,6 +86,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
         setMoodRating(initial.moodRating ?? null);
         setActivityLabel(initial.activityLabel ?? '');
         setNote(initial.note ?? '');
+        setStartedAt(initial.startedAt);
       } else if (initialTemplate) {
         setMode(initialTemplate.mode);
         setDurationMinutes(initialTemplate.defaultDurationMinutes ?? null);
@@ -90,6 +97,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
         setMoodRating(null);
         setActivityLabel(initialTemplate.activityLabel ?? '');
         setNote(initialTemplate.defaultNote ?? '');
+        setStartedAt(new Date());
       } else {
         setMode('timed');
         setDurationMinutes(null);
@@ -100,15 +108,37 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
         setMoodRating(null);
         setActivityLabel('');
         setNote('');
+        setStartedAt(new Date());
       }
       setTimerStartedAt(null);
+      setTimerStoppedUnsaved(false);
+      setStartedAtTouched(false);
+      setConfirmDiscardOpen(false);
       setError(null);
     }
   }, [open, initial, initialTemplate]);
 
+  function handleTimerStart() {
+    const now = new Date();
+    setTimerStartedAt(now);
+    setTimerStoppedUnsaved(false);
+    setStartedAt(now);
+    setStartedAtTouched(true);
+  }
+
+  function requestClose() {
+    if (confirmDiscardOpen) return;
+    if (timerStartedAt != null || timerStoppedUnsaved) {
+      setConfirmDiscardOpen(true);
+      return;
+    }
+    onCancel();
+  }
+
   function handleTimerStop(minutes: number) {
     setDurationMinutes(minutes);
     setTimerStartedAt(null);
+    setTimerStoppedUnsaved(true);
     if (mode !== 'timed') setMode('timed');
   }
 
@@ -145,9 +175,14 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       return;
     }
 
+    const effectiveStartedAt =
+      startedAtTouched || initial != null ? startedAt : new Date();
     const input: SessionInput = {
-      startedAt: initial?.startedAt ?? (timerStartedAt ?? new Date()),
-      endedAt: mode === 'timed' ? new Date() : null,
+      startedAt: effectiveStartedAt,
+      endedAt:
+        mode === 'timed' && durationMinutes != null
+          ? new Date(effectiveStartedAt.getTime() + durationMinutes * 60_000)
+          : null,
       durationMinutes: mode === 'timed' ? durationMinutes : null,
       reps: mode === 'reps' ? reps : null,
       rating,
@@ -161,7 +196,8 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
   }
 
   return (
-    <Modal open={open} onClose={onCancel} title={initial ? 'Edit session' : initialTemplate ? `Start ${initialTemplate.name}` : 'New session'}>
+    <>
+      <Modal open={open} onClose={requestClose} title={initial ? 'Edit session' : initialTemplate ? `Start ${initialTemplate.name}` : 'New session'}>
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Mode toggle */}
         <div className="grid grid-cols-2 gap-2 p-1 bg-surface-2 rounded-2xl">
@@ -185,7 +221,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
             <div className="space-y-3">
               <Timer
                 startedAt={timerStartedAt}
-                onStart={() => setTimerStartedAt(new Date())}
+                onStart={handleTimerStart}
                 onStop={handleTimerStop}
                 onReset={() => setTimerStartedAt(null)}
               />
@@ -195,6 +231,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
                   type="number"
                   min="1"
                   max="1440"
+                  step="any"
                   placeholder="e.g. 20"
                   value={durationMinutes ?? ''}
                   onChange={(e) =>
@@ -235,6 +272,29 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
             />
           </div>
         )}
+
+        {/* When */}
+        <div>
+          <label
+            htmlFor="session-started-at"
+            className="text-xs uppercase tracking-wide text-text-muted block mb-1"
+          >
+            When
+          </label>
+          <input
+            id="session-started-at"
+            type="datetime-local"
+            value={toDateTimeLocalValue(startedAt)}
+            onChange={(e) => {
+              const d = new Date(e.target.value);
+              if (!Number.isNaN(d.getTime())) {
+                setStartedAt(d);
+                setStartedAtTouched(true);
+              }
+            }}
+            className="w-full bg-surface-2 rounded-xl px-4 py-2.5 text-text text-sm border border-border focus:border-accent outline-none"
+          />
+        </div>
 
         {/* Rating picker */}
         <div>
@@ -335,7 +395,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
         {error && <p className="text-sm text-hype">{error}</p>}
 
         <div className="flex gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onCancel} className="flex-1">
+          <Button type="button" variant="ghost" onClick={requestClose} className="flex-1">
             Cancel
           </Button>
           <Button type="submit" variant="primary" className="flex-1">
@@ -343,6 +403,21 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
           </Button>
         </div>
       </form>
-    </Modal>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmDiscardOpen}
+        title="Discard unsaved practice?"
+        message="A timed practice hasn't been saved yet. Closing the form now will discard the measured time."
+        confirmLabel="Discard practice"
+        cancelLabel="Keep editing"
+        layer={2}
+        onConfirm={() => {
+          setConfirmDiscardOpen(false);
+          onCancel();
+        }}
+        onCancel={() => setConfirmDiscardOpen(false)}
+      />
+    </>
   );
 }

@@ -9,6 +9,7 @@ import type { Token } from '@/lib/schemas/token';
 import type { Conversation } from '@/lib/schemas/conversation';
 import type { Message } from '@/lib/schemas/message';
 import type { KataTemplate } from '@/lib/schemas/kata-template';
+import type { Habit, HabitLog } from '@/lib/schemas/habit';
 
 export class ChronoKataDB extends Dexie {
   sessions!: Table<Session, string>;
@@ -21,6 +22,8 @@ export class ChronoKataDB extends Dexie {
   conversations!: Table<Conversation, string>;
   messages!: Table<Message, string>;
   kataTemplates!: Table<KataTemplate, string>;
+  habits!: Table<Habit, string>;
+  habitLogs!: Table<HabitLog, string>;
 
   constructor() {
     super('chrono-kata');
@@ -57,6 +60,21 @@ export class ChronoKataDB extends Dexie {
       conversations: 'id, sessionId',
       messages: 'id, conversationId, parentId',
       kataTemplates: 'id, name, order, createdAt',
+    });
+    // Habits: add habit definitions + dated progress logs.
+    this.version(4).stores({
+      sessions: 'id, startedAt, calendarEventId, conversationId',
+      reflections: 'id, periodStart, periodEnd',
+      streak: 'id',
+      settings: 'id',
+      llmSettings: 'id',
+      pendingCalendarOps: 'id, sessionId',
+      tokens: 'id',
+      conversations: 'id, sessionId',
+      messages: 'id, conversationId, parentId',
+      kataTemplates: 'id, name, order, createdAt',
+      habits: 'id, order',
+      habitLogs: 'id, habitId, date, sessionId, [habitId+date]',
     });
   }
 }

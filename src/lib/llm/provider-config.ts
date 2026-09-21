@@ -3,4 +3,5 @@ export interface ProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  credentialSource?: 'browser' | 'environment';
 }

@@ -16,6 +16,7 @@ export function DataTransfer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingImport, setPendingImport] = useState<{ sessions: number; reflections: number } | null>(null);
   const [pendingEnvelope, setPendingEnvelope] = useState<ExportEnvelope | null>(null);
+  const [pendingSkipped, setPendingSkipped] = useState(0);
 
   async function handleExport() {
     try {
@@ -38,6 +39,7 @@ export function DataTransfer() {
         return;
       }
       setPendingEnvelope(result.envelope);
+      setPendingSkipped(result.skipped);
       setPendingImport({
         sessions: result.envelope.sessions.length,
         reflections: result.envelope.reflections.length,
@@ -54,6 +56,9 @@ export function DataTransfer() {
     try {
       await replaceAll(pendingEnvelope);
       toast.show(`Imported ${pendingEnvelope.sessions.length} sessions`, 'success');
+      if (pendingSkipped > 0) {
+        toast.show(`Skipped ${pendingSkipped} invalid row${pendingSkipped === 1 ? '' : 's'} in the file`, 'error');
+      }
       // Invalidate all queries to refresh UI
       qc.invalidateQueries();
     } catch (e) {
@@ -61,11 +66,13 @@ export function DataTransfer() {
     }
     setPendingEnvelope(null);
     setPendingImport(null);
+    setPendingSkipped(0);
   }
 
   function cancelImport() {
     setPendingEnvelope(null);
     setPendingImport(null);
+    setPendingSkipped(0);
   }
 
   return (
@@ -74,7 +81,7 @@ export function DataTransfer() {
         Backup & Restore
       </div>
       <p className="text-text-muted text-sm mb-4">
-        Export all data (sessions, reflections, settings) as JSON. API keys are stripped from exports for safety.
+        Export everything (sessions, reflections, kata presets, coach threads, settings) as JSON. API keys are stripped from exports for safety.
         Importing replaces ALL local data — existing API keys are preserved when the import file has empty key fields.
         Any queued calendar-sync ops are also wiped (they&apos;re device-specific).
       </p>
@@ -95,7 +102,7 @@ export function DataTransfer() {
         title="Replace all data?"
         message={
           pendingImport
-            ? `This will WIPE all existing data and restore ${pendingImport.sessions} session${pendingImport.sessions === 1 ? '' : 's'} and ${pendingImport.reflections} reflection${pendingImport.reflections === 1 ? '' : 's'} from the file. Any queued calendar-sync ops will also be discarded. Cannot be undone.`
+            ? `This will WIPE all existing data and restore ${pendingImport.sessions} session${pendingImport.sessions === 1 ? '' : 's'} and ${pendingImport.reflections} reflection${pendingImport.reflections === 1 ? '' : 's'} from the file.${pendingSkipped > 0 ? ` ${pendingSkipped} invalid or duplicate record${pendingSkipped === 1 ? '' : 's'} in the file will be skipped.` : ''} Any queued calendar-sync ops will also be discarded. Cannot be undone.`
             : ''
         }
         confirmLabel="Replace all"

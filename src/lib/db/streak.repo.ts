@@ -17,6 +17,7 @@ export class DexieStreakRepository implements StreakRepository {
       longestStreakDays: 0,
       lastSessionDate: '1970-01-01',
       milestonesAchieved: [],
+      freezeUsedOn: [],
       updatedAt: new Date(),
     };
     await db.streak.put(fresh);

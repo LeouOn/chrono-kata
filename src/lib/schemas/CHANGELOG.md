@@ -1,9 +1,40 @@
 # Schema Changelog
 
+## 2026-09-21 — Habits (definitions + dated logs)
+
+New `habit.ts`: `HabitSchema` (kind: timed|boolean|count, per-day target,
+daily/weekday schedule, optional linked activity label, archive timestamp)
+and `HabitLogSchema` (dated entries; manual or session-sourced). Additive:
+two new Dexie tables in DB version 4 (`habits`, `habitLogs`); existing
+tables and records are untouched, so no data migration is needed.
+
+## 2026-09-21 — Local desktop AI connections
+
+Provider entries optionally identify `credentialSource` (`browser` or
+`environment`). Environment entries contain an empty key; server keys are never
+stored in IndexedDB. Empty keys and active provider names are accepted for
+redacted backups and unconfigured settings. An optional
+`dismissedEnvironmentProviders` list preserves removal choices. Existing rows
+remain valid; no IndexedDB layout changes are required.
+
 Tracks breaking and additive changes to Zod schemas in this directory.
 Additive changes (new optional fields) only require a Zod edit.
 Breaking changes (field renames, type changes, removals) require BOTH a
 Zod schema version bump AND a Dexie migration step.
+
+## 2026-09-21 — Streak freeze consumption persisted
+
+`streak.ts` gains an additive `freezeUsedOn: string[]` field (local YYYY-MM-DD
+dates already covered by a spent streak-freeze token). Tokens now deplete
+across recomputes; dates that no longer protect a live streak are pruned,
+refunding their tokens. Existing records lack the field and default to `[]`;
+no Dexie migration is needed (non-indexed field).
+
+## 2026-09-21 — Stretch routine durations
+
+`session.ts` now accepts positive fractional minutes, preserving exact 30-second
+holds. Existing integer durations remain valid; the stored number type and
+IndexedDB layout are unchanged, so no data migration is needed.
 
 ## 2026-07-21 — Initial schemas (Wave 1)
 

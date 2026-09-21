@@ -8,6 +8,8 @@ export const StreakSchema = z.object({
   longestStreakDays: z.number().int().nonnegative(),
   lastSessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   milestonesAchieved: z.array(z.number().int().positive()),
+  /** Local YYYY-MM-DD dates already covered by a spent streak-freeze token. */
+  freezeUsedOn: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).default([]),
   updatedAt: z.date(),
 });
 

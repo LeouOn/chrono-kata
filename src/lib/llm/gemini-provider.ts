@@ -1,3 +1,4 @@
+import { providerFetch } from './provider-fetch';
 import type { ChatResponse, LLMProvider, StreamChunk } from './types';
 import { LLMException, StopReason } from './types';
 import { mapFetchError, mapResponseStatus } from './error-mapper';
@@ -28,7 +29,7 @@ export class GeminiProvider implements LLMProvider {
   private readonly apiKey: string;
   private readonly model: string;
 
-  constructor(config: ProviderConfig) {
+  constructor(private readonly config: ProviderConfig) {
     this.baseUrl = config.baseUrl;
     this.apiKey = config.apiKey;
     this.model = config.model;
@@ -51,7 +52,7 @@ export class GeminiProvider implements LLMProvider {
 
     let resp: Response;
     try {
-      resp = await fetch(url, {
+      resp = await providerFetch(this.config, url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -145,7 +146,7 @@ export class GeminiProvider implements LLMProvider {
 
     let resp: Response;
     try {
-      resp = await fetch(url, {
+      resp = await providerFetch(this.config, url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

@@ -18,6 +18,12 @@ export function mapResponseStatus(status: number, statusText: string): LLMExcept
       LLMExceptionKind.RateLimited
     );
   }
+  if (status === 400 || status === 404) {
+    return new LLMException(
+      `Provider rejected the request (${status}). Check the selected model and base URL in LLM settings.`,
+      LLMExceptionKind.Provider,
+    );
+  }
   return new LLMException(
     `Provider error (${status}${statusText ? ' ' + statusText : ''}).`,
     LLMExceptionKind.Provider
