@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Share2, Copy, Download, FileText } from 'lucide-react';
 import { useSessions } from '@/hooks/useSessions';
 import { useConversation } from '@/hooks/useConversation';
@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/Card';
 import { ConversationThread } from '@/components/session/ConversationThread';
 import { FollowUpInput } from '@/components/session/FollowUpInput';
 import { formatDuration } from '@/lib/utils/format';
+import { RatingMark } from '@/components/session/RatingMark';
 import { dispatchToast } from '@/components/ui/Toast';
 import {
   exportConversationAsJson,
@@ -21,12 +22,9 @@ import {
   copyToClipboard,
 } from '@/lib/utils/conversation-export';
 
-const RATING_EMOJI: Record<number, string> = {
-  5: '😄', 4: '🙂', 3: '😐', 2: '😕', 1: '😢',
-};
-
-export default function SessionDetailPage() {
-  const params = useParams<{ id: string }>();
+export function SessionDetailClient() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('id');
   const router = useRouter();
   const { sessions, updateSession, deleteSession } = useSessions();
   const { settings, updateSettings } = useSettings();
@@ -34,7 +32,7 @@ export default function SessionDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
 
-  const session = sessions.find((s) => s.id === params.id);
+  const session = sessions.find((s) => s.id === sessionId);
   // Keep all hooks above the early return: on hard loads the sessions query
   // starts empty, so hook order must not change between renders.
   const {
@@ -114,7 +112,7 @@ export default function SessionDetailPage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-4xl">{RATING_EMOJI[session.rating]}</div>
+          <RatingMark rating={session.rating} emoji={settings?.ratingStyle === 'emoji'} size="lg" />
           <h1 className="font-serif text-2xl mt-2">
             {session.durationMinutes != null
               ? formatDuration(session.durationMinutes)

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Star } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { MultiDimRating } from '@/lib/schemas/session';
 
@@ -38,9 +39,10 @@ interface Props {
   dimension: 'focus' | 'energy' | 'mood';
   value: MultiDimRating | null | undefined;
   onChange: (v: MultiDimRating | null) => void;
+  emoji?: boolean;
 }
 
-export function MultiDimSlider({ dimension, value, onChange }: Props) {
+export function MultiDimSlider({ dimension, value, onChange, emoji = false }: Props) {
   const preset = PRESETS[dimension];
   return (
     <div>
@@ -73,7 +75,16 @@ export function MultiDimSlider({ dimension, value, onChange }: Props) {
               aria-label={`${TITLES[dimension]}: ${o.label}`}
               aria-pressed={selected}
             >
-              <span className={`text-2xl ${selected ? '' : 'opacity-50'}`}>{o.emoji}</span>
+              {emoji ? (
+                <span className={`text-2xl ${selected ? '' : 'opacity-50'}`}>{o.emoji}</span>
+              ) : (
+                <Star
+                  size={22}
+                  strokeWidth={1.75}
+                  aria-hidden
+                  className={selected ? 'text-accent fill-accent' : 'text-text-muted opacity-50'}
+                />
+              )}
               <span className={`text-xs ${selected ? 'text-accent' : 'text-text-muted'}`}>
                 {o.label}
               </span>

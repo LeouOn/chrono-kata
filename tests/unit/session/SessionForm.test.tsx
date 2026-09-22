@@ -96,7 +96,7 @@ describe('SessionForm', () => {
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. 20/i), {
       target: { value: '25' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '4' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Good' }));
     fireEvent.click(screen.getByRole('button', { name: /save session/i }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));

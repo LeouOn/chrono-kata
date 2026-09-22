@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">chrono-kata</string>
+    <string name="title_activity_main">chrono-kata</string>
+    <string name="package_name">com.chronokata.app</string>
+    <string name="custom_url_scheme">com.chronokata.app</string>
+</resources>

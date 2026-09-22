@@ -43,7 +43,7 @@ test.describe('Habit Goals & Streak Protection', () => {
     }
 
     // Pick rating 4
-    await page.getByRole('button', { name: '4', exact: true }).click();
+    await page.getByRole('button', { name: 'Good', exact: true }).click();
 
     await page.getByRole('button', { name: /Save session/i }).click();
     await expect(page.getByRole('dialog')).toBeHidden();

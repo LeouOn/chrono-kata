@@ -2,7 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { RatingPicker } from '@/components/session/RatingPicker';
+import { RatingControl } from '@/components/session/RatingControl';
+import { useSettings } from '@/hooks/useSettings';
 import { playIntervalPing } from '@/lib/audio/bell-synthesizer';
 import {
   buildStretchRoutine,
@@ -364,13 +365,14 @@ function Completion({
   onSave: () => void;
   onClose: () => void;
 }) {
+  const { settings } = useSettings();
   return (
     <div className="space-y-4">
       <p role="status" className="text-text">
         Routine complete — lasted {minutes} minutes of stretching.
       </p>
       <p className="text-sm text-text-muted">How did it feel?</p>
-      <RatingPicker value={rating} onChange={onRating} />
+      <RatingControl value={rating} onChange={onRating} style={settings?.ratingStyle ?? 'stars'} />
       {error && (
         <p role="alert" className="text-sm text-hype">
           {error}

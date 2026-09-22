@@ -1,0 +1,49 @@
+// Re-apply after `cap sync` or `npm install` restores Capacitor's AGP 8 scripts.
+def patchCapacitorScript = { File file, Closure<String> transform ->
+    if (!file.isFile()) {
+        return
+    }
+    def original = file.getText('UTF-8')
+    def updated = transform(original)
+    if (updated != original) {
+        file.write(updated, 'UTF-8')
+        logger.lifecycle("Patched ${file}")
+    }
+}
+
+def useRootExt = { String text ->
+    text.replace('project.hasProperty(', 'rootProject.ext.has(')
+}
+
+patchCapacitorScript(new File(settingsDir, 'capacitor-cordova-android-plugins/cordova.variables.gradle'), useRootExt)
+
+patchCapacitorScript(new File(settingsDir, 'capacitor-cordova-android-plugins/build.gradle')) { String text ->
+    def updated = useRootExt(text)
+    updated = updated.replace(
+        "classpath 'com.android.tools.build:gradle:8.13.0'",
+        "classpath 'com.android.tools.build:gradle:9.4.1'",
+    )
+    updated = updated.replace('lintOptions {', 'lint {')
+    updated = updated.replaceAll(/(?m)^[ \t]*flatDir\{\r?\n[ \t]*dirs 'src\/main\/libs', 'libs'\r?\n[ \t]*\}\r?\n/, '')
+    return updated
+}
+
+def patchBundledGradle = { String text ->
+    def updated = useRootExt(text)
+    updated = updated.replace('lintOptions {', 'lint {')
+    updated = updated.replace('baseline file(', 'baseline = file(')
+    return updated
+}
+
+def capacitorRoot = new File(settingsDir, '../node_modules/@capacitor')
+if (capacitorRoot.isDirectory()) {
+    capacitorRoot.eachFileRecurse { File child ->
+        if (child.isFile() && child.name == 'build.gradle') {
+            patchCapacitorScript(child, patchBundledGradle)
+        }
+    }
+}
+
+patchCapacitorScript(new File(settingsDir, 'app/capacitor.build.gradle')) { String text ->
+    text.replace("if (hasProperty('postBuildExtras'))", "if (ext.has('postBuildExtras'))")
+}

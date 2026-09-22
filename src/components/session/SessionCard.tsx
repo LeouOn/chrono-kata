@@ -4,10 +4,8 @@ import { motion } from 'motion/react';
 import type { Session } from '@/lib/schemas/session';
 import { formatSessionSummary } from '@/lib/utils/format';
 import type { CoachPersonality } from '@/lib/schemas/coach-personality';
-
-const RATING_EMOJI: Record<number, string> = {
-  5: '😄', 4: '🙂', 3: '😐', 2: '😕', 1: '😢',
-};
+import { useSettings } from '@/hooks/useSettings';
+import { RatingMark } from './RatingMark';
 
 const PERSONALITY_COLORS: Record<CoachPersonality, string> = {
   zen: 'var(--color-zen)',
@@ -25,6 +23,7 @@ interface Props {
 }
 
 export function SessionCard({ session, onClick, onRetry, pending }: Props) {
+  const { settings } = useSettings();
   const time = session.startedAt.toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
@@ -43,8 +42,8 @@ export function SessionCard({ session, onClick, onRetry, pending }: Props) {
       onClick={() => onClick?.(session)}
       className="w-full text-left flex items-start gap-3 py-3"
     >
-      <div className="text-2xl shrink-0" aria-hidden>
-        {RATING_EMOJI[session.rating]}
+      <div className="shrink-0 pt-0.5">
+        <RatingMark rating={session.rating} emoji={settings?.ratingStyle === 'emoji'} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 text-sm">

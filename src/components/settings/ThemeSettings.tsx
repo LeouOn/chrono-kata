@@ -19,16 +19,17 @@ const ACCENT_OPTIONS: Array<{ value: AccentColor; label: string; color: string }
 ];
 
 const RATING_OPTIONS: Array<{ value: RatingStyle; label: string }> = [
+  { value: 'stars', label: 'Stars' },
   { value: 'slider', label: 'Slider' },
-  { value: 'emoji', label: 'Emoji' },
   { value: 'dots', label: 'Dots' },
+  { value: 'emoji', label: 'Emoji' },
 ];
 
 export function ThemeSettings() {
   const { settings, updateSettings } = useSettings();
   const currentTheme = settings?.theme ?? 'system';
   const currentAccent = settings?.accentColor ?? 'amber';
-  const currentRating = settings?.ratingStyle ?? 'slider';
+  const currentRating = settings?.ratingStyle ?? 'stars';
 
   return (
     <Card>
@@ -87,7 +88,7 @@ export function ThemeSettings() {
 
       <div className="mt-4 pt-4 border-t border-border">
         <div className="text-sm text-text mb-2">Rating style</div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {RATING_OPTIONS.map(({ value, label }) => {
             const active = currentRating === value;
             return (

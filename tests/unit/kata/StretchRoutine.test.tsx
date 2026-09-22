@@ -1,6 +1,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StretchRoutine } from '@/components/kata/StretchRoutine';
 import { playIntervalPing } from '@/lib/audio/bell-synthesizer';
 import type { SessionInput } from '@/lib/schemas/session';
@@ -42,8 +43,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function renderRoutine(onSave: (input: SessionInput) => Promise<unknown> = async () => undefined) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <StretchRoutine onSave={onSave} />
+    </QueryClientProvider>,
+  );
+}
+
 function openRoutine() {
-  render(<StretchRoutine onSave={vi.fn(async () => undefined)} />);
+  renderRoutine();
   fireEvent.click(screen.getByRole('button', { name: /Daily stretches/ }));
 }
 
@@ -56,7 +66,7 @@ async function completeCurrentHold() {
 
 describe('StretchRoutine', () => {
   it('shows the home card and a preview whose hip choice updates the seven holds', () => {
-    render(<StretchRoutine onSave={vi.fn(async () => undefined)} />);
+    renderRoutine();
     expect(screen.getByRole('button', { name: /7 holds · 3½ minutes · 30 seconds each/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Daily stretches/ }));
@@ -143,7 +153,7 @@ describe('StretchRoutine', () => {
         resolveSave = resolve;
       }),
     );
-    render(<StretchRoutine onSave={onSave} />);
+    renderRoutine(onSave);
     fireEvent.click(screen.getByRole('button', { name: /Daily stretches/ }));
     fireEvent.click(screen.getByRole('radio', { name: 'Half pigeon' }));
     fireEvent.click(screen.getByRole('button', { name: 'Begin' }));
@@ -209,7 +219,7 @@ describe('StretchRoutine', () => {
     onSave.mockRejectedValueOnce(new Error('disk'));
     onSave.mockResolvedValueOnce(undefined);
 
-    render(<StretchRoutine onSave={onSave} />);
+    renderRoutine(onSave);
     fireEvent.click(screen.getByRole('button', { name: /Daily stretches/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Begin' }));
     for (let index = 0; index < 7; index += 1) {

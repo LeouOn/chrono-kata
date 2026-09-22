@@ -34,6 +34,18 @@ describe('SettingsSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('defaults rating style to stars and still accepts emoji', () => {
+    expect(DEFAULT_SETTINGS.ratingStyle).toBe('stars');
+    const now = new Date();
+    const result = SettingsSchema.safeParse({
+      ...DEFAULT_SETTINGS,
+      ratingStyle: 'emoji',
+      createdAt: now,
+      updatedAt: now,
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('defaults all confirmation toggles to true', () => {
     expect(DEFAULT_SETTINGS.confirmKataDelete).toBe(true);
     expect(DEFAULT_SETTINGS.confirmSessionDelete).toBe(true);

@@ -1,5 +1,11 @@
 # Schema Changelog
 
+## 2026-09-21 — Star ratings
+
+`settings.ts` accepts `ratingStyle: 'stars'`. New settings default to stars.
+Emoji, slider, and dots remain valid. Existing rows are unchanged, so no
+Dexie migration is required.
+
 ## 2026-09-21 — Habits (definitions + dated logs)
 
 New `habit.ts`: `HabitSchema` (kind: timed|boolean|count, per-day target,

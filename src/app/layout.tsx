@@ -4,6 +4,7 @@ import { QueryProvider } from '@/providers/QueryProvider';
 import { ToastProvider } from '@/components/ui/Toast';
 import { THEME_INLINE_SCRIPT } from '@/components/system/ThemeScript';
 import { ThemeApplier } from '@/components/system/ThemeApplier';
+import { PlatformRuntime } from '@/components/system/PlatformRuntime';
 
 export const metadata: Metadata = {
   title: 'chrono-kata',
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <QueryProvider>
           <ToastProvider>
             <ThemeApplier />
+            <PlatformRuntime />
             {children}
           </ToastProvider>
         </QueryProvider>

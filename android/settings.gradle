@@ -1,0 +1,21 @@
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+apply from: 'gradle/patch-capacitor.gradle'
+include ':app'
+include ':capacitor-cordova-android-plugins'
+project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
+
+apply from: 'capacitor.settings.gradle'
+
+// Capacitor's Android library still requests AGP 8.13 in its own buildscript.
+// Gradle 9.7 requires AGP 9, so every module resolves the same plugin version.
+gradle.beforeProject { project ->
+    project.buildscript.configurations.classpath.resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'com.android.tools.build' && details.requested.name == 'gradle') {
+            details.useVersion '9.4.1'
+            details.because 'Align Capacitor modules with AGP 9.4.1'
+        }
+    }
+}

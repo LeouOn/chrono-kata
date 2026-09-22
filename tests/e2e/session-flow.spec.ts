@@ -21,7 +21,7 @@ test.describe('Session Logging Flow', () => {
     }
 
     // Pick rating 4
-    await page.getByRole('button', { name: '4', exact: true }).click();
+    await page.getByRole('button', { name: 'Good', exact: true }).click();
 
     // Fill activity label
     const labelInput = page.getByPlaceholder(/e\.g\. meditation/i);
@@ -44,7 +44,7 @@ test.describe('Session Logging Flow', () => {
 
     // Click on session to view detail
     await page.getByText('Mindfulness Practice').click();
-    await expect(page).toHaveURL(/.*sessions\/.+/);
+    await expect(page).toHaveURL(/\/sessions\/detail\?id=/);
     await expect(page.getByText('Calm and focused meditation session.').first()).toBeVisible();
   });
 

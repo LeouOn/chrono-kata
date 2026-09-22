@@ -5,9 +5,7 @@ import { Sparkles } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { RatingPicker } from './RatingPicker';
-import { SliderRatingPicker } from './SliderRatingPicker';
-import { DotsRatingPicker } from './DotsRatingPicker';
+import { RatingControl } from './RatingControl';
 import { MultiDimSlider } from './MultiDimSlider';
 import { Timer } from './Timer';
 import { useSettings } from '@/hooks/useSettings';
@@ -34,7 +32,7 @@ interface Props {
 
 export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }: Props) {
   const { settings } = useSettings();
-  const ratingStyle = settings?.ratingStyle ?? 'slider';
+  const ratingStyle = settings?.ratingStyle ?? 'stars';
   const { sessions } = useSessions();
   const { templates } = useKataTemplates();
   const { settings: llmSettings, configuredProviderNames } = useLLMSettings();
@@ -301,13 +299,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
           <div className="text-xs uppercase tracking-wide text-text-muted mb-2">
             Rating <span className="text-accent">*</span>
           </div>
-          {ratingStyle === 'emoji' ? (
-            <RatingPicker value={rating} onChange={setRating} />
-          ) : ratingStyle === 'dots' ? (
-            <DotsRatingPicker value={rating} onChange={setRating} />
-          ) : (
-            <SliderRatingPicker value={rating} onChange={setRating} />
-          )}
+          <RatingControl value={rating} onChange={setRating} style={ratingStyle} />
         </div>
 
         {/* Multi-dimensional sliders */}
@@ -319,16 +311,19 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
             dimension="focus"
             value={focusRating}
             onChange={setFocusRating}
+            emoji={ratingStyle === 'emoji'}
           />
           <MultiDimSlider
             dimension="energy"
             value={energyRating}
             onChange={setEnergyRating}
+            emoji={ratingStyle === 'emoji'}
           />
           <MultiDimSlider
             dimension="mood"
             value={moodRating}
             onChange={setMoodRating}
+            emoji={ratingStyle === 'emoji'}
           />
         </div>
 

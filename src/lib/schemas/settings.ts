@@ -7,7 +7,7 @@ export type ThemeMode = z.infer<typeof ThemeModeSchema>;
 export const AccentColorSchema = z.enum(['amber', 'sage', 'magenta', 'cyan']);
 export type AccentColor = z.infer<typeof AccentColorSchema>;
 
-export const RatingStyleSchema = z.enum(['slider', 'emoji', 'dots']);
+export const RatingStyleSchema = z.enum(['stars', 'slider', 'emoji', 'dots']);
 export type RatingStyle = z.infer<typeof RatingStyleSchema>;
 
 export const DayOfWeekSchema = z.enum(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
@@ -51,7 +51,7 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   notificationsEnabled: false,
   theme: 'system',
   accentColor: 'amber',
-  ratingStyle: 'slider',
+  ratingStyle: 'stars',
   confirmKataDelete: true,
   confirmSessionDelete: true,
   confirmClearData: true,

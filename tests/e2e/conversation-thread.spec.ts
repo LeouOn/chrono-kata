@@ -22,7 +22,7 @@ test.describe('Conversation Thread & Power Actions', () => {
     }
 
     // Pick rating 4
-    await page.getByRole('button', { name: '4', exact: true }).click();
+    await page.getByRole('button', { name: 'Good', exact: true }).click();
 
     await page.getByRole('button', { name: /Save session/i }).click();
 

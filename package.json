@@ -9,6 +9,9 @@
     "dev:clean": "npm run clean && next dev",
     "clean": "node -e \"try{require('fs').rmSync('.next',{recursive:true,force:true})}catch(e){}\"",
     "build": "next build",
+    "build:android": "node scripts/build-android.mjs",
+    "cap:sync": "npm run build:android && npx cap sync android",
+    "cap:open": "npx cap open android",
     "start": "next start",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
@@ -21,6 +24,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.2",
     "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.101.4",
     "dexie": "^4.4.4",
@@ -33,6 +39,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
     "@playwright/test": "^1.61.1",
     "@serwist/next": "^9.5.11",
     "@tailwindcss/postcss": "^4.3.3",

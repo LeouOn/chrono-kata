@@ -117,7 +117,7 @@ export default function HomePage() {
               <SessionCard
                 key={s.id}
                 session={s}
-                onClick={(sess) => router.push(`/sessions/${sess.id}`)}
+                onClick={(sess) => router.push(`/sessions/detail?id=${encodeURIComponent(sess.id)}`)}
                 onRetry={retryCoachComment}
               />
             ))}
