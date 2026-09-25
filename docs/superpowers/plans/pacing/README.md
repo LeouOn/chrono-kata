@@ -22,7 +22,7 @@ Each `T*.md` file here is one self-contained task for one agent. Pick any task w
 | [T5](T5-rules-first-coach.md) | Rules-first coach with validated output | T2, T3 | open |
 | [T6](T6-recovery-mode-streaks.md) | Recovery-mode streaks | T1, T3 | open |
 | [T7](T7-date-durability-hygiene.md) | UTC date fixes, TZ/DST tests, storage.persist | none | done (947d833) |
-| [T8](T8-habit-link-by-id.md) | Link habits to kata by ID (Dexie v6) | T1, T4 | open |
+| [T8](T8-habit-link-by-id.md) | Link habits to kata by ID (Dexie v6) | T1, T4 | claimed (pacing/t8-habit-link-by-id, 2026-09-25) |
 | [T9](T9-android-hardening.md) | Android: Keystore keys, native HTTP, auto-backup, export E2E | T1 | open |
 | [T10](T10-load-response-insights.md) | Load-response insights view + case study | T3, T4, and ~3–4 weeks of check-in data | open |
 
