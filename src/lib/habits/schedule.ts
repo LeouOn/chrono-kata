@@ -40,6 +40,11 @@ export function isHabitDueToday(habit: Habit, now: Date = new Date()): boolean {
   return habit.archivedAt == null && isScheduledOn(habit, toLocalDateString(now));
 }
 
+/** Trim, lowercase, and collapse internal whitespace so "Morning  Walk" matches "morning walk". */
+export function normalizeActivityName(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 /** Case-insensitive match between a habit link and a session activity label. */
 export function labelMatches(linkedActivityLabel: string | null | undefined, activityLabel: string | null | undefined): boolean {
   if (!linkedActivityLabel || !activityLabel) return false;

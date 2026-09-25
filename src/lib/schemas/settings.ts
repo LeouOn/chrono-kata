@@ -30,6 +30,7 @@ export const SettingsSchema = z.object({
   confirmSessionDelete: z.boolean().optional(),
   confirmClearData: z.boolean().optional(),
   showMorningCheckIn: z.boolean().optional(),
+  habitLinksMigrated: z.boolean().optional(),
   dailyGoalMinutes: z.number().int().min(1).max(1440).optional(),
   weeklyGoalDays: z.number().int().min(1).max(7).optional(),
   restDays: z.array(DayOfWeekSchema).optional(),

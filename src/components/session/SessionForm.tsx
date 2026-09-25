@@ -70,6 +70,9 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
   const [softCapMinutes, setSoftCapMinutes] = useState<number | null>(
     initialTemplate?.softCapMinutes ?? null,
   );
+  const [templateId, setTemplateId] = useState<string | null>(
+    initial?.kataTemplateId ?? initialTemplate?.id ?? null,
+  );
   const [capPromptShown, setCapPromptShown] = useState(false);
   const [keepGoing, setKeepGoing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +99,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       setNote(initial.note ?? '');
       setStartedAt(initial.startedAt);
       setSoftCapMinutes(null);
+      setTemplateId(initial.kataTemplateId ?? null);
       setTimerStartedAt(null);
     } else if (draft) {
       applyDraft(draft);
@@ -111,6 +115,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       setNote(initialTemplate.defaultNote ?? '');
       setStartedAt(new Date());
       setSoftCapMinutes(initialTemplate.softCapMinutes ?? null);
+      setTemplateId(initialTemplate.id);
       setTimerStartedAt(null);
     } else {
       setMode('timed');
@@ -124,6 +129,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       setNote('');
       setStartedAt(new Date());
       setSoftCapMinutes(null);
+      setTemplateId(null);
       setTimerStartedAt(null);
     }
     if (!draft) {
@@ -146,6 +152,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
     setSoftCapMinutes(draft.softCapMinutes);
     setCapPromptShown(draft.capPromptShown);
     setKeepGoing(draft.keepGoing);
+    setTemplateId(draft.templateId);
     setTimerStartedAt(new Date(draft.startedAtMs));
     if (draft.softCapMinutes != null) {
       void scheduleCapNotification(new Date(draft.startedAtMs + draft.softCapMinutes * 60_000));
@@ -169,7 +176,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       reps,
       activityLabel,
       note,
-      templateId: initialTemplate?.id ?? null,
+      templateId,
       softCapMinutes: cap,
       capPromptShown: false,
       keepGoing: false,
@@ -204,7 +211,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       reps,
       activityLabel,
       note,
-      templateId: initialTemplate?.id ?? readSessionTimer()?.templateId ?? null,
+      templateId,
       softCapMinutes,
       capPromptShown,
       keepGoing,
@@ -218,7 +225,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
     reps,
     activityLabel,
     note,
-    initialTemplate,
+    templateId,
     softCapMinutes,
     capPromptShown,
     keepGoing,
@@ -285,6 +292,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       rating,
       activityLabel: activityLabel.trim() || undefined,
       note: note.trim() || undefined,
+      kataTemplateId: templateId,
       focusRating,
       energyRating,
       moodRating,

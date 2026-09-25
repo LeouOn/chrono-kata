@@ -11,6 +11,7 @@ import type { Message } from '@/lib/schemas/message';
 import type { KataTemplate } from '@/lib/schemas/kata-template';
 import type { Habit, HabitLog } from '@/lib/schemas/habit';
 import type { CheckIn } from '@/lib/schemas/check-in';
+import { normalizeActivityName } from '@/lib/habits/schedule';
 
 export class ChronoKataDB extends Dexie {
   sessions!: Table<Session, string>;
@@ -94,6 +95,45 @@ export class ChronoKataDB extends Dexie {
       habitLogs: 'id, habitId, date, sessionId, [habitId+date]',
       checkIns: 'date',
     });
+    // Pacing T8: remember which kata a session or habit came from.
+    this.version(6)
+      .stores({
+        sessions: 'id, startedAt, calendarEventId, conversationId, kataTemplateId',
+        reflections: 'id, periodStart, periodEnd',
+        streak: 'id',
+        settings: 'id',
+        llmSettings: 'id',
+        pendingCalendarOps: 'id, sessionId',
+        tokens: 'id',
+        conversations: 'id, sessionId',
+        messages: 'id, conversationId, parentId',
+        kataTemplates: 'id, name, order, createdAt',
+        habits: 'id, order',
+        habitLogs: 'id, habitId, date, sessionId, [habitId+date]',
+        checkIns: 'date',
+      })
+      .upgrade(async (tx) => {
+        const templates = await tx.table('kataTemplates').toArray();
+        const byName = new Map<string, string>();
+        for (const template of templates) {
+          const key = normalizeActivityName(template.name);
+          if (key && !byName.has(key)) byName.set(key, template.id);
+        }
+        const idFor = (label: string | null | undefined) => {
+          const key = normalizeActivityName(label);
+          return key ? byName.get(key) : undefined;
+        };
+        await tx.table('sessions').toCollection().modify((session) => {
+          if (session.kataTemplateId) return;
+          const id = idFor(session.activityLabel);
+          if (id) session.kataTemplateId = id;
+        });
+        await tx.table('habits').toCollection().modify((habit) => {
+          if (habit.linkedKataTemplateId) return;
+          const id = idFor(habit.linkedActivityLabel);
+          if (id) habit.linkedKataTemplateId = id;
+        });
+      });
   }
 }
 

@@ -4,6 +4,7 @@ import { habitRepo } from '@/lib/db/habit.repo';
 import { habitLogRepo } from '@/lib/db/habit-log.repo';
 import { sessionRepo } from '@/lib/db/session.repo';
 import { resetDbForTesting } from '@/lib/db/db';
+import { kataTemplateRepo } from '@/lib/db/kata-template.repo';
 import type { Session } from '@/lib/schemas/session';
 
 beforeEach(async () => {
@@ -165,6 +166,37 @@ describe('rebuildSessionHabitLogs', () => {
     await rebuildSessionHabitLogs();
 
     expect(await habitLogRepo.getForDate(logs_today())).toHaveLength(0);
+  });
+});
+
+describe('id-linked habits', () => {
+  it('keeps progress when the kata is renamed and the session label no longer matches', async () => {
+    const template = await kataTemplateRepo.create({
+      name: 'Walk',
+      mode: 'timed',
+      defaultDurationMinutes: 20,
+    });
+    const habit = await habitRepo.create({
+      name: 'Walking',
+      kind: 'timed',
+      targetPerDay: 20,
+      schedule: { kind: 'daily' },
+      linkedKataTemplateId: template.id,
+    });
+    const session = await sessionRepo.save({
+      startedAt: new Date(),
+      durationMinutes: 20,
+      reps: null,
+      rating: 4,
+      activityLabel: 'Evening stroll',
+      kataTemplateId: template.id,
+    });
+    await kataTemplateRepo.update(template.id, { name: 'Evening stroll' });
+    await syncHabitLogsForSession(session);
+
+    const logs = await habitLogRepo.getForHabitAndDate(habit.id, logs_today());
+    expect(logs).toHaveLength(1);
+    expect((await kataTemplateRepo.getById(template.id))?.name).toBe('Evening stroll');
   });
 });
 

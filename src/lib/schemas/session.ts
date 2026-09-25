@@ -37,6 +37,7 @@ const SessionBaseSchema = z.object({
   moodRating: MultiDimRatingSchema.nullable().optional(),
   conversationId: z.string().uuid().nullable().optional(),
   stoppedAtCap: z.boolean().optional(),
+  kataTemplateId: z.string().uuid().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

@@ -19,6 +19,8 @@ import {
 import type { Rating, SessionInput } from '@/lib/schemas/session';
 import { pauseHabitTimer } from '@/lib/timers/habit-timer';
 import { requestScreenWakeLock } from '@/lib/device/wake-lock';
+import { useKataTemplates } from '@/hooks/useKataTemplates';
+import { normalizeActivityName } from '@/lib/habits/schedule';
 
 const primaryButtonClass =
   'rounded-full bg-accent text-base px-5 py-2.5 font-medium disabled:opacity-40';
@@ -57,6 +59,10 @@ function StretchPlayer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  const { templates } = useKataTemplates();
+  const stretchTemplateId =
+    templates.find((template) => normalizeActivityName(template.name) === 'daily stretches')?.id ??
+    null;
 
   const playerRef = useRef<StretchPlayerState | null>(null);
   const soundRef = useRef(sound);
@@ -174,6 +180,7 @@ function StretchPlayer({
         reps: null,
         rating,
         activityLabel: 'Daily stretches',
+        kataTemplateId: stretchTemplateId,
         note: formatStretchSessionNote(current.holds),
       });
       onClose();

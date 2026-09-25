@@ -1,5 +1,12 @@
 # Schema Changelog
 
+## 2026-09-25 — Habit links by kata id
+
+`session.ts` gains optional `kataTemplateId`. `habit.ts` gains optional
+`linkedKataTemplateId`. `settings.ts` gains optional `habitLinksMigrated`.
+Dexie version 6 indexes `sessions.kataTemplateId` and backfills both id
+fields from normalized template names. Unmatched labels are left alone.
+
 ## 2026-09-25 — Morning check-in toggle
 
 `settings.ts` accepts optional `showMorningCheckIn` (default true). Existing
