@@ -7,6 +7,7 @@ import { kataTemplateRepo } from '@/lib/db/kata-template.repo';
 import { checkInRepo } from '@/lib/db/check-in.repo';
 import { getDb } from '@/lib/db/db';
 import { CURRENT_ENVELOPE_VERSION, type ExportEnvelopeV2 } from './types';
+import { toLocalDateString } from '@/lib/utils/date';
 
 /**
  * Collect all user data into an exportable envelope. API keys are stripped
@@ -68,7 +69,7 @@ export function downloadExport(envelope: ExportEnvelopeV2): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `chrono-kata-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `chrono-kata-backup-${toLocalDateString(new Date())}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

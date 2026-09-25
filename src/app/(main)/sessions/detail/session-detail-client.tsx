@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/Card';
 import { ConversationThread } from '@/components/session/ConversationThread';
 import { FollowUpInput } from '@/components/session/FollowUpInput';
 import { formatDuration } from '@/lib/utils/format';
+import { toLocalDateString } from '@/lib/utils/date';
 import { RatingMark } from '@/components/session/RatingMark';
 import { dispatchToast } from '@/components/ui/Toast';
 import {
@@ -93,7 +94,7 @@ export function SessionDetailClient() {
   function handleDownloadMarkdown() {
     if (!conversation) return;
     const md = exportConversationAsMarkdown(session!, conversation, messages);
-    const dateTag = session!.startedAt.toISOString().slice(0, 10);
+    const dateTag = toLocalDateString(session!.startedAt);
     downloadFile(md, `chrono-kata-${dateTag}-${session!.id.slice(0, 8)}.md`, 'text/markdown');
     dispatchToast('Downloaded Markdown export', 'success');
     setExportOpen(false);
@@ -102,7 +103,7 @@ export function SessionDetailClient() {
   function handleDownloadJson() {
     if (!conversation) return;
     const jsonStr = exportConversationAsJson(session!, conversation, messages);
-    const dateTag = session!.startedAt.toISOString().slice(0, 10);
+    const dateTag = toLocalDateString(session!.startedAt);
     downloadFile(jsonStr, `chrono-kata-${dateTag}-${session!.id.slice(0, 8)}.json`, 'application/json');
     dispatchToast('Downloaded JSON export', 'success');
     setExportOpen(false);

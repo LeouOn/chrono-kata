@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -17,6 +17,12 @@ export function DataTransfer() {
   const [pendingImport, setPendingImport] = useState<{ sessions: number; reflections: number } | null>(null);
   const [pendingEnvelope, setPendingEnvelope] = useState<ExportEnvelope | null>(null);
   const [pendingSkipped, setPendingSkipped] = useState(0);
+  const [storagePersistent, setStoragePersistent] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!navigator.storage?.persisted) return;
+    void navigator.storage.persisted().then(setStoragePersistent);
+  }, []);
 
   async function handleExport() {
     try {
@@ -80,6 +86,11 @@ export function DataTransfer() {
       <div className="text-xs uppercase tracking-wide text-text-muted mb-3">
         Backup & Restore
       </div>
+      {storagePersistent != null && (
+        <p className="text-xs text-text-muted mb-3">
+          Storage: {storagePersistent ? 'persistent' : 'may be cleared by the browser'}
+        </p>
+      )}
       <p className="text-text-muted text-sm mb-4">
         Export everything (sessions, reflections, kata presets, coach threads, settings) as JSON. API keys are stripped from exports for safety.
         Importing replaces ALL local data — existing API keys are preserved when the import file has empty key fields.
