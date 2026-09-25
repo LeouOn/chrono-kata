@@ -16,6 +16,7 @@ import { suggestLabel } from '@/lib/llm/llm-service';
 import { buildLabelSuggestions } from '@/lib/utils/labels';
 import { toDateTimeLocalValue } from '@/lib/utils/date';
 import { dispatchToast } from '@/components/ui/Toast';
+import { pauseHabitTimer } from '@/lib/timers/habit-timer';
 import type { Session, SessionInput } from '@/lib/schemas/session';
 import type { Rating, MultiDimRating } from '@/lib/schemas/session';
 import type { KataTemplate } from '@/lib/schemas/kata-template';
@@ -117,6 +118,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
   }, [open, initial, initialTemplate]);
 
   function handleTimerStart() {
+    void pauseHabitTimer();
     const now = new Date();
     setTimerStartedAt(now);
     setTimerStoppedUnsaved(false);

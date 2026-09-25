@@ -64,7 +64,7 @@ function HabitRow({ habit, logs, today }: { habit: Habit; logs: HabitLog[]; toda
     if (direction === 1) {
       await habitLogRepo.add({ habitId: habit.id, date: today, minutes: null, delta: 1, source: 'manual' });
     } else {
-      await habitLogRepo.deleteLatestManualForHabitAndDate(habit.id, today);
+      await habitLogRepo.decrementManualCount(habit.id, today);
     }
     refresh();
   }

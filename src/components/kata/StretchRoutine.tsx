@@ -17,6 +17,7 @@ import {
   type StretchPlayerState,
 } from '@/lib/kata/stretch-routine';
 import type { Rating, SessionInput } from '@/lib/schemas/session';
+import { pauseHabitTimer } from '@/lib/timers/habit-timer';
 
 const primaryButtonClass =
   'rounded-full bg-accent text-base px-5 py-2.5 font-medium disabled:opacity-40';
@@ -65,6 +66,9 @@ function StretchPlayer({
 
   function commit(next: StretchPlayerState) {
     playerRef.current = next;
+    if (next.holdJustStarted) {
+      void pauseHabitTimer();
+    }
     if (soundRef.current && next.holdJustStarted) playIntervalPing();
     else if (soundRef.current && next.holdJustFinished) playIntervalPing();
     setPlayer(next);

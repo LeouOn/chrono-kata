@@ -13,6 +13,8 @@ import { DailyBriefingCard } from '@/components/dashboard/DailyBriefingCard';
 import { KataQuickStart } from '@/components/kata/KataQuickStart';
 import { StretchRoutine } from '@/components/kata/StretchRoutine';
 import { HabitCheckIn } from '@/components/habits/HabitCheckIn';
+import { TodayHabits } from '@/components/habits/TodayHabits';
+import { TODAY_HABITS_ENABLED } from '@/lib/habits/today';
 import { SessionForm } from '@/components/session/SessionForm';
 import { SessionCard } from '@/components/session/SessionCard';
 import { toLocalDateString } from '@/lib/utils/date';
@@ -78,14 +80,11 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* AI Coach Daily Briefing */}
-      <div>
-        <DailyBriefingCard />
-      </div>
+      {TODAY_HABITS_ENABLED ? <TodayHabits /> : null}
 
       <StretchRoutine onSave={createSession} />
 
-      <HabitCheckIn />
+      {TODAY_HABITS_ENABLED ? null : <HabitCheckIn />}
 
       {/* Quick Start Katas */}
       {templates.length > 0 && (
@@ -93,6 +92,20 @@ export default function HomePage() {
           templates={templates}
           onSelect={handleSelectTemplate}
         />
+      )}
+
+      {sessions.length === 0 && (
+        <div className="text-center">
+          <button
+            onClick={() => {
+              setSelectedTemplate(null);
+              setFormOpen(true);
+            }}
+            className="bg-accent text-base px-6 py-3 rounded-full font-medium"
+          >
+            Start your first session
+          </button>
+        </div>
       )}
 
       {hasSummary && (
@@ -125,19 +138,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {sessions.length === 0 && (
-        <div className="text-center py-8">
-          <button
-            onClick={() => {
-              setSelectedTemplate(null);
-              setFormOpen(true);
-            }}
-            className="bg-accent text-base px-6 py-3 rounded-full font-medium"
-          >
-            Start your first session
-          </button>
-        </div>
-      )}
+      <DailyBriefingCard />
 
       <SessionForm
         open={formOpen}

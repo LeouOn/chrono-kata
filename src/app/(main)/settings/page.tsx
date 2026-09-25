@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useSettings } from '@/hooks/useSettings';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -22,6 +23,11 @@ const DEFAULT_UNLOCKED: CoachPersonality[] = ['zen', 'hype', 'analyst', 'buddy']
 export default function SettingsPage() {
   const { settings, updateSettings } = useSettings();
   const unlocked = settings?.unlockedPersonalities ?? DEFAULT_UNLOCKED;
+
+  useEffect(() => {
+    if (window.location.hash !== '#habits') return;
+    document.getElementById('habits')?.scrollIntoView({ block: 'start' });
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -57,7 +63,9 @@ export default function SettingsPage() {
 
       <GoalSettings />
 
-      <HabitSettings />
+      <div id="habits">
+        <HabitSettings />
+      </div>
 
       <KataTemplateSettings />
 

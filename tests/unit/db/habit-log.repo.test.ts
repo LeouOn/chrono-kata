@@ -61,6 +61,20 @@ describe('habitLogRepo', () => {
     expect(logs).toHaveLength(0);
   });
 
+  it('subtracts one from a manual count and peels minutes off the newest manual log', async () => {
+    await habitLogRepo.add({ habitId: HABIT_A, date: '2026-09-21', delta: 10, minutes: null, source: 'manual' });
+    expect(await habitLogRepo.decrementManualCount(HABIT_A, '2026-09-21')).toBe(true);
+    let logs = await habitLogRepo.getForHabitAndDate(HABIT_A, '2026-09-21');
+    expect(logs[0]?.delta).toBe(9);
+
+    await habitLogRepo.add({ habitId: HABIT_B, date: '2026-09-21', minutes: 3.5, delta: null, source: 'session', sessionId: '123e4567-e89b-12d3-a456-42661417400c' });
+    await habitLogRepo.add({ habitId: HABIT_B, date: '2026-09-21', minutes: 2, delta: null, source: 'manual' });
+    await habitLogRepo.removeManualMinutes(HABIT_B, '2026-09-21', 1);
+    logs = await habitLogRepo.getForHabitAndDate(HABIT_B, '2026-09-21');
+    expect(logs.find((log) => log.source === 'session')?.minutes).toBe(3.5);
+    expect(logs.find((log) => log.source === 'manual')?.minutes).toBe(1);
+  });
+
   it('deletes by session id and by habit id', async () => {
     const sessionId = '123e4567-e89b-12d3-a456-42661417400c';
     await habitLogRepo.add({ habitId: HABIT_B, date: '2026-09-21', minutes: 3.5, delta: null, source: 'session', sessionId });

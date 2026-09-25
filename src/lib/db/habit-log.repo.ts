@@ -7,6 +7,7 @@ import { newId } from '@/lib/utils/id';
 import { getDb } from './db';
 
 export interface HabitLogRepository {
+  getAll(): Promise<HabitLog[]>;
   getForDate(date: string): Promise<HabitLog[]>;
   getForHabitAndDate(habitId: string, date: string): Promise<HabitLog[]>;
   add(input: HabitLogInput): Promise<HabitLog>;
@@ -15,6 +16,10 @@ export interface HabitLogRepository {
   deleteManualForHabitAndDate(habitId: string, date: string): Promise<number>;
   /** Remove the newest manual entry for a habit on a date (undo for count habits). */
   deleteLatestManualForHabitAndDate(habitId: string, date: string): Promise<boolean>;
+  /** Subtract 1 from the newest manual count entry. A count of 1 is deleted. */
+  decrementManualCount(habitId: string, date: string): Promise<boolean>;
+  /** Remove up to `minutes` from newest manual timed entries. Session logs stay. */
+  removeManualMinutes(habitId: string, date: string, minutes: number): Promise<void>;
   deleteByHabitId(habitId: string): Promise<void>;
   deleteBySessionId(sessionId: string): Promise<void>;
   /** Remove only session-derived entries for a habit (manual entries stay). */
@@ -25,6 +30,10 @@ export interface HabitLogRepository {
 }
 
 export class DexieHabitLogRepository implements HabitLogRepository {
+  async getAll(): Promise<HabitLog[]> {
+    return getDb().habitLogs.toArray();
+  }
+
   async getForDate(date: string): Promise<HabitLog[]> {
     return getDb().habitLogs.where('date').equals(date).toArray();
   }
@@ -56,14 +65,56 @@ export class DexieHabitLogRepository implements HabitLogRepository {
   }
 
   async deleteLatestManualForHabitAndDate(habitId: string, date: string): Promise<boolean> {
-    const logs = await this.getForHabitAndDate(habitId, date);
-    const manual = logs
-      .filter((l) => l.source === 'manual')
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    const latest = manual[0];
+    const latest = await this.newestManual(habitId, date);
     if (!latest) return false;
     await getDb().habitLogs.delete(latest.id);
     return true;
+  }
+
+  async decrementManualCount(habitId: string, date: string): Promise<boolean> {
+    const logs = await this.getForHabitAndDate(habitId, date);
+    const manual = this.newestFirst(logs).filter((log) => log.source === 'manual' && (log.delta ?? 0) > 0);
+    const latest = manual[0];
+    if (!latest || latest.delta == null) return false;
+    if (latest.delta <= 1) {
+      await getDb().habitLogs.delete(latest.id);
+      return true;
+    }
+    const updated: HabitLog = { ...latest, delta: latest.delta - 1 };
+    await getDb().habitLogs.put(HabitLogSchema.parse(updated));
+    return true;
+  }
+
+  async removeManualMinutes(habitId: string, date: string, minutes: number): Promise<void> {
+    let remaining = minutes;
+    if (!(remaining > 0)) return;
+    const logs = await this.getForHabitAndDate(habitId, date);
+    const manual = this.newestFirst(logs).filter((log) => log.source === 'manual' && (log.minutes ?? 0) > 0);
+    for (const log of manual) {
+      if (remaining <= 0.0005) return;
+      const current = log.minutes ?? 0;
+      if (current <= remaining + 0.0005) {
+        await getDb().habitLogs.delete(log.id);
+        remaining -= current;
+      } else {
+        const updated: HabitLog = { ...log, minutes: Math.round((current - remaining) * 1000) / 1000 };
+        await getDb().habitLogs.put(HabitLogSchema.parse(updated));
+        return;
+      }
+    }
+  }
+
+  private async newestManual(habitId: string, date: string): Promise<HabitLog | undefined> {
+    const logs = await this.getForHabitAndDate(habitId, date);
+    return this.newestFirst(logs).find((log) => log.source === 'manual');
+  }
+
+  /** Newest createdAt first. Equal timestamps keep the later stored row. */
+  private newestFirst(logs: HabitLog[]): HabitLog[] {
+    return logs
+      .map((log, index) => ({ log, index }))
+      .sort((a, b) => b.log.createdAt.getTime() - a.log.createdAt.getTime() || b.index - a.index)
+      .map((item) => item.log);
   }
 
   async deleteByHabitId(habitId: string): Promise<void> {
