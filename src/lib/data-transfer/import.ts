@@ -10,11 +10,13 @@ import { KataTemplateSchema, type KataTemplate } from '@/lib/schemas/kata-templa
 import { ConversationSchema, type Conversation } from '@/lib/schemas/conversation';
 import { MessageSchema, type Message } from '@/lib/schemas/message';
 import { HabitSchema, HabitLogSchema, type Habit, type HabitLog } from '@/lib/schemas/habit';
+import { CheckInSchema, type CheckIn } from '@/lib/schemas/check-in';
 import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
-import type { ExportEnvelope } from './types';
+import type { ExportEnvelope, ExportEnvelopeV2 } from './types';
+import { migrateEnvelope } from './migrate';
 
 export type ParseResult =
-  | { ok: true; envelope: ExportEnvelope; skipped: number }
+  | { ok: true; envelope: ExportEnvelopeV2; skipped: number }
   | { ok: false; error: string };
 
 function reviveDate(value: unknown): Date | null {
@@ -76,6 +78,7 @@ const CONVERSATION_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const MESSAGE_DATE_FIELDS = ['createdAt', 'editedAt'];
 const HABIT_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const HABIT_LOG_DATE_FIELDS = ['createdAt'];
+const CHECK_IN_DATE_FIELDS = ['createdAt', 'updatedAt'];
 
 export function parseEnvelope(json: string): ParseResult {
   try {
@@ -83,14 +86,15 @@ export function parseEnvelope(json: string): ParseResult {
     if (typeof parsed !== 'object' || parsed === null) {
       return { ok: false, error: 'Not a JSON object.' };
     }
-    const p = parsed as Record<string, unknown>;
-    if (p.version !== 1) {
-      return { ok: false, error: `Unsupported version: ${String(p.version ?? 'missing')}. Only version 1 supported.` };
+    const migrated = migrateEnvelope(parsed as Record<string, unknown>);
+    if (!migrated.ok) {
+      return { ok: false, error: migrated.error };
     }
+    const p = migrated.raw;
     if (!Array.isArray(p.sessions)) {
       return { ok: false, error: 'Missing or invalid sessions array.' };
     }
-    for (const field of ['reflections', 'kataTemplates', 'conversations', 'messages', 'habits', 'habitLogs'] as const) {
+    for (const field of ['reflections', 'kataTemplates', 'conversations', 'messages', 'habits', 'habitLogs', 'checkIns'] as const) {
       if (p[field] !== undefined && !Array.isArray(p[field])) {
         return { ok: false, error: `Invalid ${field}: expected an array.` };
       }
@@ -211,12 +215,29 @@ export function parseEnvelope(json: string): ParseResult {
     );
     skipped += habitLogsResult.skipped;
 
+    const checkInsResult = dedupeBy(
+      reviveRows(
+        p.checkIns === undefined ? [] : p.checkIns,
+        CheckInSchema,
+        (row) =>
+          hasValidDates(row, CHECK_IN_DATE_FIELDS)
+            ? {
+                ...row,
+                createdAt: reviveDate(row.createdAt),
+                updatedAt: reviveDate(row.updatedAt),
+              }
+            : null
+      ),
+      (c) => c.date
+    );
+    skipped += checkInsResult.skipped;
+
     const streak = reviveStreak(p.streak);
     const settings = reviveSettings(p.settings);
     const llmSettings = reviveLLMSettings(p.llmSettings);
 
-    const envelope: ExportEnvelope = {
-      version: 1,
+    const envelope: ExportEnvelopeV2 = {
+      version: 2,
       exportedAt: typeof p.exportedAt === 'string' ? p.exportedAt : new Date().toISOString(),
       sessions: sessionsResult.unique as Session[],
       reflections: reflectionsResult.unique as Reflection[],
@@ -236,6 +257,7 @@ export function parseEnvelope(json: string): ParseResult {
             habitLogs: habitLogsResult.unique as HabitLog[],
           }
         : {}),
+      ...(p.checkIns !== undefined ? { checkIns: checkInsResult.unique as CheckIn[] } : {}),
     };
     return { ok: true, envelope, skipped };
   } catch (e) {
@@ -246,15 +268,23 @@ export function parseEnvelope(json: string): ParseResult {
 function dedupeById<T extends { id: string }>(
   result: { valid: T[]; skipped: number }
 ): { unique: T[]; skipped: number } {
+  return dedupeBy(result, (row) => row.id);
+}
+
+function dedupeBy<T>(
+  result: { valid: T[]; skipped: number },
+  keyOf: (row: T) => string
+): { unique: T[]; skipped: number } {
   const seen = new Set<string>();
   const unique: T[] = [];
   let skipped = result.skipped;
   for (const row of result.valid) {
-    if (seen.has(row.id)) {
+    const key = keyOf(row);
+    if (seen.has(key)) {
       skipped++;
       continue;
     }
-    seen.add(row.id);
+    seen.add(key);
     unique.push(row);
   }
   return { unique, skipped };
@@ -307,8 +337,8 @@ function reviveLLMSettings(value: unknown): LLMSettings | null {
 /**
  * DANGEROUS: wipes ALL data and restores from envelope. Existing API keys
  * are preserved when imported entries have empty apiKey fields (since export
- * strips keys for safety). Legacy files without kataTemplates/conversations
- * leave those tables untouched.
+ * strips keys for safety). Legacy files without kataTemplates/conversations/
+ * habits/checkIns leave those tables untouched.
  */
 export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
   const db = getDb();
@@ -338,6 +368,7 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
       db.messages,
       db.habits,
       db.habitLogs,
+      db.checkIns,
     ],
     async () => {
       await Promise.all([
@@ -413,6 +444,14 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
           await db.habitLogs.bulkAdd(habitLogs);
         }
       }
+
+      // Check-ins (v2+ envelopes; absent in migrated v1 files).
+      if (envelope.checkIns !== undefined) {
+        await db.checkIns.clear();
+        if (envelope.checkIns.length > 0) {
+          await db.checkIns.bulkAdd(envelope.checkIns);
+        }
+      }
     }
   );
 
@@ -422,4 +461,4 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
 }
 
 // Type re-exports for compatibility with imports in callers
-export type { Session, Reflection, Streak, Settings, LLMSettings, KataTemplate, Conversation, Message, Habit, HabitLog };
+export type { Session, Reflection, Streak, Settings, LLMSettings, KataTemplate, Conversation, Message, Habit, HabitLog, CheckIn };

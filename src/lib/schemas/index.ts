@@ -8,3 +8,4 @@ export * from './pending-calendar-op';
 export * from './token';
 export * from './conversation';
 export * from './message';
+export * from './check-in';

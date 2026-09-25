@@ -7,9 +7,14 @@ import type { KataTemplate } from '@/lib/schemas/kata-template';
 import type { Conversation } from '@/lib/schemas/conversation';
 import type { Message } from '@/lib/schemas/message';
 import type { Habit, HabitLog } from '@/lib/schemas/habit';
+import type { CheckIn } from '@/lib/schemas/check-in';
+
+/** Envelope format written by current exports. Older files are upgraded by `migrateEnvelope`. */
+export const CURRENT_ENVELOPE_VERSION = 2;
 
 export interface ExportEnvelope {
-  version: 1;
+  /** 1 = legacy (no check-ins), 2 = adds checkIns. */
+  version: 1 | 2;
   exportedAt: string; // ISO
   sessions: Session[];
   reflections: Reflection[];
@@ -22,4 +27,8 @@ export interface ExportEnvelope {
   messages?: Message[];
   habits?: Habit[];
   habitLogs?: HabitLog[];
+  /** v2+. Absent means the file predates check-ins — import preserves local check-ins. */
+  checkIns?: CheckIn[];
 }
+
+export type ExportEnvelopeV2 = ExportEnvelope & { version: 2 };

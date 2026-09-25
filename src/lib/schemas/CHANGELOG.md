@@ -6,6 +6,18 @@
 optional `stoppedAtCap`. Neither field is indexed, so Dexie stays on its
 current version.
 
+## 2026-09-25 — Morning check-ins (pacing T1)
+
+New `check-in.ts`: `CheckInSchema`, one row per local day keyed by `date`
+(YYYY-MM-DD), with 1–5 scores for `energy` and `sleep` (high is good) and
+`fog` and `aches` (high is bad), plus an optional note (≤ 500 chars).
+Additive: new Dexie table `checkIns: 'date'` in DB version 5. Existing tables
+and records are untouched, so no data migration is needed.
+
+Backup envelope bumped to `version: 2`, which adds an optional `checkIns`
+array. `migrateEnvelope()` upgrades v1 files on import. A v1 file (or a v2
+file without `checkIns`) leaves local check-ins untouched.
+
 ## 2026-09-21 — Star ratings
 
 `settings.ts` accepts `ratingStyle: 'stars'`. New settings default to stars.
