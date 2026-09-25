@@ -1,5 +1,10 @@
 # Schema Changelog
 
+## 2026-09-25 — Morning check-in toggle
+
+`settings.ts` accepts optional `showMorningCheckIn` (default true). Existing
+rows stay valid, and Dexie is unchanged.
+
 ## 2026-09-25 — Session soft cap
 
 `kata-template.ts` gains optional `softCapMinutes` (1–600). `session.ts` gains

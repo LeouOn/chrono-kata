@@ -63,6 +63,21 @@ export default function SettingsPage() {
 
       <GoalSettings />
 
+      <Card>
+        <label className="flex items-center justify-between gap-3 cursor-pointer min-h-11">
+          <span>
+            <span className="block text-sm text-text">Morning check-in</span>
+            <span className="block text-xs text-text-muted">Show today's four-tap check-in on Home.</span>
+          </span>
+          <input
+            type="checkbox"
+            className="h-5 w-5"
+            checked={settings?.showMorningCheckIn !== false}
+            onChange={(e) => updateSettings({ showMorningCheckIn: e.target.checked })}
+          />
+        </label>
+      </Card>
+
       <div id="habits">
         <HabitSettings />
       </div>

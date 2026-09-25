@@ -16,6 +16,7 @@ import { HabitCheckIn } from '@/components/habits/HabitCheckIn';
 import { TodayHabits } from '@/components/habits/TodayHabits';
 import { TODAY_HABITS_ENABLED } from '@/lib/habits/today';
 import { SessionForm } from '@/components/session/SessionForm';
+import { MorningCheckIn } from '@/components/checkin/MorningCheckIn';
 import { SessionCard } from '@/components/session/SessionCard';
 import { toLocalDateString } from '@/lib/utils/date';
 import type { SessionInput } from '@/lib/schemas/session';
@@ -79,6 +80,8 @@ export default function HomePage() {
             : `${todaySessions.length} session${todaySessions.length === 1 ? '' : 's'} today.`}
         </p>
       </div>
+
+      <MorningCheckIn />
 
       {TODAY_HABITS_ENABLED ? <TodayHabits /> : null}
 
