@@ -40,7 +40,7 @@ describe('parseEnvelope', () => {
   });
 
   it('rejects unsupported version', () => {
-    const result = parseEnvelope(JSON.stringify({ ...validEnvelope, version: 2 }));
+    const result = parseEnvelope(JSON.stringify({ ...validEnvelope, version: 3 }));
     expect(result.ok).toBe(false);
   });
 
