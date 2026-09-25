@@ -1,5 +1,11 @@
 # Schema Changelog
 
+## 2026-09-25 — Session soft cap
+
+`kata-template.ts` gains optional `softCapMinutes` (1–600). `session.ts` gains
+optional `stoppedAtCap`. Neither field is indexed, so Dexie stays on its
+current version.
+
 ## 2026-09-21 — Star ratings
 
 `settings.ts` accepts `ratingStyle: 'stars'`. New settings default to stars.

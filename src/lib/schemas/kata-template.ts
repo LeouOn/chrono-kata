@@ -6,6 +6,7 @@ export const KataTemplateSchema = z.object({
   mode: z.enum(['timed', 'reps']),
   defaultDurationMinutes: z.number().int().positive().nullable().optional(),
   defaultReps: z.number().int().positive().nullable().optional(),
+  softCapMinutes: z.number().int().positive().max(600).nullable().optional(),
   activityLabel: z.string().max(50).optional(),
   defaultNote: z.string().max(500).optional(),
   icon: z.string().max(10).default('🥋'),
