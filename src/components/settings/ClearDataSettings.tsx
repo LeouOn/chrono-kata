@@ -50,7 +50,7 @@ export function ClearDataSettings() {
       <ConfirmDialog
         open={open}
         title="Clear all data?"
-        message="Every session, kata, conversation, and setting will be permanently deleted."
+        message="Every session, kata, check-in, conversation, and setting will be permanently deleted."
         confirmLabel="Wipe everything"
         onConfirm={() => void handleConfirm()}
         onCancel={() => setOpen(false)}

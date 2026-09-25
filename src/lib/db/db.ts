@@ -10,6 +10,7 @@ import type { Conversation } from '@/lib/schemas/conversation';
 import type { Message } from '@/lib/schemas/message';
 import type { KataTemplate } from '@/lib/schemas/kata-template';
 import type { Habit, HabitLog } from '@/lib/schemas/habit';
+import type { CheckIn } from '@/lib/schemas/check-in';
 
 export class ChronoKataDB extends Dexie {
   sessions!: Table<Session, string>;
@@ -24,6 +25,7 @@ export class ChronoKataDB extends Dexie {
   kataTemplates!: Table<KataTemplate, string>;
   habits!: Table<Habit, string>;
   habitLogs!: Table<HabitLog, string>;
+  checkIns!: Table<CheckIn, string>;
 
   constructor() {
     super('chrono-kata');
@@ -75,6 +77,22 @@ export class ChronoKataDB extends Dexie {
       kataTemplates: 'id, name, order, createdAt',
       habits: 'id, order',
       habitLogs: 'id, habitId, date, sessionId, [habitId+date]',
+    });
+    // Pacing T1: morning check-ins, one per local day (keyed by YYYY-MM-DD).
+    this.version(5).stores({
+      sessions: 'id, startedAt, calendarEventId, conversationId',
+      reflections: 'id, periodStart, periodEnd',
+      streak: 'id',
+      settings: 'id',
+      llmSettings: 'id',
+      pendingCalendarOps: 'id, sessionId',
+      tokens: 'id',
+      conversations: 'id, sessionId',
+      messages: 'id, conversationId, parentId',
+      kataTemplates: 'id, name, order, createdAt',
+      habits: 'id, order',
+      habitLogs: 'id, habitId, date, sessionId, [habitId+date]',
+      checkIns: 'date',
     });
   }
 }

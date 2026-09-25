@@ -8,9 +8,9 @@ beforeEach(async () => {
 });
 
 describe('collectAll', () => {
-  it('returns an envelope with version 1 and ISO exportedAt', async () => {
+  it('returns an envelope with version 2 and ISO exportedAt', async () => {
     const env = await collectAll();
-    expect(env.version).toBe(1);
+    expect(env.version).toBe(2);
     expect(typeof env.exportedAt).toBe('string');
     expect(() => new Date(env.exportedAt)).not.toThrow();
   });
