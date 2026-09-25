@@ -15,7 +15,7 @@ Each `T*.md` file here is one self-contained task for one agent. Pick any task w
 
 | Task | Title | Depends on | Status |
 |---|---|---|---|
-| [T1](T1-checkin-data-layer.md) | Check-in data layer + backup v2 + migration harness | none | claimed (pacing/t1-checkin-data-layer, 2026-09-25) |
+| [T1](T1-checkin-data-layer.md) | Check-in data layer + backup v2 + migration harness | none | done (c1bd779) |
 | [T2](T2-checkin-ui.md) | Morning check-in UI | T1 | open |
 | [T3](T3-pacing-engine.md) | Pacing engine (load, lagged response, recommend) | T1 | open |
 | [T4](T4-session-durability-soft-cap.md) | Session timer durability + soft cap + notifications | none | claimed (pacing/t4-session-durability-soft-cap, 2026-09-25) |
