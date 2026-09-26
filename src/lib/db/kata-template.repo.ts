@@ -67,6 +67,7 @@ export class DexieKataTemplateRepository implements KataTemplateRepository {
       defaultDurationMinutes: parsed.defaultDurationMinutes ?? null,
       defaultReps: parsed.defaultReps ?? null,
       activityLabel: parsed.activityLabel,
+      intensity: parsed.intensity,
       defaultNote: parsed.defaultNote,
       icon: parsed.icon ?? '🥋',
       order: parsed.order ?? count,

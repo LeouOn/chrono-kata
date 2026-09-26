@@ -1,5 +1,13 @@
 # Schema Changelog
 
+## 2026-09-26 — Kata intensity (pacing T3)
+
+`kata-template.ts` gains an additive `intensity: 1 | 2 | 3` field
+(1 gentle, 2 moderate, 3 hard) that scales session load in the pacing
+engine. The field is optional and non-indexed, and
+`DexieKataTemplateRepository.create` persists it; existing records
+default to 1 at read time, so no Dexie migration is needed.
+
 ## 2026-09-25 — Morning check-ins (pacing T1)
 
 New `check-in.ts`: `CheckInSchema`, one row per local day keyed by `date`
