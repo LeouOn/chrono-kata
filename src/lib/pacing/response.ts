@@ -5,7 +5,8 @@
  * Tuning constants (documented decisions):
  * - Envelope needs >= 14 pairs; anything less reports insufficient data.
  * - A candidate threshold qualifies when the mean wellbeing above it drops
- *   by >= 0.1 versus the mean below it, with >= 3 observations above it.
+ *   by >= 0.1 versus the mean below it, with >= 3 observations above it;
+ *   the envelope is the qualifying threshold with the maximum drop.
  * - Confidence is 'medium' at n >= 30 observations, otherwise 'low'.
  */
 
@@ -100,14 +101,31 @@ export function correlation(pairs: readonly LaggedPair[]): CorrelationResult {
 
 const MIN_PAIRS = 14;
 const DROP_THRESHOLD = 0.1;
+const DROP_FLOAT_EPSILON = 1e-9;
 const MIN_ABOVE_BUCKET = 3;
 const MEDIUM_CONFIDENCE_N = 30;
 
 /**
- * Estimate the safe-load envelope: the largest load threshold above which
- * mean next-day wellbeing drops by at least the drop threshold, with at
- * least 3 observations above it. When no threshold shows a drop, every
- * observed load was tolerated, so the max observed load is the envelope.
+ * Estimate the safe-load envelope with a max-drop (knee) scan.
+ *
+ * For each candidate threshold (every distinct observed load, ascending)
+ * with at least MIN_ABOVE_BUCKET pairs strictly above it, compute how much
+ * mean next-day wellbeing drops above versus below the threshold, and
+ * select the threshold with the MAXIMUM drop (ties resolve to the lower
+ * threshold). A threshold qualifies only when its drop reaches the drop
+ * threshold (with a float epsilon, so a true drop of exactly 0.1 counts).
+ *
+ * Why argmax and not first/last qualifying threshold: the lowest-qualifying
+ * threshold suffers a pooled-bucket artifact — its above-bucket pools every
+ * higher load, so mild degradation from mid loads already "drops" against
+ * the pristine low-load bucket and can return a spuriously tiny envelope.
+ * The largest-qualifying threshold errs in the unsafe direction, drifting
+ * toward whatever high load still shows any drop. The maximum drop is the
+ * knee of the dose-response curve: the sharpest transition from tolerated
+ * to harmful load.
+ *
+ * When no threshold's drop reaches the threshold, every observed load was
+ * tolerated, so the max observed load is the envelope.
  */
 export function estimateEnvelope(pairs: readonly LaggedPair[]): EnvelopeResult {
   const n = pairs.length;
@@ -116,6 +134,7 @@ export function estimateEnvelope(pairs: readonly LaggedPair[]): EnvelopeResult {
 
   const loads = [...new Set(pairs.map(([load]) => load))].sort((a, b) => a - b);
   let envelope: number | undefined;
+  let bestDrop = DROP_THRESHOLD - DROP_FLOAT_EPSILON;
   for (const threshold of loads) {
     let belowSum = 0;
     let belowCount = 0;
@@ -130,13 +149,18 @@ export function estimateEnvelope(pairs: readonly LaggedPair[]): EnvelopeResult {
         belowCount += 1;
       }
     }
-    if (aboveCount < MIN_ABOVE_BUCKET || belowCount === 0) continue;
+    if (aboveCount < MIN_ABOVE_BUCKET) continue;
     const drop = belowSum / belowCount - aboveSum / aboveCount;
-    if (drop >= DROP_THRESHOLD) envelope = threshold;
+    // Strict comparison keeps the lower threshold on ties (loads ascend).
+    if (drop > bestDrop) {
+      bestDrop = drop;
+      envelope = threshold;
+    }
   }
 
   if (envelope === undefined) {
-    return { envelope: loads.at(-1) ?? 0, n, confidence };
+    const maxLoad = loads.reduce((max, load) => Math.max(max, load));
+    return { envelope: maxLoad, n, confidence };
   }
   return { envelope, n, confidence };
 }

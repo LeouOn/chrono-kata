@@ -48,14 +48,17 @@ function wellbeingOn(byDay: ReadonlyMap<string, CheckIn>, dayKey: string): numbe
   return checkIn === undefined ? undefined : wellbeing(checkIn);
 }
 
-function priorMeanEnergy(byDay: ReadonlyMap<string, CheckIn>, today: string): number | undefined {
+function priorEnergyBasis(byDay: ReadonlyMap<string, CheckIn>, today: string): { readonly mean: number; readonly days: number } | undefined {
   const energies: number[] = [];
   for (let offset = 1; offset <= PRIOR_DAYS; offset++) {
     const checkIn = byDay.get(addDays(today, -offset));
     if (checkIn !== undefined) energies.push(checkIn.energy);
   }
   if (energies.length === 0) return undefined;
-  return energies.reduce((sum, value) => sum + value, 0) / energies.length;
+  return {
+    mean: energies.reduce((sum, value) => sum + value, 0) / energies.length,
+    days: energies.length,
+  };
 }
 
 function trendingDown(byDay: ReadonlyMap<string, CheckIn>, today: string): boolean {
@@ -86,15 +89,17 @@ export function recommend(input: RecommendInput): Recommendation {
 
   // Rule 1: rest.
   const lowEnergy = todayCheckIn.energy <= REST_ENERGY_FLOOR;
-  const priorMean = priorMeanEnergy(byDay, today);
-  const energyCrashed = priorMean !== undefined && todayCheckIn.energy <= priorMean - ENERGY_DROP_POINTS;
+  const basis = priorEnergyBasis(byDay, today);
+  const energyCrashed = basis !== undefined && todayCheckIn.energy <= basis.mean - ENERGY_DROP_POINTS;
   if (lowEnergy || energyCrashed) {
     const reasons: string[] = [];
     if (lowEnergy) {
       reasons.push(`today's energy (${todayCheckIn.energy}/5) is at or below the rest floor of ${REST_ENERGY_FLOOR}`);
     }
-    if (energyCrashed) {
-      reasons.push(`energy dropped ${ENERGY_DROP_POINTS}+ points below the 3-day average (${round1(priorMean ?? 0)})`);
+    if (energyCrashed && basis !== undefined) {
+      reasons.push(
+        `energy crashed to ${todayCheckIn.energy} (${round1(basis.mean)} average over ${basis.days} of ${PRIOR_DAYS} prior days)`
+      );
     }
     return { action: 'rest', targetLoad: 0, reasons };
   }

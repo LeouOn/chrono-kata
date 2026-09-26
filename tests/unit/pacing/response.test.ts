@@ -152,34 +152,73 @@ describe('estimateEnvelope', () => {
     expect(estimateEnvelope(pairs)).toEqual({ insufficientData: true });
   });
 
-  it('finds the largest threshold whose above-bucket drops >= 0.1 with >= 3 observations', () => {
+  it('selects the threshold with the maximum wellbeing drop (the knee)', () => {
+    // 5x[0,.8] 5x[10,.8] 2x[20,.5] 3x[30,.5]:
+    //   t=0:  below .8 (5);  above (5*.8+2*.5+3*.5)/10 = 6.5/10 = .65  -> drop .15
+    //   t=10: below .8 (10); above (2*.5+3*.5)/5 = .5                  -> drop .30  <- max
+    //   t=20: below (10*.8+2*.5)/12 = 9/12 = .75; above .5 (3)         -> drop .25
+    //   t=30: 0 above -> skipped
     const pairs = [
       ...Array.from({ length: 5 }, () => [0, 0.8] as const),
       ...Array.from({ length: 5 }, () => [10, 0.8] as const),
       ...Array.from({ length: 2 }, () => [20, 0.5] as const),
       ...Array.from({ length: 3 }, () => [30, 0.5] as const),
     ];
-    expect(estimateEnvelope(pairs)).toEqual({ envelope: 20, n: 15, confidence: 'low' });
+    expect(estimateEnvelope(pairs)).toEqual({ envelope: 10, n: 15, confidence: 'low' });
+  });
+
+  it('lands the knee on a graded dose-response, not the pooled low bucket', () => {
+    // 10x[0,.8] 10x[20,.6] 3x[30,.4]:
+    //   t=0:  below .8 (10); above (10*.6+3*.4)/13 = 7.2/13 = .5538    -> drop .2462
+    //   t=20: below (10*.8+10*.6)/20 = 14/20 = .7; above .4 (3)        -> drop .30   <- max
+    //   t=30: 0 above -> skipped
+    const pairs = [
+      ...Array.from({ length: 10 }, () => [0, 0.8] as const),
+      ...Array.from({ length: 10 }, () => [20, 0.6] as const),
+      ...Array.from({ length: 3 }, () => [30, 0.4] as const),
+    ];
+    expect(estimateEnvelope(pairs)).toEqual({ envelope: 20, n: 23, confidence: 'low' });
+  });
+
+  it('keeps the knee off the artifact threshold when only the pooled bucket drops', () => {
+    // 6x[0,.8] 5x[10,.8] 3x[20,.5]:
+    //   t=0:  below .8 (6);  above (5*.8+3*.5)/8 = 5.5/8 = .6875       -> drop .1125 (pooled artifact)
+    //   t=10: below .8 (11); above .5 (3)                              -> drop .30    <- max, the knee
+    //   t=20: 0 above -> skipped
+    // A lowest-qualifying scan would return envelope 0 here; the knee is 10.
+    const pairs = [
+      ...Array.from({ length: 6 }, () => [0, 0.8] as const),
+      ...Array.from({ length: 5 }, () => [10, 0.8] as const),
+      ...Array.from({ length: 3 }, () => [20, 0.5] as const),
+    ];
+    expect(estimateEnvelope(pairs)).toEqual({ envelope: 10, n: 14, confidence: 'low' });
   });
 
   it('ignores candidate thresholds with fewer than 3 observations above them', () => {
+    // 6x[0,.8] 6x[10,.8] 2x[20,.3]:
+    //   t=0:  below .8 (6); above (6*.8+2*.3)/8 = 5.4/8 = .675         -> drop .125 (only qualifier)
+    //   t=10: above has 2 pairs -> skipped;  t=20: 0 above -> skipped
     const pairs = [
       ...Array.from({ length: 6 }, () => [0, 0.8] as const),
       ...Array.from({ length: 6 }, () => [10, 0.8] as const),
       ...Array.from({ length: 2 }, () => [20, 0.3] as const),
     ];
-    // Only t=0 qualifies (the t=10 above-bucket has 2 pairs), so the envelope is 0.
     expect(estimateEnvelope(pairs)).toEqual({ envelope: 0, n: 14, confidence: 'low' });
   });
 
   it('upgrades confidence to medium at n >= 30', () => {
+    // 10x[0,.8] 10x[10,.8] 4x[20,.5] 6x[30,.5]:
+    //   t=0:  below .8 (10);  above (10*.8+4*.5+6*.5)/20 = 13/20 = .65 -> drop .15
+    //   t=10: below .8 (20);  above (4*.5+6*.5)/10 = .5                -> drop .30   <- max
+    //   t=20: below (8+8+2)/24 = 18/24 = .75; above .5 (6)             -> drop .25
+    //   t=30: 0 above -> skipped
     const pairs = [
       ...Array.from({ length: 10 }, () => [0, 0.8] as const),
       ...Array.from({ length: 10 }, () => [10, 0.8] as const),
       ...Array.from({ length: 4 }, () => [20, 0.5] as const),
       ...Array.from({ length: 6 }, () => [30, 0.5] as const),
     ];
-    expect(estimateEnvelope(pairs)).toEqual({ envelope: 20, n: 30, confidence: 'medium' });
+    expect(estimateEnvelope(pairs)).toEqual({ envelope: 10, n: 30, confidence: 'medium' });
   });
 
   it('falls back to the max observed load when wellbeing never drops', () => {

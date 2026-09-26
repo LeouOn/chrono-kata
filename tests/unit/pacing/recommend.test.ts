@@ -63,6 +63,19 @@ describe('recommend — rule table', () => {
     expect(result.action).not.toBe('rest');
   });
 
+  it('discloses the true basis when the crash average uses fewer than 3 prior days', () => {
+    // Only today-1 has a check-in (energy 4), so today's 2 crashes against a
+    // 1-day average; the reason must say "1 of 3 prior days", not "3-day".
+    const result = recommend({
+      today: TODAY,
+      checkIns: [ci(TODAY, 2), ci(day(1), 4)],
+      dailyLoad: new Map(),
+      envelope: 100,
+    });
+    expect(result.action).toBe('rest');
+    expect(result.reasons.some((reason) => /1 of 3 prior days/.test(reason))).toBe(true);
+  });
+
   it.each([
     [
       'yesterday load exceeded the envelope',
@@ -263,15 +276,17 @@ describe('recommend — property: low energy never builds', () => {
       let todayEnergy: number | undefined;
 
       if (flavor === 0 || flavor === 1) {
-        // Build bait: 5-day streak, light load, generous envelope. Flavor 0
-        // keeps energy at 3 (must NOT build); flavor 1 uses 4 (must build,
-        // proving the bait really triggers build when allowed).
+        // Build bait: 5-day streak, light load, generous envelope. Prior
+        // energies are 4, so the rest rule (crash needs today <= 4-2 = 2)
+        // cannot fire and these iterations isolate the build invariant.
+        // Flavor 0 keeps energy at 3 (must NOT build); flavor 1 uses 4
+        // (must build, proving the bait really triggers build when allowed).
         todayEnergy = flavor === 0 ? 3 : 4;
         input = {
           today: TODAY,
           checkIns: [
             ci(TODAY, todayEnergy as 3 | 4, { sleep: 5, fog: 1, aches: 1 }),
-            ...[1, 2, 3, 4].map((offset) => ci(day(offset), 5, { sleep: 5, fog: 1, aches: 1 })),
+            ...[1, 2, 3, 4].map((offset) => ci(day(offset), 4, { sleep: 5, fog: 1, aches: 1 })),
           ],
           dailyLoad: new Map([1, 2, 3, 4, 5, 6, 7].map((offset) => [day(offset), 5] as const)),
           envelope: 200,
