@@ -7,6 +7,7 @@ import { messageRepo } from '@/lib/db/message.repo';
 import { streakRepo } from '@/lib/db/streak.repo';
 import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { settingsRepo } from '@/lib/db/settings.repo';
+import { checkInRepo } from '@/lib/db/check-in.repo';
 import { computeStreak } from '@/lib/streak/compute-streak';
 import { generateCoachCommentStream } from '@/lib/llm/llm-service';
 import { LLMException, LLMExceptionKind } from '@/lib/llm/types';
@@ -26,22 +27,30 @@ import { toLocalDateString } from '@/lib/utils/date';
 const KEY = ['sessions'] as const;
 
 /**
- * Recompute and persist the streak from all sessions + settings.
+ * Recompute and persist the streak from all sessions + settings + check-ins.
  * Called after every session mutation and once on app open so the
- * displayed streak stays truthful after missed days.
+ * displayed streak stays truthful after missed days. In recovery mode,
+ * check-in days count like sessions and low-energy days are exempt.
  */
 export async function recomputeStreakSideEffect() {
-  const [current, sessions, settings] = await Promise.all([
+  const [current, sessions, settings, checkIns] = await Promise.all([
     streakRepo.get(),
     sessionRepo.getAll(),
     settingsRepo.get(),
+    checkInRepo.getAll(),
   ]);
+  const threshold = settings?.lowEnergyRestThreshold ?? 2;
   const next = computeStreak({
     sessions,
     previousStreak: current,
     now: new Date(),
     restDays: settings?.restDays ?? [],
     streakFreezeTokens: settings?.streakFreezeTokens ?? 0,
+    recoveryMode: settings?.recoveryMode ?? false,
+    checkInDays: new Set(checkIns.map((c) => c.date)),
+    lowEnergyDays: new Set(
+      checkIns.filter((c) => c.energy <= threshold).map((c) => c.date)
+    ),
   });
   await streakRepo.save(next);
   return next;

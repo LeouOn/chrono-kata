@@ -3,7 +3,7 @@
 import { Card } from '@/components/ui/Card';
 import { useSettings } from '@/hooks/useSettings';
 import { useStreak } from '@/hooks/useStreak';
-import type { DayOfWeek } from '@/lib/schemas/settings';
+import type { DayOfWeek, LowEnergyRestThreshold } from '@/lib/schemas/settings';
 import { Flame, ShieldCheck } from 'lucide-react';
 
 const DAYS: Array<{ id: DayOfWeek; label: string }> = [
@@ -17,6 +17,7 @@ const DAYS: Array<{ id: DayOfWeek; label: string }> = [
 ];
 
 const DAILY_PRESETS = [15, 20, 30, 45, 60];
+const THRESHOLDS: LowEnergyRestThreshold[] = [1, 2, 3];
 
 export function GoalSettings() {
   const { settings, updateSettings } = useSettings();
@@ -26,6 +27,8 @@ export function GoalSettings() {
   const weeklyGoal = settings?.weeklyGoalDays ?? 5;
   const restDays = settings?.restDays ?? [];
   const freezeTokens = settings?.streakFreezeTokens ?? 1;
+  const recoveryMode = settings?.recoveryMode ?? false;
+  const lowEnergyThreshold = settings?.lowEnergyRestThreshold ?? 2;
   const usedFreezes = streak?.freezeUsedOn?.length ?? 0;
   const remainingFreezes = Math.max(0, freezeTokens - usedFreezes);
 
@@ -36,6 +39,13 @@ export function GoalSettings() {
       : [...restDays, day];
     void (async () => {
       await updateSettings({ restDays: updated });
+      await recompute();
+    })();
+  }
+
+  function updateRecovery(patch: { recoveryMode?: boolean; lowEnergyRestThreshold?: LowEnergyRestThreshold }) {
+    void (async () => {
+      await updateSettings(patch);
       await recompute();
     })();
   }
@@ -132,6 +142,46 @@ export function GoalSettings() {
               );
             })}
           </div>
+        </div>
+
+        {/* Recovery Mode */}
+        <div>
+          <label className="flex items-center justify-between cursor-pointer mb-1">
+            <span className="text-text font-medium">Recovery Mode</span>
+            <input
+              type="checkbox"
+              checked={recoveryMode}
+              onChange={(e) => updateRecovery({ recoveryMode: e.target.checked })}
+              className="accent-accent w-4 h-4"
+            />
+          </label>
+          <p className="text-text-muted text-[11px] mb-2">
+            On a low-energy day, checking in keeps your streak — resting is the practice, not a miss.
+          </p>
+          {recoveryMode && (
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-text-muted text-[11px]">Low-energy rest at energy</span>
+                <span className="text-accent font-serif text-sm">≤ {lowEnergyThreshold}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {THRESHOLDS.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => updateRecovery({ lowEnergyRestThreshold: t })}
+                    className={`py-1.5 rounded-xl font-medium transition-colors ${
+                      lowEnergyThreshold === t
+                        ? 'bg-accent text-base'
+                        : 'bg-surface-2 text-text-muted hover:text-text'
+                    }`}
+                  >
+                    ≤ {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Streak Freeze Token Status */}

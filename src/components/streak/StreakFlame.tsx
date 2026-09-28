@@ -13,6 +13,8 @@ interface Props {
    * `compact` — just the tappable flame button, sized to fit inside a stat grid cell.
    */
   variant?: 'card' | 'compact';
+  /** Overrides the "day streak" caption (e.g. a recovery-mode rest-day note). */
+  caption?: string;
   /** Optional external tap handler (preserves backwards compatibility). */
   onTap?: () => void;
 }
@@ -23,7 +25,7 @@ interface Props {
  * unlocked) reveals her. An optional external onTap handler is still called
  * for downstream consumers if provided.
  */
-export function StreakFlame({ days, variant = 'card', onTap }: Props) {
+export function StreakFlame({ days, variant = 'card', caption, onTap }: Props) {
   const [revealOpen, setRevealOpen] = useState(false);
   const { registerTap } = useAthenaUnlock({
     onUnlock: () => setRevealOpen(true),
@@ -49,7 +51,7 @@ export function StreakFlame({ days, variant = 'card', onTap }: Props) {
         <span className="text-2xl" role="img" aria-hidden>🔥</span>
         <div className="text-left">
           <div className="font-serif text-2xl text-accent leading-none">{days}</div>
-          <div className="text-xs text-text-muted">day streak</div>
+          <div className="text-xs text-text-muted">{caption ?? 'day streak'}</div>
         </div>
       </motion.button>
       <AthenaReveal open={revealOpen} onClose={() => setRevealOpen(false)} />
