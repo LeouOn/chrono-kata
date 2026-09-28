@@ -6,7 +6,10 @@ import { YearlyConsistencyHeatmap } from '@/components/insights/YearlyConsistenc
 import { ActivityBreakdown } from '@/components/insights/ActivityBreakdown';
 import { RatingTrends } from '@/components/insights/RatingTrends';
 import { MultiDimAverages } from '@/components/insights/MultiDimAverages';
+import { LoadResponse } from '@/components/insights/LoadResponse';
 import { Card } from '@/components/ui/Card';
+import { checkInRepo } from '@/lib/db/check-in.repo';
+import { kataTemplateRepo } from '@/lib/db/kata-template.repo';
 import { sessionRepo } from '@/lib/db/session.repo';
 import { formatDuration } from '@/lib/utils/format';
 
@@ -14,6 +17,16 @@ export default function InsightsPage() {
   const { data: sessions = [] } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => sessionRepo.getAll(),
+  });
+
+  const { data: checkIns = [] } = useQuery({
+    queryKey: ['checkIns'],
+    queryFn: () => checkInRepo.getAll(),
+  });
+
+  const { data: kataTemplates = [] } = useQuery({
+    queryKey: ['kataTemplates'],
+    queryFn: () => kataTemplateRepo.getAll(),
   });
 
   const totalMinutes = sessions.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0);
@@ -46,6 +59,12 @@ export default function InsightsPage() {
           </div>
         </div>
       </Card>
+
+      <LoadResponse
+        sessions={sessions}
+        checkIns={checkIns}
+        kataTemplates={kataTemplates}
+      />
 
       <YearlyConsistencyHeatmap sessions={sessions} />
       <Heatmap sessions={sessions} />
