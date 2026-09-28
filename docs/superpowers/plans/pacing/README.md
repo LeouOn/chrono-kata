@@ -19,22 +19,24 @@ Each `T*.md` file here is one self-contained task for one agent. Pick any task w
 | [T2](T2-checkin-ui.md) | Morning check-in UI | T1 | done (bf8459d) |
 | [T3](T3-pacing-engine.md) | Pacing engine (load, lagged response, recommend) | T1 | done (6a9d953) |
 | [T4](T4-session-durability-soft-cap.md) | Session timer durability + soft cap + notifications | none | done (90ac739) |
-| [T5](T5-rules-first-coach.md) | Rules-first coach with validated output | T2, T3 | open |
+| [T5a](T5a-pacing-payload.md) | Coach payload from `recommend()` | T2, T3 | open |
+| [T5b](T5b-coach-output-guard.md) | JSON coach output, fallback, pacing clause | T5a | open |
+| [T5c](T5c-briefing-surface.md) | Briefing cache and what-gets-sent | T5a, T5b | open |
 | [T6](T6-recovery-mode-streaks.md) | Recovery-mode streaks | T1, T3 | open |
 | [T7](T7-date-durability-hygiene.md) | UTC date fixes, TZ/DST tests, storage.persist | none | done (947d833) |
 | [T8](T8-habit-link-by-id.md) | Link habits to kata by ID (Dexie v6) | T1, T4 | done (a69b641) |
-| [T9](T9-android-hardening.md) | Android: Keystore keys, native HTTP, auto-backup, export E2E | T1 | open |
-| [T10](T10-load-response-insights.md) | Load-response insights view + case study | T3, T4, and ~3–4 weeks of check-in data | open |
+| [T9](T9-android-hardening.md) | Android: Keystore keys, native HTTP, auto-backup, export E2E | T1 | in progress (other agent) |
+| [T10a](T10a-load-response-view.md) | Load-response charts with seed data | T3, T4 | open |
+| [T10b](T10b-case-study.md) | Case study after real check-ins accumulate | T10a, ~3–4 weeks of data | waiting |
 
 ```
-T1 ─┬─ T2 ─┐
-    ├─ T3 ─┼─ T5
-    │      ├─ T6
-    │      └─ T10 (after data accumulates)
-    ├─ T9
-    └─ T8 ← also after T4
-T4, T7: start any time
+T5a → T5b → T5c
+T6 can run beside T5a
+T10a can run beside T5a; T10b waits for real check-ins
+T9 is taken
 ```
+
+T5 and T10 above replace the single rows those files used to be. The parent specs stay as the full description.
 
 ## Ground rules (all tasks)
 
