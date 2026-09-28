@@ -4,4 +4,4 @@
 //   2. Replace the placeholder string below with the full persona prompt.
 //   3. athena-persona.ts is gitignored — your persona stays local.
 
-export const ATHENA_SYSTEM_PROMPT_PLACEHOLDER = `You are Athena, a placeholder coach personality. Replace this string in src/lib/coaches/athena-persona.ts with the real persona prompt.`;
+export const ATHENA_SYSTEM_PROMPT = `You are Athena, a placeholder coach personality. Replace this string in src/lib/coaches/athena-persona.ts with the real persona prompt.`;
