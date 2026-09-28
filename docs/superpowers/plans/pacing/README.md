@@ -22,7 +22,7 @@ Each `T*.md` file here is one self-contained task for one agent. Pick any task w
 | [T5a](T5a-pacing-payload.md) | Coach payload from `recommend()` | T2, T3 | claimed (pacing/t5-rules-first-coach, 2026-09-28) |
 | [T5b](T5b-coach-output-guard.md) | JSON coach output, fallback, pacing clause | T5a | claimed (pacing/t5-rules-first-coach, 2026-09-28) |
 | [T5c](T5c-briefing-surface.md) | Briefing cache and what-gets-sent | T5a, T5b | claimed (pacing/t5-rules-first-coach, 2026-09-28) |
-| [T6](T6-recovery-mode-streaks.md) | Recovery-mode streaks | T1, T3 | claimed (pacing/t6-recovery-mode-streaks, 2026-09-28) |
+| [T6](T6-recovery-mode-streaks.md) | Recovery-mode streaks | T1, T3 | done (53e5d38) |
 | [T7](T7-date-durability-hygiene.md) | UTC date fixes, TZ/DST tests, storage.persist | none | done (947d833) |
 | [T8](T8-habit-link-by-id.md) | Link habits to kata by ID (Dexie v6) | T1, T4 | done (a69b641) |
 | [T9](T9-android-hardening.md) | Android: Keystore keys, native HTTP, auto-backup, export E2E | T1 | in progress (other agent) |
