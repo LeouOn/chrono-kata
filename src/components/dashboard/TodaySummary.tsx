@@ -4,8 +4,11 @@ import React from 'react';
 import { Card } from '@/components/ui/Card';
 import { formatDuration } from '@/lib/utils/format';
 import { useSettings } from '@/hooks/useSettings';
+import { useCheckIn } from '@/hooks/useCheckIns';
 import { StreakFlame } from '@/components/streak/StreakFlame';
 import { GoalProgressRing } from './GoalProgressRing';
+import { toLocalDateString } from '@/lib/utils/date';
+import { DEFAULT_LOW_ENERGY_REST_THRESHOLD } from '@/lib/schemas/settings';
 import type { Session } from '@/lib/schemas/session';
 
 interface Props {
@@ -16,6 +19,12 @@ interface Props {
 
 export function TodaySummary({ sessions, streakDays, goalMinutes }: Props) {
   const { settings } = useSettings();
+  const todayKey = toLocalDateString(new Date());
+  const { data: todayCheckIn } = useCheckIn(todayKey);
+  const lowEnergyRestToday =
+    settings?.recoveryMode === true &&
+    todayCheckIn != null &&
+    todayCheckIn.energy <= (settings?.lowEnergyRestThreshold ?? DEFAULT_LOW_ENERGY_REST_THRESHOLD);
   const effectiveGoal = goalMinutes ?? settings?.dailyGoalMinutes ?? 20;
 
   const totalMinutes = sessions.reduce(
@@ -34,7 +43,11 @@ export function TodaySummary({ sessions, streakDays, goalMinutes }: Props) {
         <div className="grid grid-cols-2 gap-y-3 gap-x-6 flex-1">
           {/* Flame in place of a fifth stat — first cell. */}
           <div>
-            <StreakFlame variant="compact" days={streakDays} />
+            <StreakFlame
+              variant="compact"
+              days={streakDays}
+              caption={lowEnergyRestToday ? 'Rest day. Your body asked for it.' : undefined}
+            />
           </div>
           <div>
             <div className="text-xs uppercase tracking-wide text-text-muted">Today</div>

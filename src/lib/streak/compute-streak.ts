@@ -10,6 +10,16 @@ export interface ComputeStreakArgs {
   now: Date;
   restDays?: DayOfWeek[];
   streakFreezeTokens?: number;
+  /**
+   * Recovery mode (default false): `checkInDays` count like session days and
+   * `lowEnergyDays` are exempt like rest days. When false, both sets are
+   * ignored entirely, so callers can always pass them.
+   */
+  recoveryMode?: boolean;
+  /** Local YYYY-MM-DD keys that have a morning check-in. Requires recoveryMode. */
+  checkInDays?: Set<string>;
+  /** Local YYYY-MM-DD keys flagged low-energy. Requires recoveryMode. */
+  lowEnergyDays?: Set<string>;
 }
 
 const DAY_NAMES: DayOfWeek[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -23,13 +33,22 @@ export function getDayOfWeek(date: Date): DayOfWeek {
  *
  * Walk backwards day by day from today:
  * 1. If date has a session: increment count.
- * 2. If date has NO session:
+ * 2. If date has no session:
+ *    - If, in recovery mode, date is in lowEnergyDays: exempted like a rest
+ *      day — no break and no freeze spend. This takes precedence over
+ *      check-in counting, so a checked-in depleted day rests rather than
+ *      pushes (in the real pipeline lowEnergyDays ⊆ checkInDays).
+ *    - Else if, in recovery mode, date is in checkInDays: increment count —
+ *      showing up to check in IS the practice.
  *    - If date is today: 1-day grace period (user hasn't practiced *yet* today).
  *    - Else if date is in restDays: exempted, continues walk without breaking streak.
  *    - Else if date is in the current freeze set: already covered by a
  *      previously spent token, no new charge.
  *    - Else if a freeze token is available: spend one and record the date.
  *    - Else: streak gap reached, terminates walk.
+ *
+ * In recovery mode the walk still terminates at the oldest session day;
+ * check-in-only history below it does not extend the streak.
  *
  * The walk is iterated to a fixed point over the freeze set: a spend on a
  * date the walk can no longer reach is voided and its token re-spent on the
@@ -43,6 +62,9 @@ export function computeStreak({
   now,
   restDays = [],
   streakFreezeTokens = 0,
+  recoveryMode = false,
+  checkInDays = new Set<string>(),
+  lowEnergyDays = new Set<string>(),
 }: ComputeStreakArgs): Streak {
   if (sessions.length === 0) {
     return {
@@ -77,6 +99,13 @@ export function computeStreak({
       const isToday = dateStr === todayStr;
 
       if (sessionDays.has(dateStr)) {
+        count++;
+      } else if (recoveryMode && lowEnergyDays.has(dateStr)) {
+        // Low-energy day — exempt like a rest day, spends no freeze. Takes
+        // precedence over check-in counting: the low-energy subset of
+        // check-in days must rest, not push.
+      } else if (recoveryMode && checkInDays.has(dateStr)) {
+        // Check-in day — counts like a session day
         count++;
       } else if (isToday) {
         // Grace period for today (or today is a rest day) — do not penalize

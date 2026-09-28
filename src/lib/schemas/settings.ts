@@ -13,6 +13,17 @@ export type RatingStyle = z.infer<typeof RatingStyleSchema>;
 export const DayOfWeekSchema = z.enum(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
 export type DayOfWeek = z.infer<typeof DayOfWeekSchema>;
 
+/** Check-in energy at or below this counts as a low-energy rest day. */
+export const LowEnergyRestThresholdSchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+]);
+export type LowEnergyRestThreshold = z.infer<typeof LowEnergyRestThresholdSchema>;
+
+/** Default low-energy threshold; matches the pacing engine's rest floor. */
+export const DEFAULT_LOW_ENERGY_REST_THRESHOLD: LowEnergyRestThreshold = 2;
+
 export const SettingsSchema = z.object({
   id: z.literal('singleton'),
   displayName: z.string().max(50).optional(),
@@ -36,6 +47,8 @@ export const SettingsSchema = z.object({
   restDays: z.array(DayOfWeekSchema).optional(),
   streakFreezeTokens: z.number().int().min(0).max(5).optional(),
   lastStreakFreezeUsedAt: z.date().nullable().optional(),
+  recoveryMode: z.boolean().optional(),
+  lowEnergyRestThreshold: LowEnergyRestThresholdSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -63,4 +76,6 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   restDays: [],
   streakFreezeTokens: 1,
   lastStreakFreezeUsedAt: null,
+  recoveryMode: false,
+  lowEnergyRestThreshold: DEFAULT_LOW_ENERGY_REST_THRESHOLD,
 };

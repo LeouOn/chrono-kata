@@ -1,5 +1,16 @@
 # Schema Changelog
 
+## 2026-09-28 — Recovery-mode streaks (pacing T6)
+
+`settings.ts` gains optional `recoveryMode: boolean` (default false) and
+`lowEnergyRestThreshold: 1 | 2 | 3` (default 2, matching the pacing
+engine's rest floor). `compute-streak.ts` accepts optional `recoveryMode`,
+`checkInDays`, and `lowEnergyDays` args (local YYYY-MM-DD keys): with
+recovery mode on, check-in days count like session days and low-energy
+days are exempt like rest days without spending a freeze; when off, both
+sets are ignored. Both settings fields are optional and non-indexed, so
+Dexie is unchanged.
+
 ## 2026-09-26 — Kata intensity (pacing T3)
 
 `kata-template.ts` gains an additive `intensity: 1 | 2 | 3` field
