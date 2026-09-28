@@ -19,9 +19,9 @@ Each `T*.md` file here is one self-contained task for one agent. Pick any task w
 | [T2](T2-checkin-ui.md) | Morning check-in UI | T1 | done (bf8459d) |
 | [T3](T3-pacing-engine.md) | Pacing engine (load, lagged response, recommend) | T1 | done (6a9d953) |
 | [T4](T4-session-durability-soft-cap.md) | Session timer durability + soft cap + notifications | none | done (90ac739) |
-| [T5a](T5a-pacing-payload.md) | Coach payload from `recommend()` | T2, T3 | open |
-| [T5b](T5b-coach-output-guard.md) | JSON coach output, fallback, pacing clause | T5a | open |
-| [T5c](T5c-briefing-surface.md) | Briefing cache and what-gets-sent | T5a, T5b | open |
+| [T5a](T5a-pacing-payload.md) | Coach payload from `recommend()` | T2, T3 | claimed (pacing/t5-rules-first-coach, 2026-09-28) |
+| [T5b](T5b-coach-output-guard.md) | JSON coach output, fallback, pacing clause | T5a | claimed (pacing/t5-rules-first-coach, 2026-09-28) |
+| [T5c](T5c-briefing-surface.md) | Briefing cache and what-gets-sent | T5a, T5b | claimed (pacing/t5-rules-first-coach, 2026-09-28) |
 | [T6](T6-recovery-mode-streaks.md) | Recovery-mode streaks | T1, T3 | claimed (pacing/t6-recovery-mode-streaks, 2026-09-28) |
 | [T7](T7-date-durability-hygiene.md) | UTC date fixes, TZ/DST tests, storage.persist | none | done (947d833) |
 | [T8](T8-habit-link-by-id.md) | Link habits to kata by ID (Dexie v6) | T1, T4 | done (a69b641) |
