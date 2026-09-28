@@ -10,8 +10,15 @@ import { useKataTemplates } from '@/hooks/useKataTemplates';
 import { useSettings } from '@/hooks/useSettings';
 import { dispatchToast } from '@/components/ui/Toast';
 import type { KataTemplate, KataTemplateInput } from '@/lib/schemas/kata-template';
+import type { Intensity } from '@/lib/pacing/types';
 import { formatDuration } from '@/lib/utils/format';
 import { KATA_ICON_CATEGORIES } from '@/lib/kata/icons';
+
+const INTENSITY_LABELS = {
+  1: 'Gentle',
+  2: 'Moderate',
+  3: 'Hard',
+} as const;
 
 export function KataTemplateSettings() {
   const { templates, createTemplate, updateTemplate, deleteTemplate, reorderTemplates } = useKataTemplates();
@@ -29,6 +36,7 @@ export function KataTemplateSettings() {
   const [defaultNote, setDefaultNote] = useState('');
   const [softCap, setSoftCap] = useState<number | null>(null);
   const [icon, setIcon] = useState('🥋');
+  const [intensity, setIntensity] = useState<Intensity>(2);
   const [error, setError] = useState<string | null>(null);
 
   function openCreate() {
@@ -41,6 +49,7 @@ export function KataTemplateSettings() {
     setDefaultNote('');
     setSoftCap(null);
     setIcon('🥋');
+    setIntensity(2);
     setError(null);
     setModalOpen(true);
   }
@@ -74,6 +83,7 @@ export function KataTemplateSettings() {
     setDefaultNote(t.defaultNote ?? '');
     setSoftCap(t.softCapMinutes ?? null);
     setIcon(t.icon ?? '🥋');
+    setIntensity(t.intensity ?? 1);
     setError(null);
     setModalOpen(true);
   }
@@ -94,6 +104,7 @@ export function KataTemplateSettings() {
       defaultNote: defaultNote.trim() || undefined,
       softCapMinutes: mode === 'timed' && softCap != null ? softCap : null,
       icon,
+      intensity,
     };
 
     try {
@@ -305,6 +316,26 @@ export function KataTemplateSettings() {
               />
             </div>
           )}
+
+          {/* Intensity */}
+          <div>
+            <label className="text-text-muted block mb-1">Intensity</label>
+            <div className="grid grid-cols-3 gap-2 p-1 bg-surface-2 rounded-xl">
+              {([1, 2, 3] as const).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  aria-pressed={intensity === level}
+                  onClick={() => setIntensity(level)}
+                  className={`py-1.5 rounded-lg font-medium transition-colors ${
+                    intensity === level ? 'bg-accent text-base' : 'text-text-muted'
+                  }`}
+                >
+                  {INTENSITY_LABELS[level]}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Activity label */}
           <div>
