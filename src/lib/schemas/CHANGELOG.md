@@ -8,6 +8,24 @@ engine. The field is optional and non-indexed, and
 `DexieKataTemplateRepository.create` persists it; existing records
 default to 1 at read time, so no Dexie migration is needed.
 
+## 2026-09-25 — Habit links by kata id
+
+`session.ts` gains optional `kataTemplateId`. `habit.ts` gains optional
+`linkedKataTemplateId`. `settings.ts` gains optional `habitLinksMigrated`.
+Dexie version 6 indexes `sessions.kataTemplateId` and backfills both id
+fields from normalized template names. Unmatched labels are left alone.
+
+## 2026-09-25 — Morning check-in toggle
+
+`settings.ts` accepts optional `showMorningCheckIn` (default true). Existing
+rows stay valid, and Dexie is unchanged.
+
+## 2026-09-25 — Session soft cap
+
+`kata-template.ts` gains optional `softCapMinutes` (1–600). `session.ts` gains
+optional `stoppedAtCap`. Neither field is indexed, so Dexie stays on its
+current version.
+
 ## 2026-09-25 — Morning check-ins (pacing T1)
 
 New `check-in.ts`: `CheckInSchema`, one row per local day keyed by `date`

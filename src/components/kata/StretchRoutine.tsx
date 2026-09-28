@@ -18,6 +18,9 @@ import {
 } from '@/lib/kata/stretch-routine';
 import type { Rating, SessionInput } from '@/lib/schemas/session';
 import { pauseHabitTimer } from '@/lib/timers/habit-timer';
+import { requestScreenWakeLock } from '@/lib/device/wake-lock';
+import { useKataTemplates } from '@/hooks/useKataTemplates';
+import { normalizeActivityName } from '@/lib/habits/schedule';
 
 const primaryButtonClass =
   'rounded-full bg-accent text-base px-5 py-2.5 font-medium disabled:opacity-40';
@@ -56,6 +59,10 @@ function StretchPlayer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  const { templates } = useKataTemplates();
+  const stretchTemplateId =
+    templates.find((template) => normalizeActivityName(template.name) === 'daily stretches')?.id ??
+    null;
 
   const playerRef = useRef<StretchPlayerState | null>(null);
   const soundRef = useRef(sound);
@@ -63,6 +70,32 @@ function StretchPlayer({
   const viewRef = useRef<HTMLDivElement>(null);
   const applyRef = useRef<(event: StretchPlayerEvent) => void>(() => {});
   soundRef.current = sound;
+
+  useEffect(() => {
+    if (stage !== 'active') return;
+    let released = false;
+    let sentinel: WakeLockSentinel | null = null;
+    const acquire = () => {
+      void requestScreenWakeLock().then((lock) => {
+        if (!lock) return;
+        if (released) {
+          void lock.release();
+          return;
+        }
+        sentinel = lock;
+      });
+    };
+    acquire();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') acquire();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      released = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      void sentinel?.release();
+    };
+  }, [stage]);
 
   function commit(next: StretchPlayerState) {
     playerRef.current = next;
@@ -147,6 +180,7 @@ function StretchPlayer({
         reps: null,
         rating,
         activityLabel: 'Daily stretches',
+        kataTemplateId: stretchTemplateId,
         note: formatStretchSessionNote(current.holds),
       });
       onClose();

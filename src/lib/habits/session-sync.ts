@@ -6,12 +6,19 @@ import { sessionRepo } from '@/lib/db/session.repo';
 import { toLocalDateString } from '@/lib/utils/date';
 import { labelMatches } from './schedule';
 
+function habitMatchesSession(habit: Habit, session: Session): boolean {
+  if (habit.linkedKataTemplateId && session.kataTemplateId) {
+    return habit.linkedKataTemplateId === session.kataTemplateId;
+  }
+  return labelMatches(habit.linkedActivityLabel, session.activityLabel);
+}
+
 function habitsLinkedTo(habits: Habit[], session: Session): Habit[] {
-  return habits.filter((h) => labelMatches(h.linkedActivityLabel, session.activityLabel));
+  return habits.filter((habit) => habitMatchesSession(habit, session));
 }
 
 function sessionContributes(habit: Habit, session: Session): boolean {
-  if (!labelMatches(habit.linkedActivityLabel, session.activityLabel)) return false;
+  if (!habitMatchesSession(habit, session)) return false;
   if (habit.kind === 'count') return false;
   if (habit.kind === 'timed') return session.durationMinutes != null;
   return true;
@@ -43,7 +50,7 @@ export async function removeHabitLogsForSession(sessionId: string): Promise<void
 
 /** Regenerate a single habit's session-derived logs from full history (on create/edit of the link). */
 export async function backfillHabitLogsForHabit(habit: Habit): Promise<void> {
-  if (habit.kind === 'count' || !habit.linkedActivityLabel) return;
+  if (habit.kind === 'count' || (!habit.linkedActivityLabel && !habit.linkedKataTemplateId)) return;
   const sessions = await sessionRepo.getAll();
   await habitLogRepo.deleteSessionSourcedForHabit(habit.id);
   for (const session of sessions) {

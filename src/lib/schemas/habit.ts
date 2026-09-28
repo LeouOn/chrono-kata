@@ -22,6 +22,8 @@ const HabitBaseSchema = z.object({
   schedule: HabitScheduleSchema,
   /** Sessions whose activityLabel matches (case-insensitive) count automatically. */
   linkedActivityLabel: z.string().min(1).max(100).nullable().optional(),
+  /** Sessions started from this kata count even if the label is later renamed. */
+  linkedKataTemplateId: z.string().uuid().nullable().optional(),
   order: z.number().int().default(0),
   archivedAt: z.date().nullable().optional(),
   createdAt: z.date(),
@@ -47,6 +49,7 @@ export const HabitInputSchema = HabitBaseSchema.omit({
   unit: true,
   targetPerDay: true,
   linkedActivityLabel: true,
+  linkedKataTemplateId: true,
   order: true,
   archivedAt: true,
 });

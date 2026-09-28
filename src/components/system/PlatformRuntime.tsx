@@ -21,6 +21,7 @@ export function PlatformRuntime() {
       });
     } else {
       void window.serwist?.register();
+      void navigator.storage?.persist?.();
     }
 
     if (!native) return;

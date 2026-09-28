@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useHabits } from '@/hooks/useHabits';
+import { useKataTemplates } from '@/hooks/useKataTemplates';
 import { dispatchToast } from '@/components/ui/Toast';
 import type { DayOfWeek } from '@/lib/schemas/settings';
 import type { Habit, HabitInput, HabitKind, HabitSchedule } from '@/lib/schemas/habit';
@@ -29,6 +30,7 @@ const KINDS: Array<{ id: HabitKind; label: string }> = [
 
 export function HabitSettings() {
   const { habits, createHabit, updateHabit, deleteHabit, reorderHabits, setHabitArchived } = useHabits();
+  const { templates } = useKataTemplates();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Habit | null>(null);
@@ -44,6 +46,8 @@ export function HabitSettings() {
   const [scheduleKind, setScheduleKind] = useState<'daily' | 'weekdays'>('daily');
   const [weekdays, setWeekdays] = useState<DayOfWeek[]>(['mon', 'tue', 'wed', 'thu', 'fri']);
   const [linkedLabel, setLinkedLabel] = useState('');
+  const [linkMode, setLinkMode] = useState<'none' | 'template' | 'custom'>('none');
+  const [linkedTemplateId, setLinkedTemplateId] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   function openCreate() {
@@ -56,6 +60,8 @@ export function HabitSettings() {
     setScheduleKind('daily');
     setWeekdays(['mon', 'tue', 'wed', 'thu', 'fri']);
     setLinkedLabel('');
+    setLinkMode('none');
+    setLinkedTemplateId('');
     setError(null);
     setModalOpen(true);
   }
@@ -70,6 +76,8 @@ export function HabitSettings() {
     setScheduleKind(h.schedule.kind);
     setWeekdays(h.schedule.kind === 'weekdays' ? h.schedule.days : ['mon', 'tue', 'wed', 'thu', 'fri']);
     setLinkedLabel(h.linkedActivityLabel ?? '');
+    setLinkMode(h.linkedKataTemplateId ? 'template' : h.linkedActivityLabel ? 'custom' : 'none');
+    setLinkedTemplateId(h.linkedKataTemplateId ?? '');
     setError(null);
     setModalOpen(true);
   }
@@ -100,7 +108,8 @@ export function HabitSettings() {
       unit: kind === 'count' ? unit.trim() : undefined,
       targetPerDay: kind === 'boolean' ? null : target,
       schedule,
-      linkedActivityLabel: linkedLabel.trim() || null,
+      linkedActivityLabel: linkMode === 'custom' ? linkedLabel.trim() || null : null,
+      linkedKataTemplateId: linkMode === 'template' ? linkedTemplateId || null : null,
     };
 
     try {
@@ -172,7 +181,11 @@ export function HabitSettings() {
                   {h.schedule.kind === 'daily'
                     ? 'every day'
                     : h.schedule.days.map((d) => d[0]?.toUpperCase()).join(' ')}
-                  {h.linkedActivityLabel ? ` · links to "${h.linkedActivityLabel}"` : ''}
+                  {h.linkedKataTemplateId
+                    ? ` · links to ${templates.find((template) => template.id === h.linkedKataTemplateId)?.name ?? 'a kata'}`
+                    : h.linkedActivityLabel
+                      ? ` · links to "${h.linkedActivityLabel}"`
+                      : ''}
                 </div>
               </div>
             </div>
@@ -340,16 +353,40 @@ export function HabitSettings() {
 
           <div>
             <label className="text-text-muted block mb-1">Link to sessions (optional)</label>
-            <input
-              type="text"
-              maxLength={100}
-              placeholder="Activity label, e.g. Daily stretches"
-              value={linkedLabel}
-              onChange={(e) => setLinkedLabel(e.target.value)}
+            <select
+              value={linkMode === 'template' ? linkedTemplateId : linkMode}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'none' || value === 'custom') {
+                  setLinkMode(value);
+                  setLinkedTemplateId('');
+                  return;
+                }
+                setLinkMode('template');
+                setLinkedTemplateId(value);
+              }}
               className="w-full bg-surface-2 rounded-xl px-3 py-2 text-text text-sm border border-border focus:border-accent outline-none"
-            />
+            >
+              <option value="none">No link</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+              <option value="custom">Custom label…</option>
+            </select>
+            {linkMode === 'custom' && (
+              <input
+                type="text"
+                maxLength={100}
+                placeholder="Activity label, e.g. Daily stretches"
+                value={linkedLabel}
+                onChange={(e) => setLinkedLabel(e.target.value)}
+                className="mt-2 w-full bg-surface-2 rounded-xl px-3 py-2 text-text text-sm border border-border focus:border-accent outline-none"
+              />
+            )}
             <p className="text-[10px] text-text-muted mt-1">
-              Sessions with a matching activity label count toward this habit automatically.
+              A linked kata still counts after you rename it. A custom label matches free-text sessions.
             </p>
           </div>
 

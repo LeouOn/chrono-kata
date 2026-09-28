@@ -21,6 +21,7 @@ import {
   removeHabitLogsForSession,
 } from '@/lib/habits/session-sync';
 import type { Session, SessionInput } from '@/lib/schemas/session';
+import { toLocalDateString } from '@/lib/utils/date';
 
 const KEY = ['sessions'] as const;
 
@@ -135,12 +136,12 @@ function buildCoachUserTextForConversation(session: Session, recent: Session[]):
     .filter((s) => s.id !== session.id)
     .slice(0, 5)
     .map((s) => {
-      const date = s.startedAt.toISOString().slice(0, 10);
+      const date = toLocalDateString(s.startedAt);
       const dur = s.durationMinutes != null ? `${s.durationMinutes}m` : `${s.reps ?? 0} reps`;
       return `${date} | ${s.activityLabel ?? ''} | ${dur} | ${s.rating}/5`;
     })
     .join('\n');
-  const date = session.startedAt.toISOString().slice(0, 10);
+  const date = toLocalDateString(session.startedAt);
   const dur = session.durationMinutes != null ? `${session.durationMinutes}m` : `${session.reps ?? 0} reps`;
   return `Session on ${date}: ${session.activityLabel ?? 'practice'} for ${dur}, rated ${session.rating}/5${session.note ? ` — note: ${session.note}` : ''}.\n\nRecent sessions:\n${recentLines}\n\nRespond with a 3-6 sentence reflection.`;
 }

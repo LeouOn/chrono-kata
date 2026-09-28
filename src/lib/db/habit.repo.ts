@@ -38,6 +38,7 @@ export class DexieHabitRepository implements HabitRepository {
       targetPerDay: input.targetPerDay ?? null,
       schedule: input.schedule,
       linkedActivityLabel: input.linkedActivityLabel ?? null,
+      linkedKataTemplateId: input.linkedKataTemplateId ?? null,
       order: input.order ?? count,
       archivedAt: input.archivedAt ?? null,
       createdAt: now,

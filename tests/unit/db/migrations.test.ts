@@ -34,6 +34,9 @@ const HISTORICAL_STORES: Record<number, Record<string, string>> = {
     habits: 'id, order',
     habitLogs: 'id, habitId, date, sessionId, [habitId+date]',
   },
+  5: {
+    checkIns: 'date',
+  },
 };
 
 type Fixtures = Record<string, unknown[]>;
@@ -122,11 +125,15 @@ describe('Dexie migrations', () => {
 
     const db = getDb();
     await db.open();
-    expect(db.verno).toBe(5);
+    expect(db.verno).toBe(6);
 
-    for (const [table, rows] of Object.entries(V4_FIXTURES)) {
-      expect(await db.table(table).toArray(), table).toEqual(rows);
-    }
+    const walkId = '123e4567-e89b-12d3-a456-426614174002';
+    const session = await db.sessions.get('123e4567-e89b-12d3-a456-426614174001');
+    const habit = await db.habits.get('123e4567-e89b-12d3-a456-426614174003');
+    expect(session?.activityLabel).toBe('Walk');
+    expect(session?.kataTemplateId).toBe(walkId);
+    expect(habit?.linkedKataTemplateId).toBe(walkId);
+    expect(await db.habitLogs.count()).toBe(1);
     // Compound index from v4 still works after the upgrade.
     expect(
       await db.habitLogs.where('[habitId+date]').equals(['123e4567-e89b-12d3-a456-426614174003', '2026-09-20']).count()
@@ -140,7 +147,107 @@ describe('Dexie migrations', () => {
   it('opens a fresh database at the current version', async () => {
     const db = await resetDbForTesting();
     await db.open();
-    expect(db.verno).toBe(5);
+    expect(db.verno).toBe(6);
     expect(db.tables.map((t) => t.name)).toContain('checkIns');
+  });
+
+  it('v5 → v6 links mixed-case labels and leaves unmatched rows alone', async () => {
+    const templateId = '123e4567-e89b-12d3-a456-426614174010';
+    const otherId = '123e4567-e89b-12d3-a456-426614174011';
+    await seedLegacyDb(5, {
+      ...V4_FIXTURES,
+      kataTemplates: [
+        {
+          id: templateId,
+          name: 'Morning Walk',
+          mode: 'timed',
+          defaultDurationMinutes: 20,
+          defaultReps: null,
+          icon: '🚶',
+          order: 0,
+          createdAt: T,
+          updatedAt: T,
+        },
+        {
+          id: otherId,
+          name: '  deep   work ',
+          mode: 'timed',
+          defaultDurationMinutes: 45,
+          defaultReps: null,
+          icon: '⚡',
+          order: 1,
+          createdAt: T,
+          updatedAt: T,
+        },
+      ],
+      sessions: [
+        {
+          id: '123e4567-e89b-12d3-a456-426614174012',
+          startedAt: T,
+          durationMinutes: 20,
+          reps: null,
+          rating: 4,
+          activityLabel: 'morning   walk',
+          createdAt: T,
+          updatedAt: T,
+        },
+        {
+          id: '123e4567-e89b-12d3-a456-426614174013',
+          startedAt: T,
+          durationMinutes: 10,
+          reps: null,
+          rating: 3,
+          activityLabel: 'Walking',
+          createdAt: T,
+          updatedAt: T,
+        },
+        {
+          id: '123e4567-e89b-12d3-a456-426614174014',
+          startedAt: T,
+          durationMinutes: 45,
+          reps: null,
+          rating: 5,
+          activityLabel: 'Deep Work',
+          createdAt: T,
+          updatedAt: T,
+        },
+      ],
+      habits: [
+        {
+          id: '123e4567-e89b-12d3-a456-426614174015',
+          name: 'Steps',
+          icon: '🚶',
+          kind: 'timed',
+          targetPerDay: 20,
+          schedule: { kind: 'daily' },
+          linkedActivityLabel: 'MORNING WALK',
+          order: 0,
+          archivedAt: null,
+          createdAt: T,
+          updatedAt: T,
+        },
+        {
+          id: '123e4567-e89b-12d3-a456-426614174016',
+          name: 'Yoga',
+          icon: '🧘',
+          kind: 'boolean',
+          targetPerDay: null,
+          schedule: { kind: 'daily' },
+          linkedActivityLabel: 'yoga',
+          order: 1,
+          archivedAt: null,
+          createdAt: T,
+          updatedAt: T,
+        },
+      ],
+    });
+
+    const db = getDb();
+    await db.open();
+    expect((await db.sessions.get('123e4567-e89b-12d3-a456-426614174012'))?.kataTemplateId).toBe(templateId);
+    expect((await db.sessions.get('123e4567-e89b-12d3-a456-426614174013'))?.kataTemplateId).toBeUndefined();
+    expect((await db.sessions.get('123e4567-e89b-12d3-a456-426614174014'))?.kataTemplateId).toBe(otherId);
+    expect((await db.habits.get('123e4567-e89b-12d3-a456-426614174015'))?.linkedKataTemplateId).toBe(templateId);
+    expect((await db.habits.get('123e4567-e89b-12d3-a456-426614174016'))?.linkedKataTemplateId).toBeUndefined();
   });
 });

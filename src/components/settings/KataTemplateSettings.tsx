@@ -34,6 +34,7 @@ export function KataTemplateSettings() {
   const [reps, setReps] = useState<number | null>(null);
   const [activityLabel, setActivityLabel] = useState('');
   const [defaultNote, setDefaultNote] = useState('');
+  const [softCap, setSoftCap] = useState<number | null>(null);
   const [icon, setIcon] = useState('🥋');
   const [intensity, setIntensity] = useState<Intensity>(2);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +47,7 @@ export function KataTemplateSettings() {
     setReps(null);
     setActivityLabel('');
     setDefaultNote('');
+    setSoftCap(null);
     setIcon('🥋');
     setIntensity(2);
     setError(null);
@@ -79,6 +81,7 @@ export function KataTemplateSettings() {
     setReps(t.defaultReps ?? null);
     setActivityLabel(t.activityLabel ?? '');
     setDefaultNote(t.defaultNote ?? '');
+    setSoftCap(t.softCapMinutes ?? null);
     setIcon(t.icon ?? '🥋');
     setIntensity(t.intensity ?? 1);
     setError(null);
@@ -99,6 +102,7 @@ export function KataTemplateSettings() {
       defaultReps: mode === 'reps' ? reps : null,
       activityLabel: activityLabel.trim() || undefined,
       defaultNote: defaultNote.trim() || undefined,
+      softCapMinutes: mode === 'timed' && softCap != null ? softCap : null,
       icon,
       intensity,
     };
@@ -285,6 +289,16 @@ export function KataTemplateSettings() {
                 value={duration ?? ''}
                 onChange={(e) => setDuration(e.target.value ? Number(e.target.value) : null)}
                 placeholder="20"
+                className="w-full bg-surface-2 rounded-xl px-3 py-2 text-text text-sm border border-border focus:border-accent outline-none"
+              />
+              <label className="text-text-muted block mt-3 mb-1">Soft cap (minutes, optional)</label>
+              <input
+                type="number"
+                min="1"
+                max="600"
+                value={softCap ?? ''}
+                onChange={(e) => setSoftCap(e.target.value ? Number(e.target.value) : null)}
+                placeholder="none"
                 className="w-full bg-surface-2 rounded-xl px-3 py-2 text-text text-sm border border-border focus:border-accent outline-none"
               />
             </div>

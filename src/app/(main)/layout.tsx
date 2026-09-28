@@ -10,6 +10,9 @@ import { NotificationRunner } from '@/components/system/NotificationRunner';
 import { useSessions, recomputeStreakSideEffect } from '@/hooks/useSessions';
 import { flushPendingOps } from '@/lib/calendar/sync';
 import { toLocalDateString } from '@/lib/utils/date';
+import { readSessionTimer } from '@/lib/timers/session-timer';
+import { settingsRepo } from '@/lib/db/settings.repo';
+import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
 
 export default function MainLayout({ children }: { children: ReactNode }) {
   const [fabOpen, setFabOpen] = useState(false);
@@ -24,6 +27,13 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refreshStreak();
     void flushPendingOps();
+    if (readSessionTimer()) setFabOpen(true);
+    void (async () => {
+      const settings = await settingsRepo.get();
+      if (settings.habitLinksMigrated) return;
+      await rebuildSessionHabitLogs();
+      await settingsRepo.patch({ habitLinksMigrated: true });
+    })();
   }, [refreshStreak]);
 
   // Refresh the streak when the local day rolls over while the app is open,

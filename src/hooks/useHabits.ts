@@ -34,7 +34,7 @@ export function useHabits() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<HabitInput> }) => {
       const habit = await habitRepo.update(id, patch);
-      if ('linkedActivityLabel' in patch || 'kind' in patch) {
+      if ('linkedActivityLabel' in patch || 'linkedKataTemplateId' in patch || 'kind' in patch) {
         await backfillHabitLogsForHabit(habit);
       }
       return habit;

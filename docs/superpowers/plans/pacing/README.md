@@ -16,13 +16,13 @@ Each `T*.md` file here is one self-contained task for one agent. Pick any task w
 | Task | Title | Depends on | Status |
 |---|---|---|---|
 | [T1](T1-checkin-data-layer.md) | Check-in data layer + backup v2 + migration harness | none | done (c1bd779) |
-| [T2](T2-checkin-ui.md) | Morning check-in UI | T1 | open |
+| [T2](T2-checkin-ui.md) | Morning check-in UI | T1 | done (bf8459d) |
 | [T3](T3-pacing-engine.md) | Pacing engine (load, lagged response, recommend) | T1 | claimed (pacing/t3-pacing-engine, 2026-09-25) |
-| [T4](T4-session-durability-soft-cap.md) | Session timer durability + soft cap + notifications | none | claimed (pacing/t4-session-durability-soft-cap, 2026-09-25) |
+| [T4](T4-session-durability-soft-cap.md) | Session timer durability + soft cap + notifications | none | done (90ac739) |
 | [T5](T5-rules-first-coach.md) | Rules-first coach with validated output | T2, T3 | open |
 | [T6](T6-recovery-mode-streaks.md) | Recovery-mode streaks | T1, T3 | open |
-| [T7](T7-date-durability-hygiene.md) | UTC date fixes, TZ/DST tests, storage.persist | none | open |
-| [T8](T8-habit-link-by-id.md) | Link habits to kata by ID (Dexie v6) | T1, T4 | open |
+| [T7](T7-date-durability-hygiene.md) | UTC date fixes, TZ/DST tests, storage.persist | none | done (947d833) |
+| [T8](T8-habit-link-by-id.md) | Link habits to kata by ID (Dexie v6) | T1, T4 | done (a69b641) |
 | [T9](T9-android-hardening.md) | Android: Keystore keys, native HTTP, auto-backup, export E2E | T1 | open |
 | [T10](T10-load-response-insights.md) | Load-response insights view + case study | T3, T4, and ~3–4 weeks of check-in data | open |
 
