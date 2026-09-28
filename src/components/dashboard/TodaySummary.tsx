@@ -8,6 +8,7 @@ import { useCheckIn } from '@/hooks/useCheckIns';
 import { StreakFlame } from '@/components/streak/StreakFlame';
 import { GoalProgressRing } from './GoalProgressRing';
 import { toLocalDateString } from '@/lib/utils/date';
+import { DEFAULT_LOW_ENERGY_REST_THRESHOLD } from '@/lib/schemas/settings';
 import type { Session } from '@/lib/schemas/session';
 
 interface Props {
@@ -23,7 +24,7 @@ export function TodaySummary({ sessions, streakDays, goalMinutes }: Props) {
   const lowEnergyRestToday =
     settings?.recoveryMode === true &&
     todayCheckIn != null &&
-    todayCheckIn.energy <= (settings?.lowEnergyRestThreshold ?? 2);
+    todayCheckIn.energy <= (settings?.lowEnergyRestThreshold ?? DEFAULT_LOW_ENERGY_REST_THRESHOLD);
   const effectiveGoal = goalMinutes ?? settings?.dailyGoalMinutes ?? 20;
 
   const totalMinutes = sessions.reduce(

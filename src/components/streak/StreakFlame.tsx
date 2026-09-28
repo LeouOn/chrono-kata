@@ -46,7 +46,7 @@ export function StreakFlame({ days, variant = 'card', caption, onTap }: Props) {
             ? 'flex items-center gap-2 rounded-xl'
             : 'flex items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3'
         }
-        aria-label={`${days} day streak`}
+        aria-label={caption ? `${days} day streak — rest day today` : `${days} day streak`}
       >
         <span className="text-2xl" role="img" aria-hidden>🔥</span>
         <div className="text-left">

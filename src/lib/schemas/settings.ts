@@ -21,6 +21,9 @@ export const LowEnergyRestThresholdSchema = z.union([
 ]);
 export type LowEnergyRestThreshold = z.infer<typeof LowEnergyRestThresholdSchema>;
 
+/** Default low-energy threshold; matches the pacing engine's rest floor. */
+export const DEFAULT_LOW_ENERGY_REST_THRESHOLD: LowEnergyRestThreshold = 2;
+
 export const SettingsSchema = z.object({
   id: z.literal('singleton'),
   displayName: z.string().max(50).optional(),
@@ -74,5 +77,5 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   streakFreezeTokens: 1,
   lastStreakFreezeUsedAt: null,
   recoveryMode: false,
-  lowEnergyRestThreshold: 2,
+  lowEnergyRestThreshold: DEFAULT_LOW_ENERGY_REST_THRESHOLD,
 };

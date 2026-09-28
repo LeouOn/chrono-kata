@@ -9,6 +9,7 @@ import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { checkInRepo } from '@/lib/db/check-in.repo';
 import { computeStreak } from '@/lib/streak/compute-streak';
+import { DEFAULT_LOW_ENERGY_REST_THRESHOLD } from '@/lib/schemas/settings';
 import { generateCoachCommentStream } from '@/lib/llm/llm-service';
 import { LLMException, LLMExceptionKind } from '@/lib/llm/types';
 import { dispatchToast } from '@/components/ui/Toast';
@@ -39,7 +40,7 @@ export async function recomputeStreakSideEffect() {
     settingsRepo.get(),
     checkInRepo.getAll(),
   ]);
-  const threshold = settings?.lowEnergyRestThreshold ?? 2;
+  const threshold = settings?.lowEnergyRestThreshold ?? DEFAULT_LOW_ENERGY_REST_THRESHOLD;
   const next = computeStreak({
     sessions,
     previousStreak: current,
