@@ -26,7 +26,7 @@ Each `T*.md` file here is one self-contained task for one agent. Pick any task w
 | [T7](T7-date-durability-hygiene.md) | UTC date fixes, TZ/DST tests, storage.persist | none | done (947d833) |
 | [T8](T8-habit-link-by-id.md) | Link habits to kata by ID (Dexie v6) | T1, T4 | done (a69b641) |
 | [T9](T9-android-hardening.md) | Android: Keystore keys, native HTTP, auto-backup, export E2E | T1 | in progress (other agent) |
-| [T10a](T10a-load-response-view.md) | Load-response charts with seed data | T3, T4 | open |
+| [T10a](T10a-load-response-view.md) | Load-response charts with seed data | T3, T4 | claimed (pacing/t10a-load-response-view, 2026-09-28) |
 | [T10b](T10b-case-study.md) | Case study after real check-ins accumulate | T10a, ~3–4 weeks of data | waiting |
 
 ```
