@@ -1,3 +1,54 @@
+import { z } from 'zod';
+import type { RecommendAction, Recommendation } from '@/lib/pacing/types';
+
+const CoachBriefingSchema = z.object({
+  summary: z.string().min(1),
+  suggestion: z.string().min(1),
+  tone: z.enum(['gentle', 'steady', 'encouraging']),
+});
+
+export interface CoachBriefing {
+  summary: string;
+  suggestion: string;
+  tone: 'gentle' | 'steady' | 'encouraging';
+  usedFallback: boolean;
+}
+
+const CONTRADICTION = /\b(push|more than yesterday|challenge yourself)\b/i;
+
+export function fallbackBriefing(recommendation: Pick<Recommendation, 'action' | 'reasons'>): Omit<CoachBriefing, 'usedFallback'> {
+  const summary = recommendation.reasons.join(' ') || `Today is a ${recommendation.action} day.`;
+  const tone = recommendation.action === 'rest' || recommendation.action === 'reduce' ? 'gentle' : 'steady';
+  return { summary, suggestion: summary, tone };
+}
+
+function contradicts(action: RecommendAction, suggestion: string): boolean {
+  return (action === 'rest' || action === 'reduce') && CONTRADICTION.test(suggestion);
+}
+
+function parseJsonObject(text: string): unknown {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = (fenced?.[1] ?? text).trim();
+  const start = body.indexOf('{');
+  const end = body.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(body.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+export function parseCoachBriefing(
+  raw: string,
+  recommendation: Pick<Recommendation, 'action' | 'reasons'>,
+): CoachBriefing {
+  const fallback = { ...fallbackBriefing(recommendation), usedFallback: true as const };
+  const parsed = CoachBriefingSchema.safeParse(parseJsonObject(cleanLLMResponse(raw)));
+  if (!parsed.success || contradicts(recommendation.action, parsed.data.suggestion)) return fallback;
+  return { ...parsed.data, usedFallback: false };
+}
+
 /**
  * Strip <think>...</think> reasoning blocks that some models (minimax,
  * DeepSeek-R1, GLM with thinking enabled) embed inline in the content
