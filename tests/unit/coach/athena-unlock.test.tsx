@@ -27,7 +27,8 @@ describe('Athena Secret Mode & Unlock Hook', () => {
 
   it('provides Athena system prompt via getCoachSystemPrompt', () => {
     const prompt = getCoachSystemPrompt('athena');
-    expect(prompt).toBe(ATHENA_SYSTEM_PROMPT);
+    expect(prompt.startsWith(ATHENA_SYSTEM_PROMPT)).toBe(true);
+    expect(prompt).toContain('activity pacing');
     expect(prompt.length).toBeGreaterThan(20);
   });
 

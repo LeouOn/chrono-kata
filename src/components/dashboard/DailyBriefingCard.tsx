@@ -16,7 +16,7 @@ const COACH_EMOJIS: Record<string, string> = {
 
 export function DailyBriefingCard() {
   const { settings } = useSettings();
-  const { briefing, providerName, model, isLoading, error, generate } = useDailyBriefing();
+  const { summary, suggestion, briefing, usedFallback, providerName, model, isLoading, error, generate } = useDailyBriefing();
   const personality = settings?.selectedCoachPersonality ?? 'zen';
   const emoji = COACH_EMOJIS[personality] ?? '🥋';
 
@@ -84,20 +84,21 @@ export function DailyBriefingCard() {
           </div>
         )}
 
-        {briefing && !isLoading && (
+        {(summary || suggestion || briefing) && !isLoading && (
           <motion.div
             initial={{ opacity: 0, y: 3 }}
             animate={{ opacity: 1, y: 0 }}
             className="space-y-1.5"
           >
+            {summary && <p className="text-sm text-text leading-relaxed">{summary}</p>}
             <p className="font-serif text-sm text-text leading-relaxed">
-              &ldquo;{briefing}&rdquo;
+              &ldquo;{suggestion || briefing}&rdquo;
             </p>
-            {providerName && model && (
-              <div className="text-[10px] text-text-muted">
-                via {providerName} ({model})
-              </div>
-            )}
+            <div className="text-[10px] text-text-muted">
+              {usedFallback ? 'fallback' : null}
+              {usedFallback && providerName ? ' · ' : null}
+              {providerName && model ? `via ${providerName} (${model})` : null}
+            </div>
           </motion.div>
         )}
       </div>

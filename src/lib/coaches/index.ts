@@ -13,8 +13,11 @@ export const COACH_PROMPTS: Record<CoachPersonality, string> = {
   athena: ATHENA_SYSTEM_PROMPT,
 };
 
+export const PACING_CLAUSE =
+  'The user is recovering from a chronic illness and uses activity pacing. Never encourage pushing through low energy or fatigue. Your suggestion must match the given action exactly; you phrase it, you do not change it.';
+
 export function getCoachSystemPrompt(name: CoachPersonality): string {
-  return COACH_PROMPTS[name];
+  return `${COACH_PROMPTS[name]}\n\n${PACING_CLAUSE}`;
 }
 
 export * from './athena-persona';

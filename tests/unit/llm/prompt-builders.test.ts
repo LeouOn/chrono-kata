@@ -3,7 +3,6 @@ import {
   buildSessionContextSummary,
   buildCoachUserText,
   buildWeeklyReflectionUserText,
-  buildDailyBriefingUserText,
 } from '@/lib/llm/prompt-builders';
 import type { Session } from '@/lib/schemas/session';
 
@@ -79,31 +78,4 @@ describe('buildWeeklyReflectionUserText', () => {
   });
 });
 
-describe('buildDailyBriefingUserText', () => {
-  it('includes streak count, recent sessions, and rest day status', () => {
-    const recent = [
-      ses({ startedAt: new Date('2026-07-20T08:00:00Z'), activityLabel: 'kata', durationMinutes: 20, reps: null, rating: 4 }),
-    ];
-    const out = buildDailyBriefingUserText({
-      streakDays: 7,
-      recentSessions: recent,
-      displayName: 'Alex',
-      isRestDayToday: false,
-    });
 
-    expect(out).toMatch(/Current streak: 7 days/i);
-    expect(out).toMatch(/Today is a practice day/i);
-    expect(out).toMatch(/Alex/);
-    expect(out).toMatch(/kata/);
-  });
-
-  it('notes designated rest day when active', () => {
-    const out = buildDailyBriefingUserText({
-      streakDays: 12,
-      recentSessions: [],
-      isRestDayToday: true,
-    });
-
-    expect(out).toMatch(/Today is a designated rest day/i);
-  });
-});

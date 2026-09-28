@@ -6,12 +6,12 @@ import { createLLMProvider } from './provider-factory';
 import {
   buildCoachUserText,
   buildWeeklyReflectionUserText,
-  buildDailyBriefingUserText,
 } from './prompt-builders';
+import { buildDailyBriefingUserText, type PacingContext } from './pacing-context';
 import { LLMException, LLMExceptionKind } from './types';
 import type { StreamChunk, StreamingLLMProvider } from './types';
 import type { ProviderConfig } from './provider-config';
-import { cleanLLMResponse, filterStreamingText } from './clean-response';
+import { cleanLLMResponse, filterStreamingText, parseCoachBriefing } from './clean-response';
 
 const LLM_TIMEOUT_MS = 30_000;
 
@@ -375,17 +375,18 @@ export async function suggestLabel(input: LabelSuggestionInput): Promise<string>
 }
 
 export interface DailyBriefingInput {
-  streakDays: number;
-  recentSessions: Session[];
   personality: CoachPersonality;
   displayName?: string;
-  isRestDayToday?: boolean;
+  pacing: PacingContext;
   llmSettings: LLMSettings;
   signal?: AbortSignal;
 }
 
 export interface GenerateDailyBriefingResult {
   briefing: string;
+  summary: string;
+  suggestion: string;
+  usedFallback: boolean;
   providerName: string;
   model: string;
   personalityUsed: CoachPersonality;
@@ -402,30 +403,20 @@ export async function generateDailyBriefing(
   const provider = createLLMProvider(config);
   const rawSystemPrompt = getCoachSystemPrompt(input.personality);
   const systemPrompt = personalizeSystemPrompt(rawSystemPrompt, input.displayName);
-  const userText = buildDailyBriefingUserText({
-    streakDays: input.streakDays,
-    recentSessions: input.recentSessions,
-    displayName: input.displayName,
-    isRestDayToday: input.isRestDayToday,
-  });
-
+  const userText = buildDailyBriefingUserText(input.pacing);
+  const recommendation = { action: input.pacing.action, reasons: input.pacing.reasons };
   const response = await provider.completeSingle({
     systemPrompt,
     userText,
     signal: withTimeout(input.signal),
   });
-
-  if (!response.content) {
-    throw new LLMException('Empty briefing response from model.');
-  }
-
-  const briefing = cleanLLMResponse(response.content);
-  if (!briefing) {
-    throw new LLMException('Empty briefing response after cleaning.');
-  }
+  const parsed = parseCoachBriefing(response.content ?? '', recommendation);
 
   return {
-    briefing,
+    briefing: parsed.suggestion,
+    summary: parsed.summary,
+    suggestion: parsed.suggestion,
+    usedFallback: parsed.usedFallback,
     providerName: config.providerName,
     model: config.model,
     personalityUsed: input.personality,
