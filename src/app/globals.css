@@ -6,6 +6,34 @@
 }
 
 /* ============================================================
+   THEME TOKEN REGISTRATION — the self-references are intentional.
+   Do not inline the hex values or delete this block.
+
+   Tailwind v4 emits `text-text-muted` only for a colour registered
+   in @theme. A --color-* declared on :root alone is invisible to it,
+   so every class using it silently renders as nothing. `inline`
+   makes Tailwind emit var(--color-text-muted) rather than resolving
+   the value at build time, which is what keeps the data-theme,
+   data-accent and prefers-color-scheme overrides working.
+   Enforced by tests/unit/theme/theme-tokens.test.ts.
+   ============================================================ */
+@theme inline {
+  --color-base: var(--color-base);
+  --color-surface: var(--color-surface);
+  --color-surface-2: var(--color-surface-2);
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-border: var(--color-border);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-danger: var(--color-danger);
+  --color-zen: var(--color-zen);
+  --color-hype: var(--color-hype);
+  --color-analyst: var(--color-analyst);
+  --color-buddy: var(--color-buddy);
+}
+
+/* ============================================================
    DARK THEME (default — matches Wave 1-8 design)
    ============================================================ */
 :root,
@@ -59,6 +87,13 @@
   --color-buddy: #f5a623;
   --color-athena-from: #b39ddb;
   --color-athena-to: #e6c99a;
+}
+
+/* Destructive actions. Constant across themes: this shade keeps >=4.5:1
+   against white text for the Delete button, and >=3:1 as an icon on both
+   --color-surface (#1a1816 dark) and --color-surface (#ffffff light). */
+:root {
+  --color-danger: #dc2626;
 }
 
 /* ============================================================
