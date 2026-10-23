@@ -143,6 +143,15 @@ Also from the review: the dependency size is stated as installed (62 KB gzip for
 `dist/ical.js`) with ~23 KB gzip as the bundle estimate once minified, and the
 Windows-style VTIMEZONE caveat below is documented.
 
+## W8 UI design note (from the #27 review)
+
+A moved instance (`RECURRENCE-ID`) imports with a **fresh id but the same
+`calendarRef`** (the series UID), while the occurrence it replaced keeps its
+own derived id. A caller that dedupes on `id` sees a new block; a caller that
+dedupes on `calendarRef` sees the same event moved. The Wave 8 UI must pick the
+`calendarRef` key when reconciling with Google Calendar or a re-import, and must
+not assume an id is stable across a move.
+
 ## Not tested / not in scope
 
 - File picker, share sheet, pasted subscription URL fetch, export/import
