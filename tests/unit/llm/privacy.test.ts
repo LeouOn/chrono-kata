@@ -92,6 +92,21 @@ describe('private mode', () => {
     ).toThrow(/Private mode is on/);
   });
 
+  it('refuses a local preset that was pointed at a cloud address', async () => {
+    // The preset name is a label, not a promise: "lmstudio" with a public base
+    // URL is a request to a public host and must be refused.
+    setLLMAppStateReader(async () => ({ privateMode: true }));
+    const fetchMock = stubFetch();
+
+    await expect(
+      suggestLabel({
+        note: 'evening walk',
+        llmSettings: llmSettings({ lmstudio: { ...cloudEntry } }),
+      }),
+    ).rejects.toThrow(/Private mode is on/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('allows a local provider in the provider factory', () => {
     expect(() =>
       createLLMProvider(
