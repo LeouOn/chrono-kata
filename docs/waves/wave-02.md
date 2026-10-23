@@ -150,3 +150,20 @@ outside it:
    `TZ=Pacific/Kiritimati`** (UTC+14) because its fixtures used `10:00Z`
    instants, which are the next local day in UTC+14. Fixed in PR #23 (same
    local-calendar-instant pattern as #11).
+
+## Deliberate choices and limits (backlog, not this wave)
+
+- **Single-step undo**: the sheet keeps one `lastAction`, so only the most recent
+  Done/Drop can be undone. A multi-step undo stack is future work.
+- **Count filters in memory**: the inbox count is derived by filtering the whole
+  task list on each render. Fine for a personal inbox; revisit with Wave 19
+  (performance) if lists grow to the thousands.
+- **Reduced motion**: the app has no `prefers-reduced-motion` handling anywhere
+  today; the new sheet animates like every other modal. App-wide work for W19,
+  not solved here.
+- **Capture while the sheet is open**: a task captured mid-session joins the
+  queue once the app invalidates the tasks query (which every capture path
+  does); the sheet shows it on the next render.
+- **Modal focus restore**: closing from a step whose input unmounts defeated the
+  shared Modal's restore, so the inbox screen and the step's Back button put
+  focus back explicitly.
