@@ -16,7 +16,7 @@ const COACH_EMOJIS: Record<string, string> = {
 
 export function DailyBriefingCard() {
   const { settings } = useSettings();
-  const { summary, suggestion, briefing, usedFallback, providerName, model, isLoading, error, generate, contextReady } = useDailyBriefing();
+  const { summary, suggestion, briefing, usedFallback, providerName, model, isLoading, error, generate, contextReady, contextError } = useDailyBriefing();
   const personality = settings?.selectedCoachPersonality ?? 'zen';
   const emoji = COACH_EMOJIS[personality] ?? '🥋';
 
@@ -37,7 +37,7 @@ export function DailyBriefingCard() {
               {personality} Coach Briefing
             </div>
             <div className="text-[11px] text-text-muted">
-              Get an intentional focus and motivation for today
+              {contextError ?? 'Get an intentional focus and motivation for today'}
             </div>
           </div>
         </div>
