@@ -176,10 +176,18 @@ function isKnownIanaZone(timeZone: string): boolean {
  */
 function resolveTime(time: ICAL.Time, tzid: string | null): Date | null {
   if (time.isDate) return localMidnight(partsOf(time));
+  // An IANA zone name always resolves through the tz database, even when the
+  // file carries a VTIMEZONE: a stale VTIMEZONE made the same TZID resolve
+  // differently from the same event without one, and landed on a wrong instant.
+  // This matches the rest of the app, which trusts the tz database everywhere.
+  // Windows zone names are not IANA, so those files still use their VTIMEZONE.
+  if (tzid && isKnownIanaZone(tzid)) {
+    return wallTimeInZoneToUtc(partsOf(time), tzid);
+  }
   if (!isFloating(time)) {
-    // A VTIMEZONE claims the zone. ical.js throws while expanding unusable
-    // rules (and would otherwise resolve them to offset 0), so a zone we
-    // cannot evaluate is treated as unsupported rather than guessed.
+    // A non-IANA VTIMEZONE claims the zone. ical.js throws while expanding
+    // unusable rules (and would otherwise resolve them to offset 0), so a zone
+    // we cannot evaluate is treated as unsupported rather than guessed.
     try {
       const resolved = time.toJSDate();
       return Number.isFinite(resolved.getTime()) ? resolved : null;
@@ -188,8 +196,7 @@ function resolveTime(time: ICAL.Time, tzid: string | null): Date | null {
     }
   }
   if (!tzid) return localWallTime(partsOf(time));
-  if (!isKnownIanaZone(tzid)) return null;
-  return wallTimeInZoneToUtc(partsOf(time), tzid);
+  return null;
 }
 
 function propTzid(component: ICAL.Component, name: string): string | null {

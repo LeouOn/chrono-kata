@@ -14,7 +14,8 @@ as it is and treats ICS as additive.
 - `tests/unit/ics/` — 64 tests (export 15, import 27, round trip 7, TZ 8,
   review follow-ups 7)
 - `tests/fixtures/ics/` — synthetic Google-, Apple- and Outlook-shaped exports,
-  plus a broken-VTIMEZONE file and a RECURRENCE-ID override file
+  plus a broken-VTIMEZONE file, a stale-VTIMEZONE file and a RECURRENCE-ID
+  override file
 
 ## Time encoding: UTC instants (`DTSTART:…Z`)
 
@@ -111,6 +112,13 @@ event). No real calendar data.
 
 ## Follow-ups from the #26 review — fixed
 
+Post-#27 review recommendation, fixed in #28: an IANA `TZID` resolves through
+the tz database even when the file ships a VTIMEZONE (`stale-timezone.ics`
+claims +01:00 all year for Europe/Helsinki; the event now imports as 06:00Z,
+the same as without any VTIMEZONE). Non-IANA names still use the file's
+VTIMEZONE, which is the only source Intl cannot provide.
+
+
 All four review findings are fixed, each with a fixture and a test
 (`tests/unit/ics/ics-followups.test.ts`):
 
@@ -148,7 +156,10 @@ Windows-style VTIMEZONE caveat below is documented.
 - A Windows-style VTIMEZONE can disagree with the real zone rule (Outlook's
   "W. Europe Standard Time" says +02:00 for EU summer time where the real rule
   is +03:00), so those files yield instants one hour off. That is in the file,
-  not the parser; prefer the IANA path when the name is known.
+  not the parser: Intl cannot resolve a Windows zone name, so the file's
+  VTIMEZONE is the only source. **IANA names always resolve through the tz
+  database**, even when the file carries a VTIMEZONE, so a stale or wrong
+  VTIMEZONE cannot produce a wrong instant for a named zone.
 - The exporter was re-read by ical.js (a different implementation), not by an
   independent third-party parser or a real calendar app.
 - An override's `RECURRENCE-ID` is matched to an expanded occurrence within one
