@@ -1,11 +1,60 @@
-# Wave 9 — Work block → timed session flow (part 1: outcome core)
+# Wave 9 — Work block → timed session flow
 
-**Status:** part 1 complete · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 9
+**Status:** parts 1 and 2 complete (behind `taskInbox`) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 9
 **Status map:** `docs/ROADMAP_STATUS.md` W9
 
-Part 1 is the data + pure-logic core. No screens, no timer changes, no LLM.
-The end-of-session sheet, the task picker in the timer and the "pick up here"
-banner stay in part 2, which builds on the flag-gated inbox hooks.
+Part 1 is the data + pure-logic core; part 2 is the flag-gated UI (picker,
+end-of-session sheet, breadcrumb display and the actualMin recompute). No LLM.
+
+## Part 2: linked sessions (behind `taskInbox`, default OFF)
+
+With the flag off the practice form, timer and FAB are identical to before (the
+existing Playwright specs are unchanged and the new ones assert the picker/outcome
+are absent).
+
+- **"Working on" picker** in the session form: optional; lists active tasks
+  (inbox/next/scheduled, newest touch first) and active projects. Selecting a
+  task sets `taskId`, prefills the activity label from its `nextAction`/title and
+  the planned minutes from `estimateMin`; selecting a project sets `projectId`.
+  The selection's breadcrumb shows as a calm "Pick up here: …" line.
+- **Entry points**: the picker in the form, a **Start** button on each inbox row,
+  and **Start now** in process mode after a "Next action" outcome. All open the
+  same form pre-linked (a small app-level launcher context); nothing else on Home
+  changed.
+- **End-of-session sheet** (linked sessions only): outcome `Done / Progress /
+  Blocked` (neutral wording; "Blocked is not a failure"), and a "Pick up here
+  next time" field. The breadcrumb is required for a project; saving without one
+  shows a plain sentence and writes nothing. Saves go through
+  `saveSessionWithOutcome`, so session + task + project land atomically.
+- **Breadcrumb display**: on the inbox row and in process mode ("Pick up here:
+  …") and in the picker. `Task.nextAction` is updated by the outcome plan; the
+  UI shows it as the suggestion, never auto-applies anything else.
+- **actualMin after edits**: `sessionRepo.update/delete` recompute the task's
+  cached `actualMin` from its linked sessions inside the same transaction
+  (PR A, #34), so editing or deleting a linked session keeps the number
+  truthful; the inbox row shows "Nm logged".
+- **Timer**: the existing engine is reused; a task's estimate becomes the
+  session's planned minutes via the prefill. The draft stored in localStorage now
+  also carries `taskId`/`projectId` (old drafts without them restore as
+  unlinked). Pomodoro-style intervals are **deferred**: the timer has no interval
+  mode today, and adding one is not W9's job (the bells already exist for the
+  soft cap).
+- **Accessibility**: the picker, outcome group and breadcrumb are named; the
+  session form's pre-existing controls got explicit `label htmlFor` associations
+  (Repetitions, Activity label, Notes, manual Minutes) with no visual or
+  behavioural change, and a tripwire test in `session-outcome-ui.test.tsx`
+  asserts every control in a linked session has an accessible name.
+
+## Known limits (backlog, not this wave)
+
+- **Restoring a backup keeps the file's cached `actualMin`.** Import writes
+  session rows directly and never goes through the recompute path, so a stale
+  total in an old export stays stale until those sessions are edited. A
+  "recompute all task actual minutes" maintenance action is a sensible backlog
+  item; it is not built here.
+- Single-step undo remains a deliberate choice in process mode.
+- A manual `actualMin` override (there is no flag for one yet) would be
+  overwritten by any minute-affecting edit; documented in the recompute helper.
 
 ## Shipped
 

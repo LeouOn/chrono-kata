@@ -11,6 +11,9 @@ export interface SessionTimerDraft {
   softCapMinutes: number | null;
   capPromptShown: boolean;
   keepGoing: boolean;
+  /** Wave 9: the task/project this session is for, so a reload keeps the link. */
+  taskId: string | null;
+  projectId: string | null;
 }
 
 export function readSessionTimer(): SessionTimerDraft | null {
@@ -32,6 +35,9 @@ export function readSessionTimer(): SessionTimerDraft | null {
       softCapMinutes: parsed.softCapMinutes ?? null,
       capPromptShown: parsed.capPromptShown === true,
       keepGoing: parsed.keepGoing === true,
+      // Old drafts predate the link fields: absent means "practice session".
+      taskId: typeof parsed.taskId === 'string' ? parsed.taskId : null,
+      projectId: typeof parsed.projectId === 'string' ? parsed.projectId : null,
     };
   } catch {
     return null;

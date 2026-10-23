@@ -8,6 +8,7 @@ import { streakRepo } from '@/lib/db/streak.repo';
 import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { checkInRepo } from '@/lib/db/check-in.repo';
+import { saveSessionWithOutcome } from '@/lib/db/session-outcome.repo';
 import { computeStreak } from '@/lib/streak/compute-streak';
 import { DEFAULT_LOW_ENERGY_REST_THRESHOLD } from '@/lib/schemas/settings';
 import { generateCoachCommentStream } from '@/lib/llm/llm-service';
@@ -170,7 +171,22 @@ export function useSessions() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (input: SessionInput) => sessionRepo.save(input),
+    mutationFn: async (input: SessionInput) => {
+      // A session linked to a task/project must write its outcome atomically;
+      // unlinked (practice) sessions keep the ordinary single-write path.
+      if (input.taskId || input.projectId) {
+        const result = await saveSessionWithOutcome(input);
+        if (!result.ok) {
+          throw new Error(
+            result.reason === 'project-breadcrumb-required'
+              ? 'Add a pick-up note for this project, or save it as a practice session.'
+              : 'Could not save the session outcome.',
+          );
+        }
+        return result.session;
+      }
+      return sessionRepo.save(input);
+    },
     onMutate: async (input) => {
       await qc.cancelQueries({ queryKey: KEY });
       const optimistic: Session = {
@@ -192,6 +208,10 @@ export function useSessions() {
     onSuccess: async (saved) => {
       await recomputeStreakSideEffect();
       invalidateBoth();
+      // Linked sessions changed a task's actualMin/nextAction or a project's
+      // breadcrumb, so the task/project lists must refresh too.
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
       // Fire-and-forget coach comment (don't await; UI updates via liveQuery)
       void generateCoachCommentSideEffect(saved);
       // Fire-and-forget calendar sync (enqueues on failure)

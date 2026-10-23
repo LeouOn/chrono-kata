@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { useInbox } from '@/hooks/useTasks';
 import { ProcessMode } from './ProcessMode';
 import { InlineCapture } from './InlineCapture';
+import { useSessionLauncher } from '@/components/session/SessionLauncher';
 import { toLocalDateString } from '@/lib/utils/date';
 
 /**
@@ -16,6 +17,7 @@ export function InboxScreen() {
   const { inbox, count, isLoading } = useInbox();
   const [processing, setProcessing] = useState(false);
   const processButtonRef = useRef<HTMLButtonElement>(null);
+  const sessionLauncher = useSessionLauncher();
 
   return (
     <div className="space-y-4">
@@ -57,13 +59,35 @@ export function InboxScreen() {
           <li key={task.id}>
             <Card className="space-y-1">
               <p className="text-text break-words">{task.title}</p>
+              {task.nextAction ? (
+                <p className="text-xs text-text-muted">
+                  Pick up here: <span className="text-text">{task.nextAction}</span>
+                </p>
+              ) : null}
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-muted">
                 <span>added {toLocalDateString(task.createdAt)}</span>
                 {task.estimateMin ? <span>~{task.estimateMin}m</span> : null}
+                {task.actualMin ? <span>{task.actualMin}m logged</span> : null}
                 {task.energy ? <span>{task.energy} energy</span> : null}
                 {(task.context ?? []).map((context) => (
                   <span key={context}>@{context}</span>
                 ))}
+              </div>
+              <div className="pt-1">
+                <Button
+                  variant="ghost"
+                  className="min-h-11 px-3 text-sm"
+                  aria-label={`Start a session for ${task.title}`}
+                  onClick={() =>
+                    sessionLauncher.openForLink({
+                      taskId: task.id,
+                      label: (task.nextAction || task.title).slice(0, 50),
+                      estimateMin: task.estimateMin ?? null,
+                    })
+                  }
+                >
+                  Start
+                </Button>
               </div>
             </Card>
           </li>

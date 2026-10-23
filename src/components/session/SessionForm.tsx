@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useId, useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -19,6 +19,10 @@ import { dispatchToast } from '@/components/ui/Toast';
 import { playIntervalPing } from '@/lib/audio/bell-synthesizer';
 import { cancelCapNotification, scheduleCapNotification } from '@/lib/timers/cap-notification';
 import { readSessionTimer, stoppedAtCap, writeSessionTimer, type SessionTimerDraft } from '@/lib/timers/session-timer';
+import { WorkingOnPicker, type WorkingOnSelection } from './WorkingOnPicker';
+import type { SessionLink } from './SessionLauncher';
+import { cleanBreadcrumb } from '@/lib/sessions/outcome';
+import { messageOf } from '@/lib/tasks/messages';
 import { pauseHabitTimer } from '@/lib/timers/habit-timer';
 import type { Session, SessionInput } from '@/lib/schemas/session';
 import type { Rating, MultiDimRating } from '@/lib/schemas/session';
@@ -30,11 +34,13 @@ interface Props {
   open: boolean;
   initial?: Session | null;
   initialTemplate?: KataTemplate | null;
-  onSave: (input: SessionInput) => void;
+  onSave: (input: SessionInput) => void | Promise<void>;
+  /** W9: open the form already linked to a task/project (from an inbox row or process mode). */
+  initialLink?: SessionLink | null;
   onCancel: () => void;
 }
 
-export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }: Props) {
+export function SessionForm({ open, initial, initialTemplate, onSave, onCancel, initialLink }: Props) {
   const { settings } = useSettings();
   const ratingStyle = settings?.ratingStyle ?? 'stars';
   const { sessions } = useSessions();
@@ -70,12 +76,27 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
   const [softCapMinutes, setSoftCapMinutes] = useState<number | null>(
     initialTemplate?.softCapMinutes ?? null,
   );
+  // Wave 9: the optional task/project link and the end-of-session outcome.
+  const [taskId, setTaskId] = useState<string | null>(initial?.taskId ?? initialLink?.taskId ?? null);
+  const [projectId, setProjectId] = useState<string | null>(
+    initial?.projectId ?? initialLink?.projectId ?? null,
+  );
+  const [outcome, setOutcome] = useState<'done' | 'progress' | 'blocked'>(
+    initial?.outcome ?? 'progress',
+  );
+  const [breadcrumb, setBreadcrumb] = useState(initial?.breadcrumb ?? '');
+  const isLinked = Boolean(taskId || projectId);
   const [templateId, setTemplateId] = useState<string | null>(
     initial?.kataTemplateId ?? initialTemplate?.id ?? null,
   );
   const [capPromptShown, setCapPromptShown] = useState(false);
   const [keepGoing, setKeepGoing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Explicit label associations: sibling labels name nothing on their own.
+  const formId = useId();
+  const repsId = `${formId}-reps`;
+  const activityId = `${formId}-activity`;
+  const noteId = `${formId}-note`;
 
   const labelSuggestions = useMemo(
     () => buildLabelSuggestions(sessions, templates, activityLabel),
@@ -100,6 +121,10 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       setStartedAt(initial.startedAt);
       setSoftCapMinutes(null);
       setTemplateId(initial.kataTemplateId ?? null);
+      setTaskId(initial.taskId ?? null);
+      setProjectId(initial.projectId ?? null);
+      setOutcome(initial.outcome ?? 'progress');
+      setBreadcrumb(initial.breadcrumb ?? '');
       setTimerStartedAt(null);
     } else if (draft) {
       applyDraft(draft);
@@ -131,6 +156,13 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       setSoftCapMinutes(null);
       setTemplateId(null);
       setTimerStartedAt(null);
+      // A launch from an inbox row or process mode: link plus its label/estimate.
+      setTaskId(initialLink?.taskId ?? null);
+      setProjectId(initialLink?.projectId ?? null);
+      setOutcome('progress');
+      setBreadcrumb('');
+      if (initialLink?.label) setActivityLabel(initialLink.label.slice(0, 50));
+      if (initialLink?.estimateMin != null) setDurationMinutes(initialLink.estimateMin);
     }
     if (!draft) {
       setCapPromptShown(false);
@@ -140,7 +172,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
     setStartedAtTouched(Boolean(draft));
     setConfirmDiscardOpen(false);
     setError(null);
-  }, [open, initial, initialTemplate]);
+  }, [open, initial, initialTemplate, initialLink]);
 
   function applyDraft(draft: SessionTimerDraft) {
     setMode(draft.mode);
@@ -153,6 +185,8 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
     setCapPromptShown(draft.capPromptShown);
     setKeepGoing(draft.keepGoing);
     setTemplateId(draft.templateId);
+    setTaskId(draft.taskId);
+    setProjectId(draft.projectId);
     setTimerStartedAt(new Date(draft.startedAtMs));
     if (draft.softCapMinutes != null) {
       void scheduleCapNotification(new Date(draft.startedAtMs + draft.softCapMinutes * 60_000));
@@ -180,6 +214,8 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       softCapMinutes: cap,
       capPromptShown: false,
       keepGoing: false,
+      taskId,
+      projectId,
     });
     if (cap != null) void scheduleCapNotification(new Date(now.getTime() + cap * 60_000));
   }
@@ -215,6 +251,8 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       softCapMinutes,
       capPromptShown,
       keepGoing,
+      taskId,
+      projectId,
     });
   }, [
     open,
@@ -229,6 +267,8 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
     softCapMinutes,
     capPromptShown,
     keepGoing,
+    taskId,
+    projectId,
   ]);
 
   useEffect(() => {
@@ -262,7 +302,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
@@ -276,6 +316,12 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
     }
     if (mode === 'reps' && (reps == null || reps < 1)) {
       setError('Enter a rep count.');
+      return;
+    }
+
+    const cleanedBreadcrumb = cleanBreadcrumb(breadcrumb);
+    if (projectId && cleanedBreadcrumb === '') {
+      setError('Add a pick-up note for this project, or save it as a practice session.');
       return;
     }
 
@@ -293,6 +339,14 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
       activityLabel: activityLabel.trim() || undefined,
       note: note.trim() || undefined,
       kataTemplateId: templateId,
+      ...(isLinked
+        ? {
+            taskId,
+            projectId,
+            outcome,
+            breadcrumb: cleanedBreadcrumb === '' ? null : cleanedBreadcrumb,
+          }
+        : {}),
       focusRating,
       energyRating,
       moodRating,
@@ -304,7 +358,11 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
     };
     writeSessionTimer(null);
     void cancelCapNotification();
-    onSave(input);
+    try {
+      await onSave(input);
+    } catch (saveError) {
+      setError(messageOf(saveError));
+    }
   }
 
   return (
@@ -327,6 +385,23 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
           ))}
         </div>
 
+        <WorkingOnPicker
+          taskId={taskId}
+          projectId={projectId}
+          onSelect={(selection: WorkingOnSelection) => {
+            setTaskId(selection.taskId);
+            setProjectId(selection.projectId);
+            if (selection.label && activityLabel.trim() === '') setActivityLabel(selection.label);
+            if (
+              selection.estimateMin != null &&
+              !timerStartedAt &&
+              (durationMinutes == null || durationMinutes === 0)
+            ) {
+              setDurationMinutes(selection.estimateMin);
+            }
+          }}
+        />
+
         {/* Mode-specific input */}
         {mode === 'timed' ? (
           timerStartedAt || durationMinutes == null ? (
@@ -348,6 +423,7 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
                   min="1"
                   max="1440"
                   step="any"
+                  aria-label="Minutes"
                   placeholder="e.g. 20"
                   value={durationMinutes ?? ''}
                   onChange={(e) =>
@@ -374,10 +450,14 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
           )
         ) : (
           <div>
-            <label className="text-xs uppercase tracking-wide text-text-muted block mb-1">
+            <label
+              htmlFor={repsId}
+              className="text-xs uppercase tracking-wide text-text-muted block mb-1"
+            >
               Repetitions
             </label>
             <input
+              id={repsId}
               type="number"
               min="1"
               max="100000"
@@ -469,11 +549,15 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
 
         {/* Activity label */}
         <div>
-          <label className="text-xs uppercase tracking-wide text-text-muted block mb-1">
+          <label
+            htmlFor={activityId}
+            className="text-xs uppercase tracking-wide text-text-muted block mb-1"
+          >
             Activity label (optional)
           </label>
           <div className="flex gap-2">
             <input
+              id={activityId}
               type="text"
               placeholder="e.g. meditation, kata, deep work"
               value={activityLabel}
@@ -512,12 +596,75 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel }
           )}
         </div>
 
+        {isLinked ? (
+          <div className="space-y-3 pt-1 border-t border-border">
+            <div>
+              <div
+                id="session-outcome-label"
+                className="text-xs uppercase tracking-wide text-text-muted mb-2"
+              >
+                How did it end?
+              </div>
+              <div
+                role="group"
+                aria-labelledby="session-outcome-label"
+                className="grid grid-cols-3 gap-2"
+              >
+                {(['done', 'progress', 'blocked'] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={outcome === option}
+                    onClick={() => setOutcome(option)}
+                    className={`py-2.5 rounded-xl text-sm capitalize transition-colors min-h-11 ${
+                      outcome === option
+                        ? 'bg-accent text-base'
+                        : 'bg-surface-2 text-text-muted border border-border'
+                    }`}
+                  >
+                    {option === 'done' ? 'Done' : option === 'progress' ? 'Progress' : 'Blocked'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-text-muted mt-1">
+                Blocked is not a failure — it just means something else has to move first.
+              </p>
+            </div>
+            <div>
+              <label
+                htmlFor="session-breadcrumb"
+                className="text-xs uppercase tracking-wide text-text-muted block mb-1"
+              >
+                Pick up here next time {projectId ? <span className="text-accent">*</span> : null}
+              </label>
+              <input
+                id="session-breadcrumb"
+                type="text"
+                value={breadcrumb}
+                onChange={(event) => setBreadcrumb(event.target.value)}
+                maxLength={500}
+                placeholder="e.g. finish the second paragraph"
+                className="w-full bg-surface-2 rounded-xl px-4 py-2.5 text-text text-sm border border-border focus:border-accent outline-none min-h-11"
+              />
+              {projectId ? (
+                <p className="text-[11px] text-text-muted mt-1">
+                  Projects need a note so the next session has a starting point.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         {/* Note */}
         <div>
-          <label className="text-xs uppercase tracking-wide text-text-muted block mb-1">
+          <label
+            htmlFor={noteId}
+            className="text-xs uppercase tracking-wide text-text-muted block mb-1"
+          >
             Notes (optional)
           </label>
           <textarea
+            id={noteId}
             placeholder="What did you practice? How was your form?"
             value={note}
             onChange={(e) => setNote(e.target.value)}
