@@ -172,7 +172,7 @@ describe('rankPicks signals', () => {
     expect(picksEmptyDay[0]?.reasons.join(' ')).toMatch(/Trading has had little time today/);
   });
 
-  it('keeps other domains out of an anchor window, but lets the anchor domain use it', () => {
+  it('lets the anchor domain use its window and keeps other domains out of it', () => {
     const anchorDomain = '55555555-5555-4555-8555-555555555555';
     const otherDomain = '66666666-6666-4666-8666-666666666666';
     const anchor: AnchorInterval = {
@@ -183,15 +183,52 @@ describe('rankPicks signals', () => {
       end: new Date(localWallClockToEpoch('2026-06-15', '11:00')),
     };
 
-    const other = task({ title: 'other domain', domainId: otherDomain, estimateMin: 520 });
-    const same = task({ title: 'same domain', domainId: anchorDomain, estimateMin: 520 });
+    // computeCapacity has already removed the anchor from the 400 minutes, so
+    // an other-domain task must fit inside 400; the anchor's own domain gains
+    // the 120-minute window back (400 + 120).
+    const other = task({ title: 'other domain', domainId: otherDomain, estimateMin: 450 });
+    const same = task({ title: 'same domain', domainId: anchorDomain, estimateMin: 450 });
 
-    const picks = rankPicks({ ...baseInput, tasks: [other, same], anchors: [anchor] });
+    const picks = rankPicks({
+      ...baseInput,
+      capacity: { capacityMin: 400 },
+      tasks: [other, same],
+      anchors: [anchor],
+    });
     const titles = picks.map((pick) => pick.task.title);
-    // 520 > 630 - 120 for the other domain, so it cannot be a pick today.
     expect(titles).not.toContain('other domain');
-    // The anchor's own domain can use its window.
     expect(titles).toContain('same domain');
+  });
+
+  it('does not double-subtract anchors that capacity already removed (integration)', async () => {
+    const { computeCapacity } = await import('@/lib/planning/capacity');
+    const { expandAnchors } = await import('@/lib/planning/anchors');
+    const anchors = [
+      {
+        id: '88888888-8888-4888-8888-888888888888',
+        title: 'Lunch',
+        weekdays: [0, 1, 2, 3, 4, 5, 6],
+        start: '12:00',
+        end: '14:00',
+        domainId: null,
+      },
+    ];
+    const capacity = computeCapacity({
+      day: '2026-06-17',
+      wakingHours: { start: '07:00', end: '22:00' },
+      fixedBlocks: [],
+      anchors,
+    });
+    expect(capacity.capacityMin).toBe(585);
+
+    const picks = rankPicks({
+      ...baseInput,
+      now: new Date(2026, 5, 17, 9, 0),
+      capacity,
+      anchors: expandAnchors(anchors, '2026-06-17'),
+      tasks: [task({ title: 'big task', estimateMin: 500 })],
+    });
+    expect(picks.map((pick) => pick.task.title)).toEqual(['big task']);
   });
 
   it('counts a task without an estimate as the documented default (25)', () => {
@@ -199,6 +236,39 @@ describe('rankPicks signals', () => {
     const unbounded = task({ title: 'no estimate' });
     expect(rankPicks({ ...baseInput, capacity: { capacityMin: 24 }, tasks: [unbounded] })).toHaveLength(0);
     expect(rankPicks({ ...baseInput, capacity: { capacityMin: 25 }, tasks: [unbounded] })).toHaveLength(1);
+  });
+});
+
+describe('rankPicks uses local calendar days, not 24-hour elapsed time', () => {
+  it('does not call a due date at 00:00 tomorrow "passed" at 23:00 tonight', () => {
+    const now = new Date(2026, 5, 15, 23, 0);
+    const dueTomorrow = task({ title: 'tomorrow', dueAt: new Date(2026, 5, 16, 0, 0), estimateMin: 10 });
+    const picks = rankPicks({ ...baseInput, now, tasks: [dueTomorrow] });
+    // within-3 tier (30) + energy fit (10), not the passed tier (40).
+    expect(picks[0]?.score).toBe(40);
+    expect(picks[0]?.reasons.join(' ')).toMatch(/due 2026-06-16/);
+    expect(picks[0]?.reasons.join(' ')).not.toMatch(GUILT);
+  });
+
+  it('counts whole calendar days for the due tiers', () => {
+    const now = new Date(2026, 5, 15, 23, 0);
+    const inThree = task({ title: 'in three', dueAt: new Date(2026, 5, 18, 23, 59), estimateMin: 10 });
+    const inFifteen = task({ title: 'in fifteen', dueAt: new Date(2026, 5, 30, 23, 59), estimateMin: 10 });
+    const picks = rankPicks({ ...baseInput, now, tasks: [inThree, inFifteen] });
+    const byTitle = new Map(picks.map((pick) => [pick.task.title, pick.score]));
+    expect(byTitle.get('in three')).toBe(40); // 30 due + 10 energy
+    expect(byTitle.get('in fifteen')).toBe(10); // no due points + 10 energy
+  });
+
+  it('counts a session 6 local days ago and not one 7 days ago', () => {
+    const now = new Date(2026, 5, 15, 23, 0);
+    const projectWithDebt = project({ title: 'Cadence', cadencePerWeek: 3 });
+    const sixDaysAgo = session({ projectId: projectWithDebt.id, startedAt: new Date(2026, 5, 9, 23, 30) });
+    const sevenDaysAgo = session({ projectId: projectWithDebt.id, startedAt: new Date(2026, 5, 8, 0, 30) });
+
+    expect(cadenceDebt(projectWithDebt, [sixDaysAgo], now)).toBe(2);
+    expect(cadenceDebt(projectWithDebt, [sevenDaysAgo], now)).toBe(3);
+    expect(cadenceDebt(projectWithDebt, [sixDaysAgo, sevenDaysAgo], now)).toBe(2);
   });
 });
 

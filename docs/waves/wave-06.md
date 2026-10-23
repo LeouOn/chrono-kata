@@ -61,6 +61,45 @@ untouched.
   reason reads `due YYYY-MM-DD`; tests assert the absence of
   overdue/late/behind/missed wording in every reason and message.
 
+## Review findings fixed (PR #37, dev-lead's oracle)
+
+dev-lead reviewed with a brute-force oracle that scans every real minute around
+each 2026 offset change and compares the functions in 18 zones. It found four
+real defects, all fixed here:
+
+1. **DST resolution east of UTC+12** (`Pacific/Auckland`, `Pacific/Chatham`):
+   the ±12h offset sampling put both samples on the same side of a transition,
+   so a fall-back time resolved to the *second* occurrence and a spring-forward
+   gap landed before it. Sampling is now ±14h (the largest UTC offset), with
+   Auckland/Chatham tests; the oracle goes red in Auckland if this is reverted.
+2. **Overnight waking windows dropped anchors after midnight**: capacity only
+   expanded anchors for the window's start day, so an anchor starting tomorrow
+   (or today's cross-midnight tail) inside a night-owl window was lost.
+   Anchors for `day` **and `day + 1`** are expanded and clipped to the window.
+3. **Anchor minutes were subtracted twice in `rankPicks`**: capacity already
+   excludes every anchor, so a task now only *gains* the windows of its own
+   domain (`capacityMin + same-domain anchor minutes`). An integration test
+   builds capacity and anchors from the same input and feeds both to the ranker.
+4. **Due tiers and the cadence window used 24-hour elapsed math** instead of
+   local calendar days: a due date at 00:00 tomorrow is not "passed" at 23:00
+   tonight, and "last 7 local days" is now a set of local day keys (DST-safe).
+
+**The oracle is now a permanent test** (`tests/unit/planning/oracle.test.ts`,
+credited to dev-lead): minute-scanning wall-clock and capacity oracles over
+seven zones including Auckland and Chatham, plus the rank integration check.
+It runs in well under a second. `bufferPct` is also clamped to [0, 100]
+(negative/NaN values could otherwise inflate capacity), with tests.
+
+## Known gaps (backlog, not this wave)
+
+- `rankPicks` drops a task whose estimate exceeds the available time instead of
+  suggesting it be broken down (W3); the part 2 UI should offer that.
+- Existing settings rows have no `wakingHours` until the user saves once; part 2
+  needs a resolve-with-default helper (07:00–22:00) so capacity never falls back
+  implicitly.
+- The buffer clamp covers the pure function; nothing in the UI can edit
+  `bufferPct` yet, so the clamp is a guard, not a feature.
+
 ## Deferred to part 2
 
 The morning plan screen (fixed blocks and anchors shown, picks confirmed or

@@ -21,6 +21,7 @@
  */
 
 import type { Anchor, WakingHours } from '@/lib/schemas/settings';
+import { addDays } from '@/lib/pacing/days';
 import { expandAnchors } from './anchors';
 import { elapsedMinutes, wakingWindow } from './time';
 
@@ -90,7 +91,9 @@ function clip(spans: readonly Span[], from: number, to: number): Span[] {
 }
 
 export function computeCapacity(input: CapacityInput): CapacityResult {
-  const bufferPct = input.bufferPct ?? 25;
+  // A negative/NaN buffer would hand back capacity above the free time.
+  const rawBufferPct = input.bufferPct ?? 25;
+  const bufferPct = Number.isFinite(rawBufferPct) ? Math.min(100, Math.max(0, rawBufferPct)) : 25;
   const window = wakingWindow(input.day, input.wakingHours);
 
   const fixedSpans = clip(
@@ -101,8 +104,11 @@ export function computeCapacity(input: CapacityInput): CapacityResult {
     window.start,
     window.end,
   );
+  // An overnight waking window can run into the next calendar day, so anchors
+  // that start tomorrow (or today's cross-midnight tail) must be considered
+  // too; the clip to the window keeps only the part that touches it.
   const anchorSpans = clip(
-    expandAnchors(input.anchors, input.day).map((interval) => ({
+    [...expandAnchors(input.anchors, input.day), ...expandAnchors(input.anchors, addDays(input.day, 1))].map((interval) => ({
       start: interval.start.getTime(),
       end: interval.end.getTime(),
     })),

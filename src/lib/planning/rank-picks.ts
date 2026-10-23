@@ -22,6 +22,7 @@ import type { Session } from '@/lib/schemas/session';
 import type { Task } from '@/lib/schemas/task';
 import type { AnchorInterval } from './anchors';
 import { toLocalDateString } from '@/lib/utils/date';
+import { addDays } from '@/lib/pacing/days';
 
 const DAY_MS = 86_400_000;
 
@@ -81,14 +82,21 @@ export interface RankedPick {
   readonly reasons: string[];
 }
 
-function daysBetween(now: Date, then: Date): number {
-  return Math.round((then.getTime() - now.getTime()) / DAY_MS);
+/** Whole local calendar days between two day keys (negative when `to` is past). */
+function calendarDaysBetween(fromKey: string, toKey: string): number {
+  const parts = (key: string) => key.split('-').map(Number) as [number, number, number];
+  const [fy, fm, fd] = parts(fromKey);
+  const [ty, tm, td] = parts(toKey);
+  // Date.UTC on bare calendar dates has no DST, so the difference is exact.
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / DAY_MS);
 }
 
 function duePoints(task: Task, now: Date): { points: number; reason?: string } {
   if (!task.dueAt) return { points: 0 };
+  // Local calendar days, not 24-hour elapsed time: a due date at 00:00 tomorrow
+  // is one day away at 23:00 tonight, not "passed".
   const dayKey = toLocalDateString(task.dueAt);
-  const days = daysBetween(now, task.dueAt);
+  const days = calendarDaysBetween(toLocalDateString(now), dayKey);
   if (days <= 0) {
     // The date has passed. Say what it is; do not say it is late.
     return { points: DUE_POINTS.passed, reason: `due ${dayKey}` };
@@ -100,12 +108,13 @@ function duePoints(task: Task, now: Date): { points: number; reason?: string } {
 }
 
 function sessionsInLastWeek(projectId: string, sessions: readonly Session[], now: Date): number {
-  const since = now.getTime() - 7 * DAY_MS;
+  // The last seven LOCAL days, today included. Elapsed-time windows drift by an
+  // hour across a DST change and can include or drop a session at the edge.
+  const todayKey = toLocalDateString(now);
+  const days = new Set<string>();
+  for (let offset = 0; offset < 7; offset += 1) days.add(addDays(todayKey, -offset));
   return sessions.filter(
-    (session) =>
-      session.projectId === projectId &&
-      session.startedAt.getTime() >= since &&
-      session.startedAt.getTime() <= now.getTime(),
+    (session) => session.projectId === projectId && days.has(toLocalDateString(session.startedAt)),
   ).length;
 }
 
@@ -121,13 +130,19 @@ export function cadenceDebt(project: Project, sessions: readonly Session[], now:
   return Math.max(0, wanted - sessionsInLastWeek(project.id, sessions, now));
 }
 
-/** Minutes an anchor window takes away from a task of a given domain. */
-function anchorMinutesForOtherDomains(
+/**
+ * Minutes of anchor windows that belong to the task's own domain.
+ *
+ * `computeCapacity` already removed every anchor from the capacity, so a task
+ * never *loses* anchor time; a task only *gains* the windows of its own domain,
+ * because other domains are kept out of those by construction.
+ */
+function anchorMinutesForSameDomain(
   anchors: readonly AnchorInterval[],
   domainId: string | null | undefined,
 ): number {
   const spans = anchors
-    .filter((anchor) => !anchor.domainId || anchor.domainId !== domainId)
+    .filter((anchor) => !!anchor.domainId && anchor.domainId === domainId)
     .map((anchor) => ({
       start: anchor.start.getTime(),
       end: anchor.end.getTime(),
@@ -194,8 +209,8 @@ export function rankPicks(input: RankPicksInput): RankedPick[] {
 
     const estimate = task.estimateMin ?? DEFAULT_TASK_MINUTES;
     const anchors = input.anchors ?? [];
-    const blockedMin = anchorMinutesForOtherDomains(anchors, task.domainId);
-    const availableMin = Math.max(0, capacity.capacityMin - blockedMin);
+    const ownDomainAnchorMin = anchorMinutesForSameDomain(anchors, task.domainId);
+    const availableMin = Math.max(0, capacity.capacityMin + ownDomainAnchorMin);
     if (estimate > availableMin) {
       // It does not fit today, so it is not one of today's picks.
       return null;

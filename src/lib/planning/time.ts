@@ -88,8 +88,11 @@ export function localWallClockToEpoch(dayKey: string, clock: string): number {
 
   // The two offsets that could apply: the one in effect before the requested
   // time and the one after it. They differ only around a transition.
-  const offsetBefore = offsetMinutesAt(wallUtcGuess - 12 * HOUR_MS);
-  const offsetAfter = offsetMinutesAt(wallUtcGuess + 12 * HOUR_MS);
+  // Sample ±14h, the largest UTC offset in use: at ±12h a zone east of UTC+12
+  // (Auckland +12/+13, Chatham +12:45/+13:45) can put BOTH samples on the same
+  // side of a transition, so the ambiguity/gap is never seen.
+  const offsetBefore = offsetMinutesAt(wallUtcGuess - 14 * HOUR_MS);
+  const offsetAfter = offsetMinutesAt(wallUtcGuess + 14 * HOUR_MS);
   // `getTimezoneOffset` is minutes west of UTC, so the wall clock sits that
   // many minutes *behind* the UTC guess.
   const candidateBefore = wallUtcGuess + offsetBefore * MINUTE_MS;
