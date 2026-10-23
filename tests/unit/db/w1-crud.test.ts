@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Dexie from 'dexie';
 import { resetDbForTesting, getDb } from '@/lib/db/db';
 import { ensureDefaultDomains } from '@/lib/db/init';
@@ -215,6 +215,31 @@ describe('Wave 1 repositories', () => {
     const db = (await import('@/lib/db/db')).getDb();
     expect(await db.sessions.where('taskId').equals(task.id).count()).toBe(1);
   });
+  it('ensureDefaultDomains never leaves an unhandled rejection (PR #18 class)', async () => {
+    const db = getDb();
+    await db.open();
+    const rejections: unknown[] = [];
+    const onUnhandled = (reason: unknown) => rejections.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const count = vi.spyOn(db.domains, 'count').mockRejectedValue(new Error('boom'));
+    let warnCalls = -1;
+    try {
+      // Awaited here to prove it resolves (never rejects); the layout call
+      // site uses a bare void, so any escaping rejection would be unhandled.
+      await ensureDefaultDomains();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      // Capture before finally: mockRestore() wipes call history.
+      warnCalls = warn.mock.calls.length;
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+      count.mockRestore();
+      warn.mockRestore();
+    }
+    expect(rejections).toEqual([]);
+    expect(warnCalls).toBe(1);
+  });
+
   it('ensureDefaultDomains heals an empty domains table on an existing v7 database', async () => {
     // Simulate a fresh-install seed that silently failed: the database
     // exists at v7 (populate will never fire again) with no domain rows.
