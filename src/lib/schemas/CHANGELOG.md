@@ -1,5 +1,30 @@
 # Schema Changelog
 
+## 2026-10-23 — Feature flags (roadmap Wave 0 prerequisite)
+
+`settings.ts` gains optional `flags`: a partial record over the closed
+`FlagName` union `privateMode | nativeCalendar | nudgeKinds | sync`, one
+boolean each, defaulting to `{}` on new rows. The field is optional and
+non-indexed, so Dexie is unchanged and a row written before flags existed
+stays valid — it simply has no flags and every flag reads as off unless the
+caller passes a different default. `FLAG_NAMES` is the only source of truth
+for the names, so a typo fails the typecheck.
+
+`settingsRepo.setFlag(name, value)` sets one flag without touching the others
+or any other setting, and `useFlag` / `useFlags` read a flag with an explicit
+default. No flagged feature is built by this change.
+
+## 2026-10-23 — Wave 1 repositories, links, backup fields (roadmap W1, part 2)
+
+`session.ts` gains optional `taskId`/`projectId`/`blockId` (taskId/projectId
+indexed in Dexie v7; blockId non-indexed). `habit.ts` and
+`kata-template.ts` gain an optional non-indexed `domainId`. The backup
+envelope (still `version: 2`) carries `domains`/`projects`/`tasks`/`blocks`/
+`dayPlans`/`estimates` as optional fields per the T1 rule; imports skip and
+count invalid rows and leave the new tables untouched when the keys are
+absent. New repositories (`src/lib/db/*.repo.ts`) and pure task-status
+transitions (`src/lib/tasks/transitions.ts`). See docs/waves/wave-01.md.
+
 ## 2026-10-23 — Unified data model (roadmap Wave 1)
 
 New Zod schemas for the work vocabulary (a task is never a session):
@@ -21,6 +46,7 @@ domains (Trading, Practice, Career/Build, Life admin, fixed UUIDs); fresh
 installs get the same seed via `on('populate')`. Existing rows are untouched.
 Habit/KataTemplate `domainId` and Session `taskId`/`projectId`/`blockId`
 Zod fields land with the Wave 1 repository layer.
+b4d949e (feat(settings): add the feature-flag mechanism (roadmap Wave 0 prerequisite))
 
 ## 2026-09-28 — Recovery-mode streaks (pacing T6)
 

@@ -4,6 +4,7 @@ import { getDb, resetDbForTesting } from '@/lib/db/db';
 import { checkInRepo } from '@/lib/db/check-in.repo';
 import { generateDemoData } from '@/lib/pacing/seed-data';
 import { DEFAULT_DOMAINS, DOMAIN_SEED_IDS } from '@/lib/db/seed-domains';
+import { DEXIE_V6_FIXTURES } from '../../fixtures/dexie-v6';
 
 /**
  * Migration harness: create the database at an old version with raw Dexie,
@@ -12,7 +13,8 @@ import { DEFAULT_DOMAINS, DOMAIN_SEED_IDS } from '@/lib/db/seed-domains';
  *
  * The store definitions below are a frozen snapshot of what shipped at each
  * version. Don't edit them to match `db.ts`; add the next version instead.
- * T8 adds v5 → v6 here. Wave 1 adds v6 → v7.
+ * T8 adds v5 → v6 here; the v6 dump in `tests/fixtures/dexie-v6.ts` covers
+ * that shape. Wave 1 adds v6 → v7.
  */
 const HISTORICAL_STORES: Record<number, Record<string, string>> = {
   1: {
@@ -264,6 +266,27 @@ describe('Dexie migrations', () => {
     expect((await db.sessions.get('123e4567-e89b-12d3-a456-426614174014'))?.kataTemplateId).toBe(otherId);
     expect((await db.habits.get('123e4567-e89b-12d3-a456-426614174015'))?.linkedKataTemplateId).toBe(templateId);
     expect((await db.habits.get('123e4567-e89b-12d3-a456-426614174016'))?.linkedKataTemplateId).toBeUndefined();
+  });
+
+  it('opens the synthetic v6 dump with every row intact', async () => {
+    await seedLegacyDb(6, DEXIE_V6_FIXTURES);
+
+    const db = getDb();
+    await db.open();
+    // Opened at the current version; v7 adds tables and seeds domains, but
+    // every v6 row below must survive unchanged.
+    expect(db.verno).toBe(7);
+
+    for (const [table, rows] of Object.entries(DEXIE_V6_FIXTURES)) {
+      expect(await db.table(table).count(), table).toBe(rows.length);
+    }
+
+    // Indexes that later waves may rely on still resolve on the fixture data.
+    expect(await db.sessions.where('kataTemplateId').equals('b7a04fe2-0b66-4d86-b40c-afa2b45af613').count()).toBe(1);
+    expect(await db.habitLogs.where('habitId').equals('c0dca0e9-d048-4f8e-92b5-116ec0d64eac').count()).toBe(2);
+    expect(await db.messages.where('parentId').equals('06d2d4b4-55f1-4a9b-b694-d71aa78315a3').count()).toBe(2);
+    expect(await checkInRepo.getByDate('2026-10-20')).toMatchObject({ energy: 4, fog: 1 });
+    expect(await db.domains.count()).toBe(4);
   });
 
   it('v6 → v7 preserves every v6 row and seeds the default domains', async () => {
