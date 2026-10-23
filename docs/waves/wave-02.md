@@ -90,6 +90,14 @@ word was a token, it falls back to the raw line.
 - A terminal weekday is always treated as a date, so a title that *ends* in a
   weekday word ("sprint review friday") defers instead of saying "friday".
   Put the weekday anywhere else (or use `next friday`) to keep it as text.
+- The bare-weekday rule names the **nearest upcoming day with that weekday**
+  (today included), not "the Monday of this calendar week", and it does not
+  depend on the locale's first day of the week: a user whose week starts on
+  Monday still gets the nearest Monday.
+- **A day a time zone skipped cannot be represented.** Pacific/Apia had no
+  2011-12-30, so `localDayKeyToDate('2011-12-30')` lands on 2011-12-31. No
+  local-day representation can cover a day that never existed on that device;
+  this is inherent to local day keys, not a parser defect.
 
 ## Pre-existing blockers observed while gating
 
