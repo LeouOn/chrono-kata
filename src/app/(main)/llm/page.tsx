@@ -6,6 +6,8 @@ import { ProviderList } from '@/components/llm/ProviderList';
 import { ProviderEditor } from '@/components/llm/ProviderEditor';
 import { TokenMeter } from '@/components/llm/TokenMeter';
 import { WhatGetsSent } from '@/components/llm/WhatGetsSent';
+import { ProviderRouting } from '@/components/llm/ProviderRouting';
+import { PrivateModeCard } from '@/components/llm/PrivateModeCard';
 import type { ProviderName } from '@/lib/llm/provider-defaults';
 import type { ProviderEntry } from '@/lib/schemas/llm-settings';
 import { discoverLocalProviders } from '@/lib/llm/local-discovery';
@@ -42,7 +44,7 @@ export default function LLMPage() {
     setTesting(name);
     setConnectionResult('');
     try {
-      const response = await createLLMProvider({ providerName: name, ...entry }).completeSingle({
+      const response = await createLLMProvider({ providerName: name, ...entry }, { privateMode }).completeSingle({
         systemPrompt: 'Reply with OK only.', userText: 'Connection test.', signal: AbortSignal.timeout(30_000),
       });
       if (!response.content) throw new Error('Provider returned no text.');
@@ -77,6 +79,10 @@ export default function LLMPage() {
       <p className="text-sm text-text-muted">Desktop keys appear when you run the app with <code>npm run dev:local</code>. On Android, tap Add and paste your key. Connection tests make a small provider request.</p>
       {connectionResult && <p role="status" className="text-sm text-text">{connectionResult}</p>}
       <WhatGetsSent />
+
+      <PrivateModeCard />
+
+      <ProviderRouting />
 
       <TokenMeter
         totalTokensThisMonth={settings.totalTokensThisMonth}

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DECOMPOSITION_FEATURE } from '@/lib/decomposition/schema';
 import { CoachPersonalitySchema } from './coach-personality';
 
 export const ThemeModeSchema = z.enum(['system', 'light', 'dark']);
@@ -46,6 +47,40 @@ export type Flags = z.infer<typeof FlagsSchema>;
 /** The stored shape: any subset of the flags, each one a boolean. */
 export type FlagValues = Partial<Flags>;
 
+/**
+ * The AI surfaces that can be routed to a different provider (roadmap W5).
+ *
+ * `decomposition` and `estimate` are reserved for roadmap W3 and W4 — they
+ * exist as named slots now so the routing table does not have to change
+ * shape when those waves land.
+ */
+export const LLM_FEATURES = [
+  'dailyBriefing',
+  'sessionCoachComment',
+  'weeklyReflection',
+  'conversationReply',
+  'labelSuggestion',
+  DECOMPOSITION_FEATURE,
+  'estimate',
+] as const;
+export type LLMFeature = (typeof LLM_FEATURES)[number];
+
+/**
+ * Which provider each AI surface uses.
+ *
+ * `default` is the fallback for every feature that has no explicit entry;
+ * `features` overrides it per surface. Both name a provider configured in
+ * LLM settings. Stored on the settings row, optional and non-indexed, so no
+ * Dexie version is needed.
+ */
+export const LLMRoutingSchema = z.object({
+  /** Provider used by any feature without its own entry. */
+  default: z.string().min(1).optional(),
+  /** Per-feature provider overrides. */
+  features: z.record(z.enum(LLM_FEATURES), z.string().min(1)).optional(),
+});
+export type LLMRouting = z.infer<typeof LLMRoutingSchema>;
+
 /** Check-in energy at or below this counts as a low-energy rest day. */
 export const LowEnergyRestThresholdSchema = z.union([
   z.literal(1),
@@ -84,6 +119,8 @@ export const SettingsSchema = z.object({
   lowEnergyRestThreshold: LowEnergyRestThresholdSchema.optional(),
   /** Feature flags for experimental roadmap work. Absent on rows written before flags existed. */
   flags: FlagsSchema.partial().optional(),
+  /** Per-feature provider routing. Absent on rows written before routing existed. */
+  llmRouting: LLMRoutingSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

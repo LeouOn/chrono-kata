@@ -1,6 +1,6 @@
 import type { Settings } from '@/lib/schemas/settings';
 import { DEFAULT_SETTINGS } from '@/lib/schemas/settings';
-import type { FlagName } from '@/lib/schemas/settings';
+import type { FlagName, LLMRouting } from '@/lib/schemas/settings';
 import { withFlag } from '@/lib/settings/flags';
 import { getDb } from './db';
 
@@ -10,6 +10,8 @@ export interface SettingsRepository {
   patch(patch: Partial<Settings>): Promise<Settings>;
   /** Set one feature flag, leaving every other flag and setting untouched. */
   setFlag(flag: FlagName, value: boolean): Promise<Settings>;
+  /** Replace the per-feature provider routing table. */
+  setLLMRouting(routing: LLMRouting | undefined): Promise<Settings>;
 }
 
 export class DexieSettingsRepository implements SettingsRepository {
@@ -37,6 +39,11 @@ export class DexieSettingsRepository implements SettingsRepository {
   async setFlag(flag: FlagName, value: boolean): Promise<Settings> {
     const current = await this.get();
     return this.patch({ flags: withFlag(current.flags, flag, value) });
+  }
+
+  async setLLMRouting(routing: LLMRouting | undefined): Promise<Settings> {
+    const current = await this.get();
+    return this.patch({ llmRouting: routing });
   }
 }
 
