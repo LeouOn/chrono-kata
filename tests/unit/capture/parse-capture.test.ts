@@ -311,3 +311,58 @@ describe('parseCapture', () => {
     expect(now.getTime()).toBe(NOW.getTime());
   });
 });
+
+describe('caps that keep the parser inside the Task contract', () => {
+  const options = { now: NOW, domains: DOMAINS };
+
+  it('keeps an @context longer than 50 characters in the title', () => {
+    const long = `meet @${'c'.repeat(51)}`;
+    const result = parseCapture(long, options);
+    expect(result.contexts).toEqual([]);
+    expect(result.title).toBe(long);
+  });
+
+  it('accepts an @context of exactly 50 characters', () => {
+    const tag = `@${'c'.repeat(50)}`;
+    const result = parseCapture(`meet ${tag}`, options);
+    expect(result.contexts).toEqual([tag.slice(1)]);
+    expect(result.title).toBe('meet');
+  });
+
+  it('accepts exactly 10 distinct contexts and keeps the 11th in the title', () => {
+    const ten = Array.from({ length: 10 }, (_, i) => `@t${i}`).join(' ');
+    const tenResult = parseCapture(`fix ${ten}`, options);
+    expect(tenResult.contexts).toHaveLength(10);
+    expect(tenResult.title).toBe('fix');
+
+    const eleven = Array.from({ length: 11 }, (_, i) => `@t${i}`).join(' ');
+    const elevenResult = parseCapture(`fix ${eleven}`, options);
+    expect(elevenResult.contexts).toHaveLength(10);
+    expect(elevenResult.contexts.at(-1)).toBe('t9');
+    expect(elevenResult.title).toBe('fix @t10');
+  });
+
+  it('lets repeated contexts consume no extra slot', () => {
+    const repeated = Array.from({ length: 11 }, () => '@shop').join(' ');
+    const withTen = `@a @b @c @d @e @f @g @h @i @j ${repeated}`;
+    const result = parseCapture(`fix ${withTen}`, options);
+    expect(result.contexts).toHaveLength(10);
+    expect(result.contexts).not.toContain('shop');
+    expect(result.title).toBe('fix ' + repeated);
+  });
+
+  it('keeps relative dates beyond 100 years in the title', () => {
+    const tooFar = parseCapture('renew in 36501 days', options);
+    expect(tooFar.deferUntil).toBeNull();
+    expect(tooFar.title).toBe('renew in 36501 days');
+
+    const huge = parseCapture('renew in 100000000 days', options);
+    expect(huge.deferUntil).toBeNull();
+    expect(huge.title).toBe('renew in 100000000 days');
+  });
+
+  it('accepts relative dates up to 100 years', () => {
+    expect(parseCapture('renew in 36500 days', options).deferUntil).toBe('2126-09-29');
+    expect(parseCapture('renew in 5200 weeks', options).deferUntil).toBe('2126-06-21');
+  });
+});

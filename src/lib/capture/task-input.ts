@@ -32,14 +32,30 @@ export function captureToTaskInput(
   const title = parsed.title.trim();
   if (title === '') return null;
 
-  return TaskInputSchema.parse({
+  // `z.date()` accepts an Invalid Date, so guard the one field that can carry
+  // one: a day key that does not resolve is dropped rather than persisted.
+  const deferDate = parsed.deferUntil ? localDayKeyToDate(parsed.deferUntil) : null;
+  const candidate = {
     title,
-    status: 'inbox',
+    status: 'inbox' as const,
     source: options.source ?? 'manual',
     domainId: parsed.domainId,
     estimateMin: parsed.estimateMin,
     energy: parsed.energy,
     context: parsed.contexts.length > 0 ? parsed.contexts : null,
-    deferUntil: parsed.deferUntil ? localDayKeyToDate(parsed.deferUntil) : null,
+    deferUntil: deferDate && Number.isFinite(deferDate.getTime()) ? deferDate : null,
+  };
+
+  // Total: safeParse never throws, and a value the schema rejects must not cost
+  // the user their text. Fall back to a title-only input (the field the schema
+  // only guarantees) rather than propagating a ZodError into the capture sheet.
+  const parsedInput = TaskInputSchema.safeParse(candidate);
+  if (parsedInput.success) return parsedInput.data;
+
+  const fallback = TaskInputSchema.safeParse({
+    title: title.slice(0, 200),
+    status: 'inbox',
+    source: options.source ?? 'manual',
   });
+  return fallback.success ? fallback.data : null;
 }

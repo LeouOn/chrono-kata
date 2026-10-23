@@ -17,7 +17,11 @@ table-driven tests (this part). This PR does the second half.
 - `src/lib/capture/task-input.ts` — `captureToTaskInput()` / `localDayKeyToDate()`:
   the bridge from a parsed capture to the Wave 1 `TaskInputSchema` contract.
   Dates become local midday `Date`s (never UTC midnight), and an empty line
-  yields `null` rather than an invalid row.
+  yields `null` rather than an invalid row. The bridge is **total**: it uses
+  `safeParse` and, if the input ever fails validation, falls back to a
+  title-only `TaskInput` so the user's text is never lost and no `ZodError` can
+  reach the capture sheet. A day key that does not resolve to a finite `Date` is
+  dropped (Zod's `z.date()` accepts an Invalid Date).
 - `tests/unit/capture/` — 82 tests: 51 table-driven parser cases (syntax,
   order, repetition, adversarial input), 14 splitter cases, 10 timezone/DST
   cases, 7 task-input contract cases.
@@ -61,12 +65,18 @@ word was a token, it falls back to the raw line.
 6. **Estimates are whole minutes** and out-of-range values (`~0m`, `~200h`) are
    not consumed — they stay visible in the title instead of failing validation
    later.
-7. **Title is capped at 200 characters** (TaskSchema max), on a plain slice;
+7. **Values the Task schema cannot hold stay in the title**, matching the
+   out-of-range-estimate policy: an `@context` longer than 50 characters is not
+   a tag (the text stays), and contexts beyond the 10th distinct one are left in
+   the title. Duplicate contexts consume no slot. Relative offsets beyond
+   36 500 days (100 years) are left in the title rather than producing an
+   invalid `Date`.
+8. **Title is capped at 200 characters** (TaskSchema max), on a plain slice;
    the raw line is preserved in `raw`.
-8. **Bulk splitter**: bullet/number/checkbox markers are stripped (stacked
+9. **Bulk splitter**: bullet/number/checkbox markers are stripped (stacked
    markers too), an indented non-marker line continues the previous item,
    blank lines separate, trailing `;`/`,` are dropped but a final `.` is kept.
-9. **Domain normalization** lowercases and drops non-alphanumerics, so
+10. **Domain normalization** lowercases and drops non-alphanumerics, so
    `#career/build` matches *Career/Build*; matching is case-insensitive and
    space-insensitive for the same reason.
 

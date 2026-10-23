@@ -54,6 +54,12 @@ export interface ParsedCapture {
 }
 
 const MAX_TITLE_LENGTH = 200; // TaskSchema.title max
+/** TaskSchema.context item max. Longer @tags are left in the title. */
+const MAX_CONTEXT_LENGTH = 50;
+/** TaskSchema.context max length. A 11th distinct @tag is left in the title. */
+const MAX_CONTEXTS = 10;
+/** Relative date cap: 100 years in days. Larger offsets stay in the title. */
+const MAX_RELATIVE_DAYS = 36_500;
 
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 type Weekday = (typeof WEEKDAYS)[number];
@@ -213,6 +219,9 @@ function takeDates(raw: string, now: Date, acc: Accumulator): void {
     const unit = m[3]!.toLowerCase();
     if (!Number.isFinite(count) || count < 0) return false;
     const days = unit.startsWith('week') ? count * 7 : count;
+    // Keep the "out-of-range stays in the title" policy: an offset that cannot
+    // produce a valid Date is not a date token.
+    if (!Number.isFinite(days) || days > MAX_RELATIVE_DAYS) return false;
     found.push({ at: start, key: dayKeyFrom(now, days) });
     return true;
   });
@@ -268,14 +277,19 @@ function takeEnergy(raw: string, acc: Accumulator): void {
 }
 
 function takeContexts(raw: string, acc: Accumulator): void {
-  scan(raw, CONTEXT_TAG, acc, (m, start, end) => {
+  scan(raw, CONTEXT_TAG, acc, (m) => {
     const value = m[2]!.replace(/[.,;:!?]+$/, '');
     if (!value) return false;
+    // Values the task schema cannot hold stay in the title rather than being
+    // dropped or failing later.
+    if (value.length > MAX_CONTEXT_LENGTH) return false;
     const key = value.toLowerCase();
-    if (!acc.contexts.some((existing) => existing.toLowerCase() === key)) {
-      acc.contexts.push(value);
+    if (acc.contexts.some((existing) => existing.toLowerCase() === key)) {
+      return true; // a repeat consumes no slot
     }
-    return start < end;
+    if (acc.contexts.length >= MAX_CONTEXTS) return false;
+    acc.contexts.push(value);
+    return true;
   });
 }
 
