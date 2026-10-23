@@ -12,7 +12,9 @@ import { useInbox } from '@/hooks/useTasks';
  */
 export function InboxLink() {
   const enabled = useFlag('taskInbox');
-  const { count } = useInbox();
+  // Gate the query itself: with the flag off the Home page must not read the
+  // tasks store at all, not merely hide the link.
+  const { count } = useInbox({ enabled });
   if (!enabled) return null;
 
   return (

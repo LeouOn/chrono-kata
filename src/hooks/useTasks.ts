@@ -21,10 +21,11 @@ function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
 }
 
 /** All tasks, newest touch first (repository order). */
-export function useTasks() {
+export function useTasks(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: TASKS_KEY,
     queryFn: () => taskRepo.getAll(),
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -34,9 +35,9 @@ export function useTasks() {
  * stay in the repository, and field changes (nextAction/deferUntil) go through
  * `update` first.
  */
-export function useInbox() {
+export function useInbox(options: { enabled?: boolean } = {}) {
   const qc = useQueryClient();
-  const query = useTasks();
+  const query = useTasks({ enabled: options.enabled });
 
   const inbox = (query.data ?? [])
     .filter((task) => task.status === 'inbox')

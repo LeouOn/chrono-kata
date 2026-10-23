@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { act, cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -187,6 +187,22 @@ describe('ProcessMode', () => {
     expect((await taskRepo.getById(task.id))?.status).toBe('inbox');
   });
 
+  it('shows a readable sentence when a write fails, never raw validation JSON', async () => {
+    await seed('one');
+    const spy = vi
+      .spyOn(taskRepo, 'setStatus')
+      .mockRejectedValue({ issues: [{ message: 'Could not save that task.' }] });
+    renderWithProviders(<ProcessMode open onClose={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /1: Do now/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not save that task.');
+    expect(alert.textContent ?? '').not.toContain('issues');
+    expect(alert.textContent ?? '').not.toContain('code');
+    spy.mockRestore();
+  });
+
   it('says so when the inbox is empty', async () => {
     renderWithProviders(<ProcessMode open onClose={() => {}} />);
     expect(await screen.findByText('Inbox is clear.')).toBeInTheDocument();
@@ -194,6 +210,15 @@ describe('ProcessMode', () => {
 });
 
 describe('InboxLink (Home header entry point)', () => {
+  it('does not read the tasks store at all while the flag is off', async () => {
+    const spy = vi.spyOn(taskRepo, 'getAll');
+    renderWithProviders(<InboxLink />);
+    await waitFor(() => expect(screen.queryByRole('link', { name: /Inbox/i })).toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it('renders nothing while the flag is off', async () => {
     await seed('hidden');
     renderWithProviders(<InboxLink />);

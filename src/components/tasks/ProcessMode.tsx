@@ -15,6 +15,16 @@ interface Props {
   onClose: () => void;
 }
 
+/** Turn a validation error into one sentence instead of raw Zod JSON. */
+function messageOf(error: unknown): string {
+  if (error && typeof error === 'object' && 'issues' in error) {
+    const issues = (error as { issues?: Array<{ message?: string }> }).issues;
+    const first = issues?.find((issue) => typeof issue.message === 'string' && issue.message !== '');
+    if (first?.message) return first.message;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 function toDateInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -102,7 +112,7 @@ export function ProcessMode({ open, onClose }: Props) {
         'success',
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(messageOf(e));
     } finally {
       setBusy(false);
     }
