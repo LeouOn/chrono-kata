@@ -31,10 +31,19 @@ export function isLocalProviderName(name: string): boolean {
 
 function hostOf(baseUrl: string): string | null {
   try {
+    // `URL` normalises the host the same way the browser does: it lower-cases
+    // it and rewrites decimal, octal and hex IPv4 forms (http://2130706433
+    // becomes 127.0.0.1). Classifying by the normalised host is what keeps
+    // this in step with where a request would actually go.
     return new URL(baseUrl).hostname.toLowerCase();
   } catch {
     return null;
   }
+}
+
+/** A trailing dot is the same host ("localhost." === "localhost"). */
+function withoutTrailingDot(host: string): string {
+  return host.endsWith('.') ? host.slice(0, -1) : host;
 }
 
 /** RFC1918 / loopback / link-local IPv4. */
@@ -54,15 +63,37 @@ function isPrivateIpv4(host: string): boolean {
 }
 
 /**
+ * IPv4-mapped IPv6 (`::ffff:127.0.0.1`), which the URL parser keeps in hex
+ * form. It reaches the same IPv4 address, so it counts as that address.
+ */
+function mappedIpv4(host: string): string | null {
+  const match = /^\[::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})\]$/.exec(host);
+  if (!match) return null;
+  const high = Number.parseInt(match[1] ?? '0', 16);
+  const low = Number.parseInt(match[2] ?? '0', 16);
+  if (!Number.isFinite(high) || !Number.isFinite(low)) return null;
+  const value = ((high << 16) | low) >>> 0;
+  return [(value >>> 24) & 255, (value >>> 16) & 255, (value >>> 8) & 255, value & 255].join('.');
+}
+
+/**
  * True when the base URL points at this machine, a private network, or an
  * mDNS `.local` name — i.e. a host that is not a cloud provider.
+ *
+ * The host is compared exactly: a name that merely *starts* with a local
+ * address ("localhost.evil.com") is not local, and userinfo or fragment
+ * tricks cannot move the host.
  */
 export function isLocalBaseUrl(baseUrl: string): boolean {
-  const host = hostOf(baseUrl);
-  if (!host) return false;
+  const raw = hostOf(baseUrl);
+  if (!raw) return false;
+  const host = withoutTrailingDot(raw);
   if (LOOPBACK_HOSTS.has(host)) return true;
   if (host.endsWith('.local')) return true;
-  return isPrivateIpv4(host);
+  if (isPrivateIpv4(host)) return true;
+  const mapped = mappedIpv4(host);
+  if (mapped && isPrivateIpv4(mapped)) return true;
+  return false;
 }
 
 /**
