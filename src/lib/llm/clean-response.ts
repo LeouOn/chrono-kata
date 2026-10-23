@@ -14,11 +14,11 @@ export interface CoachBriefing {
   usedFallback: boolean;
 }
 
-const CONTRADICTION = /\b(push|more than yesterday|challenge yourself)\b/i;
+const CONTRADICTION = /\bpush|more than yesterday|challenge yourself/i;
 
 /** Deterministic per-action phrasing so the fallback never repeats the summary. */
 const FALLBACK_SUGGESTIONS: Record<RecommendAction, string> = {
-  rest: 'Today is a rest day. Rest, or keep to gentle stretches only if they feel good.',
+  rest: 'Today is for rest. Keep to gentle stretches only if they feel good.',
   reduce: 'Do a little less than yesterday. Shorten today\'s practice and stop early if fatigue shows up.',
   hold: 'Hold today at yesterday\'s level. Keep the practice as it is and see how you feel.',
   build: 'There is room to build today. Add a little, not a lot, and keep it comfortable.',
@@ -30,8 +30,8 @@ export function fallbackBriefing(recommendation: Pick<Recommendation, 'action' |
   return { summary, suggestion: FALLBACK_SUGGESTIONS[recommendation.action], tone };
 }
 
-function contradicts(action: RecommendAction, suggestion: string): boolean {
-  return (action === 'rest' || action === 'reduce') && CONTRADICTION.test(suggestion);
+function contradicts(action: RecommendAction, reply: { summary: string; suggestion: string }): boolean {
+  return (action === 'rest' || action === 'reduce') && CONTRADICTION.test(`${reply.summary} ${reply.suggestion}`);
 }
 
 function parseJsonObject(text: string): unknown {
@@ -53,7 +53,7 @@ export function parseCoachBriefing(
 ): CoachBriefing {
   const fallback = { ...fallbackBriefing(recommendation), usedFallback: true as const };
   const parsed = CoachBriefingSchema.safeParse(parseJsonObject(cleanLLMResponse(raw)));
-  if (!parsed.success || contradicts(recommendation.action, parsed.data.suggestion)) return fallback;
+  if (!parsed.success || contradicts(recommendation.action, parsed.data)) return fallback;
   return { ...parsed.data, usedFallback: false };
 }
 

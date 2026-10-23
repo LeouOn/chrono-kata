@@ -54,7 +54,7 @@ export function usePacingContext(): { context: PacingContext | null; ready: bool
 
 export function useDailyBriefing() {
   const { settings } = useSettings();
-  const { context } = usePacingContext();
+  const { context, ready: contextReady } = usePacingContext();
   const [data, setData] = useState<BriefingData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +113,7 @@ export function useDailyBriefing() {
   }, [context, personality, settings, cacheKey]);
 
   return {
+    contextReady,
     briefing: data?.briefing ?? null,
     summary: data?.summary ?? null,
     suggestion: data?.suggestion ?? null,

@@ -16,7 +16,7 @@ const COACH_EMOJIS: Record<string, string> = {
 
 export function DailyBriefingCard() {
   const { settings } = useSettings();
-  const { summary, suggestion, briefing, usedFallback, providerName, model, isLoading, error, generate } = useDailyBriefing();
+  const { summary, suggestion, briefing, usedFallback, providerName, model, isLoading, error, generate, contextReady } = useDailyBriefing();
   const personality = settings?.selectedCoachPersonality ?? 'zen';
   const emoji = COACH_EMOJIS[personality] ?? '🥋';
 
@@ -25,7 +25,8 @@ export function DailyBriefingCard() {
       <button
         type="button"
         onClick={() => void generate()}
-        className="w-full text-left bg-surface border border-border/80 hover:border-accent/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 transition-all group"
+        disabled={!contextReady}
+        className="w-full text-left bg-surface border border-border/80 hover:border-accent/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 transition-all group disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center text-base group-hover:scale-110 transition-transform">
@@ -61,7 +62,7 @@ export function DailyBriefingCard() {
           <button
             type="button"
             onClick={() => void generate()}
-            disabled={isLoading}
+            disabled={isLoading || !contextReady}
             className="text-text-muted hover:text-text p-1 transition-colors disabled:opacity-40"
             title="Refresh briefing"
             aria-label="Refresh briefing"
