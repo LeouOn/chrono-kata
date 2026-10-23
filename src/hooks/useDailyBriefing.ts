@@ -22,39 +22,45 @@ interface BriefingData {
   generatedAt: string;
 }
 
-export function usePacingContext(): { context: PacingContext | null; ready: boolean } {
+export function usePacingContext(): { context: PacingContext | null; ready: boolean; error: string | null } {
   const { settings } = useSettings();
   const { streak } = useStreak();
   const { sessions } = useSessions();
   const [context, setContext] = useState<PacingContext | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [checkIns, templates] = await Promise.all([
-        checkInRepo.getAll(),
-        kataTemplateRepo.getAll(),
-      ]);
-      if (cancelled) return;
-      const today = toLocalDateString(new Date());
-      setContext(buildPacingContext({
-        today,
-        sessions,
-        templates,
-        checkIns,
-        streakDays: streak?.currentStreakDays ?? 0,
-        restDay: settings?.restDays?.includes(getDayOfWeek(new Date())) ?? false,
-      }));
+      try {
+        const [checkIns, templates] = await Promise.all([
+          checkInRepo.getAll(),
+          kataTemplateRepo.getAll(),
+        ]);
+        if (cancelled) return;
+        setError(null);
+        const today = toLocalDateString(new Date());
+        setContext(buildPacingContext({
+          today,
+          sessions,
+          templates,
+          checkIns,
+          streakDays: streak?.currentStreakDays ?? 0,
+          restDay: settings?.restDays?.includes(getDayOfWeek(new Date())) ?? false,
+        }));
+      } catch {
+        if (!cancelled) setError("Could not load today's pacing data");
+      }
     })();
     return () => { cancelled = true; };
   }, [sessions, streak, settings]);
 
-  return { context, ready: context != null };
+  return { context, ready: context != null, error };
 }
 
 export function useDailyBriefing() {
   const { settings } = useSettings();
-  const { context, ready: contextReady } = usePacingContext();
+  const { context, ready: contextReady, error: contextError } = usePacingContext();
   const [data, setData] = useState<BriefingData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +120,7 @@ export function useDailyBriefing() {
 
   return {
     contextReady,
+    contextError,
     briefing: data?.briefing ?? null,
     summary: data?.summary ?? null,
     suggestion: data?.suggestion ?? null,
