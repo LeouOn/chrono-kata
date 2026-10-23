@@ -5,6 +5,18 @@ import { getDb } from './db';
 import { newId } from '@/lib/utils/id';
 import { conversationRepo } from './conversation.repo';
 import { messageRepo } from './message.repo';
+import { sumSessionMinutes } from '@/lib/sessions/outcome';
+
+/**
+ * Fields whose change can move a linked task's cached `actualMin`.
+ * A patch that does not touch them (a note, a rating, a streamed coach comment)
+ * never triggers a recompute, so token-by-token updates stay cheap.
+ */
+function affectsTaskMinutes(patch: Partial<Session>): boolean {
+  return (
+    'durationMinutes' in patch || 'reps' in patch || 'taskId' in patch || 'projectId' in patch
+  );
+}
 
 export interface SessionRepository {
   getAll(): Promise<Session[]>;
@@ -55,11 +67,11 @@ export class DexieSessionRepository implements SessionRepository {
   async save(input: SessionInput): Promise<Session> {
     const now = new Date();
     const sessionId = newId();
-    const conversation = await conversationRepo.save({ sessionId });
+    const db = getDb();
     const session: Session = {
       ...input,
       id: sessionId,
-      conversationId: conversation.id,
+      conversationId: newId(),
       createdAt: now,
       updatedAt: now,
       coachComment: null,
@@ -67,24 +79,69 @@ export class DexieSessionRepository implements SessionRepository {
       failedLLM: false,
     };
     const parsed = SessionSchema.parse(session);
-    const db = getDb();
-    await db.sessions.add(parsed);
-    return parsed;
+    // The conversation, the session row and a linked task's recomputed
+    // actualMin land together; a linked save can never leave the cache stale.
+    await db.transaction('rw', [db.sessions, db.conversations, db.tasks], async () => {
+      const conversation = await conversationRepo.save({ sessionId });
+      await db.sessions.add({ ...parsed, conversationId: conversation.id });
+      if (parsed.taskId) await recomputeActualMinutes(db, [parsed.taskId]);
+    });
+    const stored = await db.sessions.get(sessionId);
+    if (!stored) throw new Error(`Session ${sessionId} was not stored`);
+    return stored;
   }
 
   async update(id: string, patch: Partial<Session>): Promise<Session> {
     const db = getDb();
-    const existing = await db.sessions.get(id);
-    if (!existing) throw new Error(`Session ${id} not found`);
-    const updated: Session = { ...existing, ...patch, updatedAt: new Date() };
-    const parsed = SessionSchema.parse(updated);
-    await db.sessions.put(parsed);
-    return parsed;
+    // `actualMin` on a task is a cache of its linked sessions (Wave 9 part 1),
+    // so an edit that changes minutes or links must recompute it in the SAME
+    // transaction as the session write. Otherwise the cache starts lying.
+    return db.transaction('rw', [db.sessions, db.tasks], async () => {
+      const existing = await db.sessions.get(id);
+      if (!existing) throw new Error(`Session ${id} not found`);
+      const updated: Session = { ...existing, ...patch, updatedAt: new Date() };
+      const parsed = SessionSchema.parse(updated);
+      await db.sessions.put(parsed);
+      if (affectsTaskMinutes(patch)) {
+        await recomputeActualMinutes(db, [existing.taskId, parsed.taskId]);
+      }
+      return parsed;
+    });
   }
 
   async delete(id: string): Promise<void> {
     const db = getDb();
-    await db.sessions.delete(id);
+    return db.transaction('rw', [db.sessions, db.tasks], async () => {
+      const existing = await db.sessions.get(id);
+      await db.sessions.delete(id);
+      await recomputeActualMinutes(db, [existing?.taskId]);
+    });
+  }
+}
+
+/**
+ * Rewrite `actualMin` for each affected task from the session rows themselves.
+ *
+ * - Derived, never accumulated: the sessions are the source of truth, so edits,
+ *   deletes and re-links all converge on the same value.
+ * - `0` is stored as `null` (the schema allows positive values or null).
+ * - A missing (orphaned) task is skipped: there is nothing to update.
+ * - There is no manual-override flag yet; if one is added, this must respect it.
+ */
+async function recomputeActualMinutes(
+  db: ReturnType<typeof getDb>,
+  taskIds: Array<string | null | undefined>,
+): Promise<void> {
+  const unique = [...new Set(taskIds.filter((id): id is string => typeof id === 'string' && id !== ''))];
+  for (const taskId of unique) {
+    const task = await db.tasks.get(taskId);
+    if (!task) continue;
+    const sessions = await db.sessions.where('taskId').equals(taskId).toArray();
+    const total = sumSessionMinutes(sessions);
+    const next = total > 0 ? total : null;
+    if (task.actualMin !== next) {
+      await db.tasks.put({ ...task, actualMin: next });
+    }
   }
 }
 
