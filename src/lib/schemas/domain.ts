@@ -23,5 +23,7 @@ export const DomainInputSchema = DomainBaseSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).partial({
+  order: true,
 });
 export type DomainInput = z.infer<typeof DomainInputSchema>;

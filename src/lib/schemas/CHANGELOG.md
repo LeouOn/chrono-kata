@@ -14,6 +14,17 @@ for the names, so a typo fails the typecheck.
 or any other setting, and `useFlag` / `useFlags` read a flag with an explicit
 default. No flagged feature is built by this change.
 
+## 2026-10-23 — Wave 1 repositories, links, backup fields (roadmap W1, part 2)
+
+`session.ts` gains optional `taskId`/`projectId`/`blockId` (taskId/projectId
+indexed in Dexie v7; blockId non-indexed). `habit.ts` and
+`kata-template.ts` gain an optional non-indexed `domainId`. The backup
+envelope (still `version: 2`) carries `domains`/`projects`/`tasks`/`blocks`/
+`dayPlans`/`estimates` as optional fields per the T1 rule; imports skip and
+count invalid rows and leave the new tables untouched when the keys are
+absent. New repositories (`src/lib/db/*.repo.ts`) and pure task-status
+transitions (`src/lib/tasks/transitions.ts`). See docs/waves/wave-01.md.
+
 ## 2026-10-23 — Unified data model (roadmap Wave 1)
 
 New Zod schemas for the work vocabulary (a task is never a session):

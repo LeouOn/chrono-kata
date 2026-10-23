@@ -58,5 +58,8 @@ export const TaskInputSchema = TaskBaseSchema.omit({
   createdAt: true,
   touchedAt: true,
   doneAt: true,
+}).partial({
+  status: true,
+  source: true,
 });
 export type TaskInput = z.infer<typeof TaskInputSchema>;
