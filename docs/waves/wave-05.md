@@ -70,9 +70,10 @@ asking them to remember.
 ## Known issues and boundaries
 
 1. **Private mode is about LLM traffic, not about every byte leaving the device.** It refuses a
-   non-local *provider*; it does not touch Google Calendar sync (which sends sessions to Google),
-   exports (which write a file wherever you choose), or anything else the app does on purpose. The
-   LLM tab says so in the same words, next to the switch.
+   non-local *provider*; it does not touch Google Calendar sync (which sends your sessions to
+   Google as calendar events — the one that matters most, and it is only on when you turn the
+   integration on), exports (which write a file wherever you choose), or the service worker's own
+   caching of app assets. The LLM tab says so in the same words, next to the switch.
 2. **A redirect from a local host is refused, not followed.** While private mode is on, every
    provider request is sent with `redirect: 'error'`, so a "local" server that answers `307` to a
    public URL cannot carry the request body off the machine — the request fails at the first hop
@@ -99,6 +100,11 @@ asking them to remember.
    the device and ask the human first.
 7. **The routing table names providers, it does not check them.** A route pointing at a provider
    that was removed fails with a message that says which surface was routed where.
+8. **Two address families are not recognised as local, and both fail closed.** `*.localhost`
+   (RFC 6761 says it is loopback) and IPv6 link-local / unique-local addresses (`fe80::/10`,
+   `fc00::/7`) are treated as **not** local, so private mode refuses them. If your LAN hands out
+   IPv6 addresses, point the provider at an IPv4 address or a `.local` name, or leave private mode
+   off for that provider.
 
 ## Proposal: reaching a LAN model from Android (decision needed)
 

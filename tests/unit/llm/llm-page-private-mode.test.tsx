@@ -54,8 +54,8 @@ const cloudProvider = {
 describe('the LLM tab in private mode', () => {
   it('refuses to test a cloud connection while private mode is on', async () => {
     await llmSettingsRepo.addProvider('openai', cloudProvider);
-    setLLMAppStateReader(async () => ({ privateMode: true }));
-    await settingsRepo.get();
+    // The page reads the flag from the settings row, like the service does.
+    await settingsRepo.setFlag('privateMode', true);
     const fetchMock = stubFetch();
 
     renderPage();
@@ -77,8 +77,7 @@ describe('the LLM tab in private mode', () => {
       apiKey: '',
       credentialSource: 'browser',
     });
-    setLLMAppStateReader(async () => ({ privateMode: true }));
-    await settingsRepo.get();
+    await settingsRepo.setFlag('privateMode', true);
     const fetchMock = stubFetch();
 
     renderPage();
