@@ -93,42 +93,45 @@ actually exists.
 
 ## W1 — Unified data model for tasks, projects, domains
 
-**Status:** missing · **Size:** L · **Lanes:** A (data) · **Depends on:** W0
+**Status:** exists (shipped 2026-10-23, PRs #14 + #19) · **Size:** L · **Lanes:** A (data) · **Depends on:** W0
 
 **Evidence**
-- Missing: no task/project/domain/block/day-plan/estimate/review/journal schema —
-  `grep -rInE "TaskSchema|ProjectSchema|DomainSchema|DayPlanSchema|BlockSchema|EstimateSchema|ReviewSchema|JournalSchema" src tests scripts` → **0 hits**.
-- Missing: `src/lib/schemas/` holds 14 files (check-in, coach-personality, conversation, habit,
-  kata-template, llm-settings, message, pending-calendar-op, reflection, session, settings, streak,
-  token, index) — none is a task or project.
-- Missing: `src/lib/db/db.ts` v1–v6 stores 13 tables; none of Domain/Project/Task/Block/DayPlan/Estimate.
-- Missing: no foreign keys to task/project/block — `grep -rInE "taskId|projectId|domainId|blockId" src tests` → **0 hits**.
-- Partial (adjacent, reusable): `KataTemplate` (`src/lib/schemas/kata-template.ts`) is a *practice
-  routine* with schedule/defaults, not a project; `Habit` (`src/lib/schemas/habit.ts`) is a recurring
-  routine with a schedule and dated logs; `Session` (`src/lib/schemas/session.ts`) is a completed
-  practice with no task/project/block link.
+- Shipped: Zod schemas `domain`/`project`/`task`/`block`/`day-plan`/`estimate` in
+  `src/lib/schemas/` (the work vocabulary; a task is never a session).
+- Shipped: Dexie **v7** in `src/lib/db/db.ts` — six new tables (`domains`, `projects`, `tasks`,
+  `blocks`, `dayPlans`, `estimates`) + `sessions.taskId`/`projectId` indexes; frozen
+  `HISTORICAL_STORES` v6-delta + v7 rows in `tests/unit/db/migrations.test.ts`.
+- Shipped: default-domain seeding (Trading, Practice, Career/Build, Life admin) on **both**
+  paths — `on('populate')` for fresh installs and the v6→v7 upgrade — plus an idempotent
+  `ensureDefaultDomains()` heal called from the main layout (from check-g's review).
+- Shipped: repositories `domain/project/task/block/day-plan/estimate.repo.ts` with typed
+  queries (by status/domain/project, stale-since via `touchedAt`/`lastTouchedAt`, task
+  children, block overlap-range) and pure status transitions in `src/lib/tasks/transitions.ts`.
+- Shipped: `Session` optional `taskId`/`projectId`/`blockId`; `Habit`/`KataTemplate` optional
+  `domainId` (non-indexed, no extra version).
+- Shipped: backup envelope carries the six tables as optional fields (envelope stays `version: 2`
+  per the T1 ground rule); export/import round-trip tested, including legacy files without the keys.
+- Migration evidence: the v6→v7 upgrade test loads a real v6 DB from `generateDemoData()` fixtures
+  and proves row-for-row survival; independently verified at PR review with an all-tables
+  deep-diff harness and a mutation test.
 
 **Skip / extend / net-new**
-- Skip: do **not** re-model practice as tasks. Practice has its own vocabulary (kata templates,
-  habits, streaks, check-ins) and its own history.
-- Extend: `Session` gets optional `taskId`/`projectId`/`blockId`; `Habit`/`KataTemplate` get optional
-  `domainId` — optional + non-indexed fields need no version bump, *indexed* ones do.
-- Net-new: `Domain`, `Project`, `Task`, `Block`, `DayPlan`, `Estimate` tables + typed repositories
-  (by status, domain, project, stale-since) + CRUD unit tests.
+- Skipped: practice re-modelling — practice (kata templates, habits, streaks, check-ins) keeps
+  its own vocabulary and tables, per decision Q1.
+- Extended: Session/Habit/KataTemplate links as above; `DayPlan` keyed by local day
+  (`toLocalDateString`), same pattern as check-ins.
+- Net-new: the six tables + repositories + transitions + seeding + envelope fields.
 
 **Conflicts**
-1. **Dexie version:** the pacing roadmap already used v5 (`checkIns`) and v6
-   (`sessions.kataTemplateId`). The next free version is **v7**. The roadmap's "new tables and a
-   migration" must land as v7, and `tests/unit/db/migrations.test.ts` gains a v7 row in
-   `HISTORICAL_STORES`. The pacing ground rules still apply (see
+1. **Dexie version:** resolved as v7 (see above). The pacing ground rules still apply (see
    [Cross-cutting rules](#cross-cutting-rules-and-conflicts)).
-2. **Domain naming:** "domain" here means a life area (Trading / Practice / Career / Life admin).
-   The codebase already uses `activityLabel` for what a session was about. Keep the table name
-   `Domain`, but never call a session label a "domain" in code or in LLM payloads.
+2. **Domain naming:** kept — `Domain` is a life area; session labels stay `activityLabel`
+   everywhere, including LLM payloads.
 
-**Depends on / blocks:** blocks W2, W6, W7, W9, W10, W11, W12, W13, W14, W18.
+**Depends on / blocks:** blocks W2, W6, W7, W9, W10, W11, W12, W13, W14, W18 — all unblocked
+as of this merge.
 
----
+Wave note: [docs/waves/wave-01.md](waves/wave-01.md).
 
 ## W2 — Capture (the inbox)
 

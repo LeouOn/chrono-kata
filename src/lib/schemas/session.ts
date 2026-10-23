@@ -38,6 +38,10 @@ const SessionBaseSchema = z.object({
   conversationId: z.string().uuid().nullable().optional(),
   stoppedAtCap: z.boolean().optional(),
   kataTemplateId: z.string().uuid().nullable().optional(),
+  /** Wave 1: which work item this practice session served (optional). */
+  taskId: z.string().uuid().nullable().optional(),
+  projectId: z.string().uuid().nullable().optional(),
+  blockId: z.string().uuid().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

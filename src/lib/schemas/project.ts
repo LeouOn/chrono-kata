@@ -28,5 +28,6 @@ export const ProjectInputSchema = ProjectBaseSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  lastTouchedAt: true,
 });
 export type ProjectInput = z.infer<typeof ProjectInputSchema>;

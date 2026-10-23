@@ -11,6 +11,12 @@ import { ConversationSchema, type Conversation } from '@/lib/schemas/conversatio
 import { MessageSchema, type Message } from '@/lib/schemas/message';
 import { HabitSchema, HabitLogSchema, type Habit, type HabitLog } from '@/lib/schemas/habit';
 import { CheckInSchema, type CheckIn } from '@/lib/schemas/check-in';
+import { DomainSchema, type Domain } from '@/lib/schemas/domain';
+import { ProjectSchema, type Project } from '@/lib/schemas/project';
+import { TaskSchema, type Task } from '@/lib/schemas/task';
+import { BlockSchema, type Block } from '@/lib/schemas/block';
+import { DayPlanSchema, type DayPlan } from '@/lib/schemas/day-plan';
+import { EstimateSchema, type Estimate } from '@/lib/schemas/estimate';
 import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
 import type { ExportEnvelope, ExportEnvelopeV2 } from './types';
 import { migrateEnvelope } from './migrate';
@@ -79,6 +85,12 @@ const MESSAGE_DATE_FIELDS = ['createdAt', 'editedAt'];
 const HABIT_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const HABIT_LOG_DATE_FIELDS = ['createdAt'];
 const CHECK_IN_DATE_FIELDS = ['createdAt', 'updatedAt'];
+const DOMAIN_DATE_FIELDS = ['createdAt', 'updatedAt'];
+const PROJECT_DATE_FIELDS = ['lastTouchedAt', 'createdAt', 'updatedAt'];
+const TASK_DATE_FIELDS = ['dueAt', 'deferUntil', 'createdAt', 'touchedAt', 'doneAt'];
+const BLOCK_DATE_FIELDS = ['start', 'end', 'createdAt', 'updatedAt'];
+const DAY_PLAN_DATE_FIELDS = ['createdAt', 'updatedAt'];
+const ESTIMATE_DATE_FIELDS = ['createdAt', 'updatedAt'];
 
 export function parseEnvelope(json: string): ParseResult {
   try {
@@ -94,7 +106,7 @@ export function parseEnvelope(json: string): ParseResult {
     if (!Array.isArray(p.sessions)) {
       return { ok: false, error: 'Missing or invalid sessions array.' };
     }
-    for (const field of ['reflections', 'kataTemplates', 'conversations', 'messages', 'habits', 'habitLogs', 'checkIns'] as const) {
+    for (const field of ['reflections', 'kataTemplates', 'conversations', 'messages', 'habits', 'habitLogs', 'checkIns', 'domains', 'projects', 'tasks', 'blocks', 'dayPlans', 'estimates'] as const) {
       if (p[field] !== undefined && !Array.isArray(p[field])) {
         return { ok: false, error: `Invalid ${field}: expected an array.` };
       }
@@ -232,6 +244,97 @@ export function parseEnvelope(json: string): ParseResult {
     );
     skipped += checkInsResult.skipped;
 
+    const domainsResult = dedupeById(
+      reviveRows(
+        p.domains === undefined ? [] : p.domains,
+        DomainSchema,
+        (row) =>
+          hasValidDates(row, DOMAIN_DATE_FIELDS)
+            ? { ...row, createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
+            : null
+      )
+    );
+    skipped += domainsResult.skipped;
+
+    const projectsResult = dedupeById(
+      reviveRows(
+        p.projects === undefined ? [] : p.projects,
+        ProjectSchema,
+        (row) =>
+          hasValidDates(row, PROJECT_DATE_FIELDS)
+            ? {
+                ...row,
+                lastTouchedAt: reviveDate(row.lastTouchedAt),
+                createdAt: reviveDate(row.createdAt),
+                updatedAt: reviveDate(row.updatedAt),
+              }
+            : null
+      )
+    );
+    skipped += projectsResult.skipped;
+
+    const tasksResult = dedupeById(
+      reviveRows(
+        p.tasks === undefined ? [] : p.tasks,
+        TaskSchema,
+        (row) => {
+          if (!hasValidDates(row, TASK_DATE_FIELDS)) return null;
+          return {
+            ...row,
+            dueAt: reviveNullableDate(row.dueAt),
+            deferUntil: reviveNullableDate(row.deferUntil),
+            createdAt: reviveDate(row.createdAt),
+            touchedAt: reviveDate(row.touchedAt),
+            doneAt: reviveNullableDate(row.doneAt),
+          };
+        }
+      )
+    );
+    skipped += tasksResult.skipped;
+
+    const blocksResult = dedupeById(
+      reviveRows(
+        p.blocks === undefined ? [] : p.blocks,
+        BlockSchema,
+        (row) =>
+          hasValidDates(row, BLOCK_DATE_FIELDS)
+            ? {
+                ...row,
+                start: reviveDate(row.start),
+                end: reviveDate(row.end),
+                createdAt: reviveDate(row.createdAt),
+                updatedAt: reviveDate(row.updatedAt),
+              }
+            : null
+      )
+    );
+    skipped += blocksResult.skipped;
+
+    const dayPlansResult = dedupeBy(
+      reviveRows(
+        p.dayPlans === undefined ? [] : p.dayPlans,
+        DayPlanSchema,
+        (row) =>
+          hasValidDates(row, DAY_PLAN_DATE_FIELDS)
+            ? { ...row, createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
+            : null
+      ),
+      (d) => d.date
+    );
+    skipped += dayPlansResult.skipped;
+
+    const estimatesResult = dedupeById(
+      reviveRows(
+        p.estimates === undefined ? [] : p.estimates,
+        EstimateSchema,
+        (row) =>
+          hasValidDates(row, ESTIMATE_DATE_FIELDS)
+            ? { ...row, createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
+            : null
+      )
+    );
+    skipped += estimatesResult.skipped;
+
     const streak = reviveStreak(p.streak);
     const settings = reviveSettings(p.settings);
     const llmSettings = reviveLLMSettings(p.llmSettings);
@@ -258,6 +361,12 @@ export function parseEnvelope(json: string): ParseResult {
           }
         : {}),
       ...(p.checkIns !== undefined ? { checkIns: checkInsResult.unique as CheckIn[] } : {}),
+      ...(p.domains !== undefined ? { domains: domainsResult.unique as Domain[] } : {}),
+      ...(p.projects !== undefined ? { projects: projectsResult.unique as Project[] } : {}),
+      ...(p.tasks !== undefined ? { tasks: tasksResult.unique as Task[] } : {}),
+      ...(p.blocks !== undefined ? { blocks: blocksResult.unique as Block[] } : {}),
+      ...(p.dayPlans !== undefined ? { dayPlans: dayPlansResult.unique as DayPlan[] } : {}),
+      ...(p.estimates !== undefined ? { estimates: estimatesResult.unique as Estimate[] } : {}),
     };
     return { ok: true, envelope, skipped };
   } catch (e) {
@@ -369,6 +478,12 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
       db.habits,
       db.habitLogs,
       db.checkIns,
+      db.domains,
+      db.projects,
+      db.tasks,
+      db.blocks,
+      db.dayPlans,
+      db.estimates,
     ],
     async () => {
       await Promise.all([
@@ -452,6 +567,45 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
           await db.checkIns.bulkAdd(envelope.checkIns);
         }
       }
+
+      // Wave 1 tables (only for envelopes that carry them; domains fall
+      // back to the default seed when absent).
+      if (envelope.domains !== undefined) {
+        await db.domains.clear();
+        if (envelope.domains.length > 0) {
+          await db.domains.bulkAdd(envelope.domains);
+        }
+      }
+      if (envelope.projects !== undefined) {
+        await db.projects.clear();
+        if (envelope.projects.length > 0) {
+          await db.projects.bulkAdd(envelope.projects);
+        }
+      }
+      if (envelope.tasks !== undefined) {
+        await db.tasks.clear();
+        if (envelope.tasks.length > 0) {
+          await db.tasks.bulkAdd(envelope.tasks);
+        }
+      }
+      if (envelope.blocks !== undefined) {
+        await db.blocks.clear();
+        if (envelope.blocks.length > 0) {
+          await db.blocks.bulkAdd(envelope.blocks);
+        }
+      }
+      if (envelope.dayPlans !== undefined) {
+        await db.dayPlans.clear();
+        if (envelope.dayPlans.length > 0) {
+          await db.dayPlans.bulkAdd(envelope.dayPlans);
+        }
+      }
+      if (envelope.estimates !== undefined) {
+        await db.estimates.clear();
+        if (envelope.estimates.length > 0) {
+          await db.estimates.bulkAdd(envelope.estimates);
+        }
+      }
     }
   );
 
@@ -461,4 +615,4 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
 }
 
 // Type re-exports for compatibility with imports in callers
-export type { Session, Reflection, Streak, Settings, LLMSettings, KataTemplate, Conversation, Message, Habit, HabitLog, CheckIn };
+export type { Session, Reflection, Streak, Settings, LLMSettings, KataTemplate, Conversation, Message, Habit, HabitLog, CheckIn, Domain, Project, Task, Block, DayPlan, Estimate };

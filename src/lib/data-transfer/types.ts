@@ -8,6 +8,12 @@ import type { Conversation } from '@/lib/schemas/conversation';
 import type { Message } from '@/lib/schemas/message';
 import type { Habit, HabitLog } from '@/lib/schemas/habit';
 import type { CheckIn } from '@/lib/schemas/check-in';
+import type { Domain } from '@/lib/schemas/domain';
+import type { Project } from '@/lib/schemas/project';
+import type { Task } from '@/lib/schemas/task';
+import type { Block } from '@/lib/schemas/block';
+import type { DayPlan } from '@/lib/schemas/day-plan';
+import type { Estimate } from '@/lib/schemas/estimate';
 
 /** Envelope format written by current exports. Older files are upgraded by `migrateEnvelope`. */
 export const CURRENT_ENVELOPE_VERSION = 2;
@@ -29,6 +35,13 @@ export interface ExportEnvelope {
   habitLogs?: HabitLog[];
   /** v2+. Absent means the file predates check-ins — import preserves local check-ins. */
   checkIns?: CheckIn[];
+  /** Wave 1+ tables, all optional so older files stay importable. */
+  domains?: Domain[];
+  projects?: Project[];
+  tasks?: Task[];
+  blocks?: Block[];
+  dayPlans?: DayPlan[];
+  estimates?: Estimate[];
 }
 
 export type ExportEnvelopeV2 = ExportEnvelope & { version: 2 };

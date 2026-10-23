@@ -13,6 +13,7 @@ import { toLocalDateString } from '@/lib/utils/date';
 import { readSessionTimer } from '@/lib/timers/session-timer';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
+import { ensureDefaultDomains } from '@/lib/db/init';
 
 export default function MainLayout({ children }: { children: ReactNode }) {
   const [fabOpen, setFabOpen] = useState(false);
@@ -25,6 +26,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   }, [qc]);
 
   useEffect(() => {
+    void ensureDefaultDomains();
     void refreshStreak();
     void flushPendingOps();
     if (readSessionTimer()) setFabOpen(true);
