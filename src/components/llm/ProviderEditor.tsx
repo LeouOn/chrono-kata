@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { PROVIDER_DEFAULTS, type ProviderName } from '@/lib/llm/provider-defaults';
@@ -30,6 +30,15 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
   const privateMode = useFlag('privateMode');
   const [loadingModels, setLoadingModels] = useState(false);
   const [health, setHealth] = useState('');
+  // Explicit ids: the Model control swaps between an <select> and an <input>,
+  // and its action buttons must live outside the label, so a wrapping <label>
+  // cannot be used (interactive content inside a label is invalid HTML).
+  const fieldId = useId();
+  const hostId = `${fieldId}-host`;
+  const baseUrlId = `${fieldId}-base-url`;
+  const modelId = `${fieldId}-model`;
+  const apiKeyId = `${fieldId}-api-key`;
+  const hostHelpId = `${fieldId}-host-help`;
 
   useEffect(() => {
     setBaseUrl(initial?.baseUrl ?? defaults.baseUrl);
@@ -86,31 +95,38 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
     <Modal open={open} onClose={onCancel} title={`Configure ${name}`}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {isLocal ? (
-          <label className="block">
-            <span className="text-text-muted text-sm">Host</span>
+          <div className="block">
+            <label htmlFor={hostId} className="text-text-muted text-sm">
+              Host
+            </label>
             <input
+              id={hostId}
               type="text"
               value={host}
               onChange={(e) => handleHostChange(e.target.value)}
               placeholder="localhost:1234"
+              aria-describedby={hostHelpId}
               className="w-full mt-1 bg-surface-2 border border-border rounded-2xl px-4 py-3 text-text"
             />
-            <span className="text-xs text-text-muted mt-1 block">
+            <span id={hostHelpId} className="text-xs text-text-muted mt-1 block">
               Host and port of the local server. Use your machine ({'localhost:1234'}) or a LAN address
               (192.168.1.5:1234) so a phone on the same network can reach it.
             </span>
-          </label>
+          </div>
         ) : (
-          <label className="block">
-            <span className="text-text-muted text-sm">Base URL</span>
+          <div className="block">
+            <label htmlFor={baseUrlId} className="text-text-muted text-sm">
+              Base URL
+            </label>
             <input
+              id={baseUrlId}
               type="url"
               disabled={initial?.credentialSource === 'environment'}
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               className="w-full mt-1 bg-surface-2 border border-border rounded-2xl px-4 py-3 text-text"
             />
-          </label>
+          </div>
         )}
 
         {isLocal && (
@@ -120,9 +136,12 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
         )}
 
         <div className="block">
-          <span className="text-text-muted text-sm">Model</span>
+          <label htmlFor={modelId} className="text-text-muted text-sm">
+            Model
+          </label>
           {models.length > 0 ? (
             <select
+              id={modelId}
               value={model}
               onChange={(e) => setModel(e.target.value)}
               className="w-full mt-1 bg-surface-2 border border-border rounded-2xl px-4 py-3 text-text"
@@ -134,6 +153,7 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
             </select>
           ) : (
             <input
+              id={modelId}
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
@@ -156,9 +176,12 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
         {initial?.credentialSource === 'environment' ? (
           <p className="text-sm text-text-muted">Using this computer’s environment key. Change the server URL in its environment settings.</p>
         ) : isLocal ? (
-          <label className="block">
-            <span className="text-text-muted text-sm">API key (optional)</span>
+          <div className="block">
+            <label htmlFor={apiKeyId} className="text-text-muted text-sm">
+              API key (optional)
+            </label>
             <input
+              id={apiKeyId}
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
@@ -166,11 +189,14 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
               autoComplete="off"
               className="w-full mt-1 bg-surface-2 border border-border rounded-2xl px-4 py-3 text-text"
             />
-          </label>
+          </div>
         ) : (
-          <label className="block">
-            <span className="text-text-muted text-sm">API key</span>
+          <div className="block">
+            <label htmlFor={apiKeyId} className="text-text-muted text-sm">
+              API key
+            </label>
             <input
+              id={apiKeyId}
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
@@ -178,7 +204,7 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
               autoComplete="off"
               className="w-full mt-1 bg-surface-2 border border-border rounded-2xl px-4 py-3 text-text"
             />
-          </label>
+          </div>
         )}
         <div className="flex gap-2 justify-end pt-2">
           <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
