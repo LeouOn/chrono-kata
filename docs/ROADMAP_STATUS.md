@@ -358,7 +358,9 @@ Blocks, `src/lib/ics/`) now ships as a pure module; file picker/share/screens, p
 
 ## W9 — Work block → timed session flow
 
-**Status:** partial · **Size:** M · **Lanes:** B · **Depends on:** W1 (session links)
+**Status:** partial — part 1 (session `outcome`/`breadcrumb` fields, the pure outcome plan and an
+atomic session+task+project write) ships; the end-of-session sheet, the task picker in the timer and
+the breadcrumb banner remain · **Size:** M · **Lanes:** B · **Depends on:** W1 (session links)
 
 **Evidence**
 - Exists: a real timer engine — `src/lib/timers/session-timer.ts` (draft persisted across reloads,

@@ -1,5 +1,14 @@
 # Schema Changelog
 
+## 2026-10-23 — Session outcome and breadcrumb (roadmap W9 part 1)
+
+`session.ts` gains optional `outcome` (`'done' | 'progress' | 'blocked'`,
+`SessionOutcomeSchema`) and `breadcrumb` (string, max 500, "pick up here next
+time"). Both are optional and non-indexed, so Dexie stays on version 7 and rows
+written before this change remain valid. The v2 backup envelope carries them
+as ordinary optional session fields — no envelope version bump.
+
+
 ## 2026-10-23 — Feature flags (roadmap Wave 0 prerequisite)
 
 `settings.ts` gains optional `flags`: a partial record over the closed

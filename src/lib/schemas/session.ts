@@ -10,6 +10,10 @@ export const RatingSchema = z.union([
 ]);
 export type Rating = z.infer<typeof RatingSchema>;
 
+/** How a work session ended (Wave 9). Optional: practice sessions have none. */
+export const SessionOutcomeSchema = z.enum(['done', 'progress', 'blocked']);
+export type SessionOutcome = z.infer<typeof SessionOutcomeSchema>;
+
 export const MultiDimRatingSchema = z.union([
   z.literal(1),
   z.literal(2),
@@ -42,6 +46,10 @@ const SessionBaseSchema = z.object({
   taskId: z.string().uuid().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
   blockId: z.string().uuid().nullable().optional(),
+  /** Wave 9: how the work ended. Absent on practice sessions and old rows. */
+  outcome: SessionOutcomeSchema.nullable().optional(),
+  /** Wave 9: "pick up here next time" (required for projects, optional for tasks). */
+  breadcrumb: z.string().max(500).nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
