@@ -47,6 +47,29 @@ banner stay in part 2, which builds on the flag-gated inbox hooks.
 - **"Propose the next action"** is the pure cleanup above; the optional AI
   polish is deliberately not in part 1.
 
+## Known gap: editing or deleting a linked session
+
+`Task.actualMin` is a **cache** of the timed sessions linked to that task. This
+part writes it on session create only; there is no edit/delete path yet (those
+stay in part 2, where sessions gain task links in the UI). Once a linked session
+can be edited or deleted, `actualMin` would drift by that session's minutes.
+
+The recompute path is already here: `sumSessionMinutes()` (in
+`src/lib/sessions/outcome.ts`) derives the value from the session rows. Part 2
+should call it **inside the same Dexie transaction as the session edit/delete**
+(`db.sessions.where('taskId').equals(id)`) and write the result to
+`Task.actualMin`, so the cache can never be stale. If a manual actual-minute
+override ever exists, it needs an explicit flag before recompute may overwrite
+it — out of scope now.
+
+## Orphaned links
+
+A session can reference a task/project that no longer exists (deleted later, or
+a restored backup). That is a data condition, not a failed write: the session is
+saved, the link id is kept as history, the outcome updates are skipped, and the
+plan carries `linked task/project no longer exists`. A **write failure** is
+different and still rolls the whole transaction back.
+
 ## Deferred to part 2
 
 End-of-session sheet (actual minutes, rating already exists, outcome radio,

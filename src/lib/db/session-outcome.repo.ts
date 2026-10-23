@@ -68,10 +68,14 @@ export async function saveSessionWithOutcome(
   return db.transaction('rw', [db.sessions, db.conversations, db.tasks, db.projects], async () => {
     const task = sessionLike.taskId ? await db.tasks.get(sessionLike.taskId) : undefined;
     const project = sessionLike.projectId ? await db.projects.get(sessionLike.projectId) : undefined;
-    if (sessionLike.taskId && !task) throw new Error(`Task ${sessionLike.taskId} not found`);
-    if (sessionLike.projectId && !project) throw new Error(`Project ${sessionLike.projectId} not found`);
 
     const plan = planSessionOutcome(sessionLike, task, project);
+    // An orphaned link (the task/project was deleted, or a restored backup
+    // references one that is gone) must never cost the user their session:
+    // save it, keep the link id as history, and report what could not be
+    // updated. A write failure is different and still rolls everything back.
+    if (sessionLike.taskId && !task) plan.warnings.push('linked task no longer exists');
+    if (sessionLike.projectId && !project) plan.warnings.push('linked project no longer exists');
     if (!plan.validation.ok) {
       return { ok: false, reason: plan.validation.reason, plan };
     }

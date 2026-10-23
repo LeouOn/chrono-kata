@@ -168,12 +168,31 @@ describe('saveSessionWithOutcome', () => {
     expect((await taskRepo.getById(task.id))?.actualMin).toBe(27.5);
   });
 
-  it('rejects a session whose linked task disappeared, without writing', async () => {
+  it('saves a session whose linked task disappeared and reports it', async () => {
     const missingId = '99999999-9999-4999-8999-999999999999';
-    await expect(
-      saveSessionWithOutcome(timedSession({ taskId: missingId, outcome: 'progress' })),
-    ).rejects.toThrow(/not found/);
-    expect(await getDb().sessions.count()).toBe(0);
+    const result = await saveSessionWithOutcome(
+      timedSession({ taskId: missingId, outcome: 'progress', breadcrumb: 'keep going' }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.plan.warnings).toContain('linked task no longer exists');
+    expect(result.plan.task).toBeUndefined();
+    // The user's session is never lost to a stale link.
+    expect(await getDb().sessions.count()).toBe(1);
+    expect(result.session.taskId).toBe(missingId);
+  });
+
+  it('saves a session whose linked project disappeared and reports it', async () => {
+    const missingId = '99999999-9999-4999-8999-999999999999';
+    const result = await saveSessionWithOutcome(
+      timedSession({ projectId: missingId, outcome: 'progress', breadcrumb: 'still here' }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.plan.warnings).toContain('linked project no longer exists');
+    expect(result.plan.project).toBeUndefined();
+    expect(await getDb().sessions.count()).toBe(1);
+    expect(result.session.projectId).toBe(missingId);
   });
 
   it('keeps the ordinary save path for sessions with stale/absent links', async () => {

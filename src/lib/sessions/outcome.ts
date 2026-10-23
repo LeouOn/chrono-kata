@@ -79,6 +79,26 @@ export function cleanBreadcrumb(raw: string | null | undefined): string {
   return collapsed.slice(0, BREADCRUMB_MAX).trim();
 }
 
+/**
+ * Recompute a task's actual minutes from its linked sessions.
+ *
+ * The source of truth is the session rows: `Task.actualMin` is a cache. Part 2
+ * will call this in the same transaction as a session edit or delete so the
+ * cache cannot drift once sessions are editable (see docs/waves/wave-09.md).
+ */
+export function sumSessionMinutes(
+  sessions: ReadonlyArray<{ durationMinutes?: number | null }>,
+): number {
+  let total = 0;
+  for (const session of sessions) {
+    const minutes = session.durationMinutes;
+    if (typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0) {
+      total += minutes;
+    }
+  }
+  return roundMinutes(total);
+}
+
 /** Round to two decimals: 30-second precision survives, float drift does not. */
 function roundMinutes(value: number): number {
   return Math.round(value * 100) / 100;

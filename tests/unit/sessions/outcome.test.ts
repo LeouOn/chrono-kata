@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   accumulateActualMinutes,
+  sumSessionMinutes,
   BREADCRUMB_MAX,
   cleanBreadcrumb,
   planSessionOutcome,
@@ -78,6 +79,24 @@ describe('accumulateActualMinutes', () => {
       total = accumulateActualMinutes(total, minutes);
     }
     expect(total).toBe(30);
+  });
+});
+
+describe('sumSessionMinutes (recompute path for edit/delete)', () => {
+  it('sums only timed sessions, with the same rounding', () => {
+    expect(
+      sumSessionMinutes([
+        { durationMinutes: 10 },
+        { durationMinutes: 12.5 },
+        { durationMinutes: null },
+        { durationMinutes: 0.25 },
+      ]),
+    ).toBe(22.75);
+  });
+
+  it('returns 0 when no timed sessions remain', () => {
+    expect(sumSessionMinutes([])).toBe(0);
+    expect(sumSessionMinutes([{ durationMinutes: null }])).toBe(0);
   });
 });
 
