@@ -1,14 +1,14 @@
 # Data model — current state
 
-Audited 2026-10-23 against `main` (Dexie **version 6**). Source of truth:
+Audited 2026-10-23 against `main` (Dexie **version 7**). Source of truth:
 `src/lib/db/db.ts` (store definitions + upgrades), `src/lib/schemas/*` (row
 shapes), `src/lib/db/*.repo.ts` (access), `src/lib/data-transfer/*` (backup).
 
 Everything lives in one IndexedDB database, `chrono-kata`, opened through the
 singleton `getDb()` in `src/lib/db/db.ts`. There is no server-side store.
 
-**The next free Dexie version is 7.** v5 added `checkIns`, v6 added the
-`sessions.kataTemplateId` index; both are taken.
+**The next free Dexie version is 8.** v5 added `checkIns`, v6 added the
+`sessions.kataTemplateId` index, and v7 added the Wave 1 planning tables.
 
 ## 1. Tables and indexes by version
 
@@ -20,6 +20,7 @@ singleton `getDb()` in `src/lib/db/db.ts`. There is no server-side store.
 | 4 | habits | new `habits: 'id, order'`, `habitLogs: 'id, habitId, date, sessionId, [habitId+date]'` |
 | 5 | morning check-ins | new `checkIns: 'date'` (primary key is the local `YYYY-MM-DD`) |
 | 6 | kata id links | `sessions` gains `kataTemplateId` index; upgrade backfills `sessions.kataTemplateId` and `habits.linkedKataTemplateId` from normalized template names |
+| 7 | Wave 1 planning entities | `sessions` gains `taskId`/`projectId` indexes; new `domains: 'id, order'`, `projects: 'id, domainId, status, lastTouchedAt'`, `tasks: 'id, status, domainId, projectId, parentId, touchedAt'`, `blocks: 'id, start, kind, taskId, projectId'`, `dayPlans: 'date'`, `estimates: 'id, taskId, createdAt'`; upgrade and `populate` seed the four default domains |
 
 Current (v6) full store map:
 
@@ -37,7 +38,15 @@ kataTemplates        id, name, order, createdAt
 habits               id, order
 habitLogs            id, habitId, date, sessionId, [habitId+date]
 checkIns             date
+domains              id, order                          (v7)
+projects             id, domainId, status, lastTouchedAt (v7)
+tasks                id, status, domainId, projectId, parentId, touchedAt (v7)
+blocks               id, start, kind, taskId, projectId  (v7)
+dayPlans             date                               (v7)
+estimates            id, taskId, createdAt              (v7)
 ```
+
+`sessions` also carries the v7 `taskId` and `projectId` indexes.
 
 Singletons: `streak`, `settings`, `llmSettings` (primary key `'singleton'`),
 `tokens` (primary key `'google'`).
@@ -162,9 +171,9 @@ timer live in `localStorage` (`src/lib/timers/*.ts`); theme/accent and the
   a Zod change **and** a Dexie `version(n).stores(...).upgrade(...)` step, a
   migration test that opens the previous version's fixture data, and a
   CHANGELOG entry saying so.
-- Reserved numbering from the pacing work: v5 = `checkIns`, v6 =
-  `sessions.kataTemplateId`. Later work must not reuse those numbers; the next
-  free version is **v7**.
+- Reserved numbering: v5 = `checkIns`, v6 = `sessions.kataTemplateId`, v7 =
+  Wave 1 planning tables. Later work must not reuse those numbers; the next
+  free version is **v8**.
 - Day keys are always local `YYYY-MM-DD` via `toLocalDateString`
   (`src/lib/utils/date.ts`), never `toISOString().slice(0, 10)`.
 

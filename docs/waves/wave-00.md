@@ -16,8 +16,8 @@ Wave 0 is an audit wave: no product behaviour changes.
   are not confused.
 - `docs/DATA_MODEL.md` — Dexie versions and store definitions through v6, row
   shapes, repositories, the v2 backup envelope with `migrateEnvelope`, the
-  schema CHANGELOG conventions, and the reserved version numbers (**v7 is the
-  next free version**).
+  schema CHANGELOG conventions, and the reserved version numbers (**v8 is the
+  next free version** after Wave 1 took v7).
 - `docs/TOOLING.md` — what Vitest, Playwright, ESLint and TypeScript actually
   enforce, what they miss, measured timings, and the build artifacts that touch
   the working tree.

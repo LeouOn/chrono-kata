@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Dexie from 'dexie';
 import { getDb, resetDbForTesting } from '@/lib/db/db';
 import { checkInRepo } from '@/lib/db/check-in.repo';
+import { generateDemoData } from '@/lib/pacing/seed-data';
+import { DEFAULT_DOMAINS, DOMAIN_SEED_IDS } from '@/lib/db/seed-domains';
 import { DEXIE_V6_FIXTURES } from '../../fixtures/dexie-v6';
 
 /**
@@ -11,7 +13,8 @@ import { DEXIE_V6_FIXTURES } from '../../fixtures/dexie-v6';
  *
  * The store definitions below are a frozen snapshot of what shipped at each
  * version. Don't edit them to match `db.ts`; add the next version instead.
- * v6 was added together with the synthetic dump in `tests/fixtures/dexie-v6.ts`.
+ * T8 adds v5 → v6 here; the v6 dump in `tests/fixtures/dexie-v6.ts` covers
+ * that shape. Wave 1 adds v6 → v7.
  */
 const HISTORICAL_STORES: Record<number, Record<string, string>> = {
   1: {
@@ -40,18 +43,15 @@ const HISTORICAL_STORES: Record<number, Record<string, string>> = {
   },
   6: {
     sessions: 'id, startedAt, calendarEventId, conversationId, kataTemplateId',
-    reflections: 'id, periodStart, periodEnd',
-    streak: 'id',
-    settings: 'id',
-    llmSettings: 'id',
-    pendingCalendarOps: 'id, sessionId',
-    tokens: 'id',
-    conversations: 'id, sessionId',
-    messages: 'id, conversationId, parentId',
-    kataTemplates: 'id, name, order, createdAt',
-    habits: 'id, order',
-    habitLogs: 'id, habitId, date, sessionId, [habitId+date]',
-    checkIns: 'date',
+  },
+  7: {
+    sessions: 'id, startedAt, calendarEventId, conversationId, kataTemplateId, taskId, projectId',
+    domains: 'id, order',
+    projects: 'id, domainId, status, lastTouchedAt',
+    tasks: 'id, status, domainId, projectId, parentId, touchedAt',
+    blocks: 'id, start, kind, taskId, projectId',
+    dayPlans: 'date',
+    estimates: 'id, taskId, createdAt',
   },
 };
 
@@ -141,7 +141,7 @@ describe('Dexie migrations', () => {
 
     const db = getDb();
     await db.open();
-    expect(db.verno).toBe(6);
+    expect(db.verno).toBe(7);
 
     const walkId = '123e4567-e89b-12d3-a456-426614174002';
     const session = await db.sessions.get('123e4567-e89b-12d3-a456-426614174001');
@@ -163,8 +163,9 @@ describe('Dexie migrations', () => {
   it('opens a fresh database at the current version', async () => {
     const db = await resetDbForTesting();
     await db.open();
-    expect(db.verno).toBe(6);
+    expect(db.verno).toBe(7);
     expect(db.tables.map((t) => t.name)).toContain('checkIns');
+    expect(db.tables.map((t) => t.name)).toContain('tasks');
   });
 
   it('v5 → v6 links mixed-case labels and leaves unmatched rows alone', async () => {
@@ -272,7 +273,9 @@ describe('Dexie migrations', () => {
 
     const db = getDb();
     await db.open();
-    expect(db.verno).toBe(6);
+    // Opened at the current version; v7 adds tables and seeds domains, but
+    // every v6 row below must survive unchanged.
+    expect(db.verno).toBe(7);
 
     for (const [table, rows] of Object.entries(DEXIE_V6_FIXTURES)) {
       expect(await db.table(table).count(), table).toBe(rows.length);
@@ -283,5 +286,75 @@ describe('Dexie migrations', () => {
     expect(await db.habitLogs.where('habitId').equals('c0dca0e9-d048-4f8e-92b5-116ec0d64eac').count()).toBe(2);
     expect(await db.messages.where('parentId').equals('06d2d4b4-55f1-4a9b-b694-d71aa78315a3').count()).toBe(2);
     expect(await checkInRepo.getByDate('2026-10-20')).toMatchObject({ energy: 4, fog: 1 });
+    expect(await db.domains.count()).toBe(4);
+  });
+
+  it('v6 → v7 preserves every v6 row and seeds the default domains', async () => {
+    // Real v6 data: the pacing demo dataset (templates, sessions with
+    // kataTemplateId links, check-ins) plus habit/settings rows.
+    const demo = generateDemoData('2026-09-28');
+    await seedLegacyDb(6, {
+      kataTemplates: demo.templates,
+      sessions: demo.sessions,
+      checkIns: demo.checkIns,
+      habits: V4_FIXTURES.habits!,
+      habitLogs: V4_FIXTURES.habitLogs!,
+      settings: V4_FIXTURES.settings!,
+    });
+
+    const db = getDb();
+    await db.open();
+    expect(db.verno).toBe(7);
+
+    // Every existing row survives, counts intact.
+    expect(await db.kataTemplates.count()).toBe(demo.templates.length);
+    expect(await db.sessions.count()).toBe(demo.sessions.length);
+    expect(await db.checkIns.count()).toBe(demo.checkIns.length);
+    expect(await db.habits.count()).toBe(1);
+    expect(await db.habitLogs.count()).toBe(1);
+    expect((await db.settings.get('singleton'))?.displayName).toBe('Tester');
+
+    // Spot-check integrity: v6 backfilled links and data values survive.
+    const linked = demo.sessions.filter((s) => s.kataTemplateId);
+    expect(linked.length).toBeGreaterThan(0);
+    for (const session of linked) {
+      expect((await db.sessions.get(session.id))?.kataTemplateId).toBe(session.kataTemplateId);
+    }
+    const firstCheckIn = demo.checkIns[0]!;
+    expect((await db.checkIns.get(firstCheckIn.date))?.energy).toBe(firstCheckIn.energy);
+    // The v4 compound index still works after two more upgrades.
+    expect(
+      await db.habitLogs
+        .where('[habitId+date]')
+        .equals(['123e4567-e89b-12d3-a456-426614174003', '2026-09-20'])
+        .count()
+    ).toBe(1);
+
+    // New tables exist, empty except the seeded domains.
+    expect(await db.projects.count()).toBe(0);
+    expect(await db.tasks.count()).toBe(0);
+    expect(await db.blocks.count()).toBe(0);
+    expect(await db.dayPlans.count()).toBe(0);
+    expect(await db.estimates.count()).toBe(0);
+    const domains = await db.domains.toArray();
+    expect(domains.map((d) => d.id)).toEqual(DEFAULT_DOMAINS.map((d) => d.id));
+    expect(domains.map((d) => d.name)).toEqual(['Trading', 'Practice', 'Career/Build', 'Life admin']);
+    // Sessions keep working without task/project links; the new indexes
+    // are ready for them.
+    expect(await db.sessions.where('taskId').equals('00000000-0000-4000-8000-000000000099').count()).toBe(0);
+    expect(DOMAIN_SEED_IDS.practice).toBe('11111111-1111-4111-8111-111111111112');
+  });
+
+  it('seeds the default domains on a fresh install (populate path)', async () => {
+    const db = await resetDbForTesting();
+    await db.open();
+    expect(db.verno).toBe(7);
+    const domains = await db.domains.orderBy('order').toArray();
+    expect(domains).toHaveLength(4);
+    expect(domains.map((d) => d.name)).toEqual(['Trading', 'Practice', 'Career/Build', 'Life admin']);
+    expect(domains.map((d) => d.id)).toEqual(DEFAULT_DOMAINS.map((d) => d.id));
+    // Seeding is idempotent: a second seed attempt adds nothing.
+    await db.domains.bulkPut(DEFAULT_DOMAINS);
+    expect(await db.domains.count()).toBe(4);
   });
 });

@@ -1,5 +1,27 @@
 # Schema Changelog
 
+## 2026-10-23 — Unified data model (roadmap Wave 1)
+
+New Zod schemas for the work vocabulary (a task is never a session):
+`domain.ts` (Domain: name, color, icon, order), `project.ts` (Project:
+title, domainId, status active|paused|done|dropped, cadencePerWeek,
+breadcrumb, lastTouchedAt), `task.ts` (Task: nextAction, domain/project/
+parent links, status inbox|next|scheduled|waiting|done|dropped with
+doneAt exactly when done, estimateMin/actualMin, energy, context[],
+dueAt/deferUntil, source, touchedAt), `block.ts` (Block: start/end with
+end > start, kind fixed|anchor|focus, task/project links, calendarRef),
+`day-plan.ts` (DayPlan: local day key YYYY-MM-DD like check-ins, picks,
+capacityMin, shutdownNote, journal), `estimate.ts` (Estimate: taskId,
+source 'user'|providerId, minutes, rationale).
+
+Dexie version 7 adds tables `domains`, `projects`, `tasks`, `blocks`,
+`dayPlans`, `estimates` and indexes `sessions.taskId`/`sessions.projectId`
+(time invested per task/project). The v6→v7 upgrade seeds the four default
+domains (Trading, Practice, Career/Build, Life admin, fixed UUIDs); fresh
+installs get the same seed via `on('populate')`. Existing rows are untouched.
+Habit/KataTemplate `domainId` and Session `taskId`/`projectId`/`blockId`
+Zod fields land with the Wave 1 repository layer.
+
 ## 2026-09-28 — Recovery-mode streaks (pacing T6)
 
 `settings.ts` gains optional `recoveryMode: boolean` (default false) and
