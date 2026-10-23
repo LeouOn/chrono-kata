@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import { useInbox } from '@/hooks/useTasks';
 import { INBOX_OUTCOMES, outcomeForKey, type InboxOutcome } from '@/lib/tasks/outcomes';
+import { messageOf } from '@/lib/tasks/messages';
 import type { Task } from '@/lib/schemas/task';
 
 type Step = 'choose' | 'next-action' | 'schedule' | 'make-project';
@@ -13,16 +14,6 @@ type Step = 'choose' | 'next-action' | 'schedule' | 'make-project';
 interface Props {
   open: boolean;
   onClose: () => void;
-}
-
-/** Turn a validation error into one sentence instead of raw Zod JSON. */
-function messageOf(error: unknown): string {
-  if (error && typeof error === 'object' && 'issues' in error) {
-    const issues = (error as { issues?: Array<{ message?: string }> }).issues;
-    const first = issues?.find((issue) => typeof issue.message === 'string' && issue.message !== '');
-    if (first?.message) return first.message;
-  }
-  return error instanceof Error ? error.message : String(error);
 }
 
 function toDateInputValue(date: Date): string {

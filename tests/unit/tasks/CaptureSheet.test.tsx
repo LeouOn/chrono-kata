@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,6 +8,8 @@ import { settingsRepo } from '@/lib/db/settings.repo';
 import { ToastProvider } from '@/components/ui/Toast';
 import { CaptureSheet } from '@/components/tasks/CaptureSheet';
 import { CaptureLauncher } from '@/components/tasks/CaptureLauncher';
+import { Modal } from '@/components/ui/Modal';
+import { taskRepo as repoForSpy } from '@/lib/db/task.repo';
 import { InboxScreen } from '@/components/tasks/InboxScreen';
 
 beforeEach(async () => {
@@ -133,6 +135,65 @@ describe('InlineCapture on the inbox screen', () => {
     fireEvent.change(addInput, { target: { value: 'something' } });
     fireEvent.submit(addInput.closest('form')!);
     await waitFor(async () => expect(await screen.findByRole('button', { name: 'Process' })).toBeEnabled());
+  });
+});
+
+describe('CaptureLauncher stacking and errors', () => {
+  it('opens on top of the practice form; Escape closes only the capture sheet', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    function Harness() {
+      const [formOpen, setFormOpen] = React.useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setFormOpen(true)}>
+            Open practice form
+          </button>
+          <Modal open={formOpen} onClose={() => setFormOpen(false)} title="New session">
+            <label htmlFor="practice-note">Practice note</label>
+            <input id="practice-note" />
+          </Modal>
+          <CaptureLauncher />
+        </>
+      );
+    }
+    renderWithProviders(<Harness />);
+
+    const opener = await screen.findByRole('button', { name: 'Open practice form' });
+    fireEvent.click(opener);
+    const practiceDialog = await screen.findByRole('dialog', { name: 'New session' });
+    const note = screen.getByLabelText('Practice note') as HTMLInputElement;
+    note.focus();
+    fireEvent.change(note, { target: { value: 'half typed note' } });
+
+    await screen.findByRole('button', { name: 'Capture a task' });
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    await screen.findByRole('dialog', { name: 'Capture' });
+    expect(screen.getAllByRole('dialog')).toHaveLength(2);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Capture' })).toBeNull());
+    // The practice form is still there, unmounted nowhere, with its state.
+    expect(screen.getByRole('dialog', { name: 'New session' })).toBe(practiceDialog);
+    expect(note.value).toBe('half typed note');
+    await waitFor(() => expect(document.activeElement).toBe(note));
+  });
+
+  it('shows a sentence and keeps the text when a capture write fails', async () => {
+    const spy = vi
+      .spyOn(repoForSpy, 'create')
+      .mockRejectedValue({ issues: [{ message: 'Storage is full.' }] });
+    renderWithProviders(<CaptureSheet open onClose={() => {}} />);
+    const input = (await screen.findByLabelText('Task to capture')) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: 'fix hose' } });
+    fireEvent.submit(input.closest('form')!);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Storage is full.');
+    expect(alert.textContent ?? '').not.toContain('issues');
+    expect(input.value).toBe('fix hose');
+    spy.mockRestore();
   });
 });
 

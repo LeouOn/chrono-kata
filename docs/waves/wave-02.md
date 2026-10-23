@@ -167,3 +167,9 @@ outside it:
 - **Modal focus restore**: closing from a step whose input unmounts defeated the
   shared Modal's restore, so the inbox screen and the step's Back button put
   focus back explicitly.
+- **Capture over an open form**: Ctrl/Cmd+K opens the capture sheet on Modal
+  layer 2, so it can stack over the practice session form; Escape closes only
+  the capture sheet, the form below keeps its typed state and focus returns to
+  its field.
+- **Write failures are spoken**: both sheets show one sentence (`messageOf`,
+  shared) in a `role="alert"` line and keep the user's text in the field.

@@ -9,6 +9,7 @@ import { useDomains } from '@/hooks/useDomains';
 import { parseCapture, type CaptureDomain } from '@/lib/capture/parse-capture';
 import { captureToTaskInput } from '@/lib/capture/task-input';
 import { splitBulk } from '@/lib/capture/split-bulk';
+import { messageOf } from '@/lib/tasks/messages';
 import type { TaskInput } from '@/lib/schemas/task';
 
 interface Props {
@@ -46,6 +47,7 @@ export function CaptureSheet({ open, onClose }: Props) {
   const [line, setLine] = useState('');
   const [bulk, setBulk] = useState<BulkRow[] | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const captureDomains: CaptureDomain[] = useMemo(
@@ -65,6 +67,7 @@ export function CaptureSheet({ open, onClose }: Props) {
     if (!open) return;
     setLine('');
     setBulk(null);
+    setError(null);
     const focus = window.setTimeout(() => inputRef.current?.focus(), 30);
     return () => window.clearTimeout(focus);
   }, [open]);
@@ -88,6 +91,7 @@ export function CaptureSheet({ open, onClose }: Props) {
       return;
     }
     setSaving(true);
+    setError(null);
     try {
       const saved = await saveOne(raw);
       if (saved) {
@@ -95,6 +99,9 @@ export function CaptureSheet({ open, onClose }: Props) {
         toast.show('Added to the inbox.', 'success');
         inputRef.current?.focus();
       }
+    } catch (e) {
+      // Keep the text in the field; say what happened instead of nothing.
+      setError(messageOf(e));
     } finally {
       setSaving(false);
     }
@@ -112,6 +119,7 @@ export function CaptureSheet({ open, onClose }: Props) {
   async function saveBulk() {
     if (!bulk || saving) return;
     setSaving(true);
+    setError(null);
     try {
       const inputs: TaskInput[] = [];
       for (const row of bulk) {
@@ -128,6 +136,8 @@ export function CaptureSheet({ open, onClose }: Props) {
       setBulk(null);
       setLine('');
       inputRef.current?.focus();
+    } catch (e) {
+      setError(messageOf(e));
     } finally {
       setSaving(false);
     }
@@ -143,7 +153,8 @@ export function CaptureSheet({ open, onClose }: Props) {
   if (parsed.unknownDomainTags.length > 0) chips.push(parsed.unknownDomainTags.join(' '));
 
   return (
-    <Modal open={open} onClose={onClose} title={bulk ? 'Add several tasks' : 'Capture'}>
+    <Modal open={open} onClose={onClose} title={bulk ? 'Add several tasks' : 'Capture'}
+      layer={2}>
       {bulk ? (
         <div className="space-y-3">
           <p className="text-sm text-text-muted">
@@ -178,6 +189,11 @@ export function CaptureSheet({ open, onClose }: Props) {
               </li>
             ))}
           </ul>
+          {error ? (
+            <p role="alert" className="text-sm text-hype">
+              {error}
+            </p>
+          ) : null}
           <div className="flex gap-2">
             <Button onClick={() => void saveBulk()} disabled={saving || bulk.length === 0}>
               {bulk.length === 1 ? 'Add 1' : `Add ${bulk.length}`}
@@ -221,6 +237,11 @@ export function CaptureSheet({ open, onClose }: Props) {
               </>
             ) : null}
           </p>
+          {error ? (
+            <p role="alert" className="text-sm text-hype">
+              {error}
+            </p>
+          ) : null}
           <div className="flex gap-2">
             <Button type="submit" disabled={saving || line.trim() === ''}>
               Add to inbox
@@ -242,7 +263,7 @@ export function CaptureButton({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       aria-label="Capture a task"
-      className="fixed bottom-[8.5rem] right-4 z-10 h-11 min-w-11 rounded-full border border-border bg-surface text-text-muted shadow-sm flex items-center justify-center px-3 gap-1.5 text-xs"
+      className="fixed bottom-[9rem] right-4 z-10 h-11 min-w-11 rounded-full border border-border bg-surface text-text-muted shadow-sm flex items-center justify-center px-3 gap-1.5 text-xs"
     >
       <span aria-hidden>＋</span>
       <span>Task</span>
