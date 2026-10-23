@@ -11,18 +11,21 @@ import { assertProviderAllowed } from './privacy';
  * standard for self-hosted and third-party gateways).
  *
  * When `privateMode` is on, a non-local provider is refused here — before an
- * adapter exists, so before any request can be made.
+ * adapter exists, so before any request can be made — and the adapter is told
+ * not to follow redirects.
  */
 export function createLLMProvider(
   config: ProviderConfig,
   options: { privateMode?: boolean } = {},
 ): LLMProvider {
-  assertProviderAllowed(config, options.privateMode === true);
-  switch (config.providerName) {
+  const privateMode = options.privateMode ?? config.privateMode ?? false;
+  assertProviderAllowed(config, privateMode);
+  const effective: ProviderConfig = privateMode ? { ...config, privateMode: true } : config;
+  switch (effective.providerName) {
     case 'claude':
-      return new ClaudeProvider(config);
+      return new ClaudeProvider(effective);
     case 'gemini':
-      return new GeminiProvider(config);
+      return new GeminiProvider(effective);
     case 'openai':
     case 'deepseek':
     case 'deepseek-pro':
@@ -32,6 +35,6 @@ export function createLLMProvider(
     case 'nemotron':
     case 'ollama':
     default:
-      return new OpenAICompatibleProvider(config);
+      return new OpenAICompatibleProvider(effective);
   }
 }

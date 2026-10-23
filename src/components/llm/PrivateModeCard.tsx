@@ -37,12 +37,13 @@ export function PrivateModeCard() {
       </label>
       <p className="text-xs text-text-muted mt-3">
         While this is on, a request to any provider that is not a local host — this machine, your
-        own network, or a <code>.local</code> name — is refused before it is made. That covers every
-        AI surface: the session coach comment, the coach conversation, the daily briefing, the
-        weekly reflection and the label suggestion. It does <strong>not</strong> cover other
-        traffic: Google Calendar sync still sends your sessions to Google, an export still writes a
-        file wherever you choose, and a local server that redirects to a public address would send
-        the request there — private mode checks where a request is addressed, not where it ends up.
+        own network, or a <code>.local</code> name — is refused before it is made, and a local
+        server that redirects somewhere else is refused rather than followed, so the request cannot
+        be carried off the machine. That covers every AI surface: the session coach comment, the
+        coach conversation, the daily briefing, the weekly reflection and the label suggestion. It
+        does <strong>not</strong> cover other traffic: Google Calendar sync still sends your
+        sessions to Google, and an export still writes a file wherever you choose. Outside private
+        mode nothing changes, so a reverse proxy of your own keeps working.
       </p>
     </Card>
   );

@@ -73,15 +73,18 @@ asking them to remember.
    non-local *provider*; it does not touch Google Calendar sync (which sends sessions to Google),
    exports (which write a file wherever you choose), or anything else the app does on purpose. The
    LLM tab says so in the same words, next to the switch.
-2. **Private mode checks where a request is addressed, not where it ends up.** A local server that
-   answers `307` to a public URL would send the request there, because the redirect is followed by
-   the browser. Closing that means refusing redirects for local providers, which lives in
-   `src/lib/llm/provider-fetch.ts` — T9's file, so it is not touched here. It is listed in the wave
-   note for whoever picks T9 up.
+2. **A redirect from a local host is refused, not followed.** While private mode is on, every
+   provider request is sent with `redirect: 'error'`, so a "local" server that answers `307` to a
+   public URL cannot carry the request body off the machine — the request fails at the first hop
+   and says so. Outside private mode the redirect behaviour is untouched, so a user's own
+   http→https reverse proxy keeps working. (`src/lib/llm/provider-fetch.ts` is T9's file and was
+   not touched: the option travels in the request the adapter builds.)
 3. **The loopback AI proxy is outside the app's privacy guarantee.** `src/app/api/local-ai/route.ts`
-   injects desktop environment keys and proxies the request server-side. The app refuses a
-   non-local provider before it reaches that route, but a caller that talks to the route directly
-   bypasses the app's check. The route is loopback-only and only exists in `npm run dev:local`.
+   injects desktop environment keys and proxies the request server-side. That route serves the
+   **environment-key cloud providers** (DeepSeek, ZAI, OpenRouter) — and private mode already
+   refuses every one of them, because their addresses are public, so the route is never reached
+   while private mode is on. A caller that talks to the route directly, bypassing the app, is
+   outside the app's guarantee: the route is loopback-only and only exists in `npm run dev:local`.
    Making that boundary airtight belongs with T9's native HTTP work.
 4. **Browsers block plain HTTP from an HTTPS page.** A hosted build (HTTPS) cannot reach
    `http://<lan-host>:1234` — the browser refuses mixed content. The app says so explicitly rather

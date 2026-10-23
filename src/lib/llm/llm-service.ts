@@ -456,6 +456,9 @@ async function resolveProviderFor(
     apiKey: entry.apiKey,
     model: entry.model,
     credentialSource: entry.credentialSource,
+    // The adapter needs to know: while private mode is on it must not follow
+    // a redirect to somewhere else.
+    privateMode: appState.privateMode,
   };
   assertProviderAllowed(config, appState.privateMode);
   return config;

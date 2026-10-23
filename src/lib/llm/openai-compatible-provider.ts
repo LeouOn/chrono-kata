@@ -3,6 +3,7 @@ import type { ChatResponse, LLMProvider, StreamChunk } from './types';
 import { LLMException, StopReason } from './types';
 import { mapFetchError, mapResponseStatus } from './error-mapper';
 import type { ProviderConfig } from './provider-config';
+import { privateModeFetchError, privateModeFetchOptions } from './privacy';
 import { parseSSELines, extractContentFromOpenAIChunk } from './sse-parser';
 
 interface OpenAIMessage {
@@ -90,9 +91,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
         },
         body: JSON.stringify(body),
         signal: input.signal,
+        ...privateModeFetchOptions(this.config),
       });
     } catch (e) {
-      throw mapFetchError(e);
+      throw privateModeFetchError(this.config, e) ?? mapFetchError(e);
     }
 
     const statusError = mapResponseStatus(resp.status, resp.statusText);
@@ -178,9 +180,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
         },
         body: JSON.stringify(body),
         signal: input.signal,
+        ...privateModeFetchOptions(this.config),
       });
     } catch (e) {
-      throw mapFetchError(e);
+      throw privateModeFetchError(this.config, e) ?? mapFetchError(e);
     }
 
     const statusError = mapResponseStatus(resp.status, resp.statusText);
