@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { TabBar } from '@/components/ui/TabBar';
 import { FAB } from '@/components/ui/FAB';
 import { CaptureLauncher } from '@/components/tasks/CaptureLauncher';
+import { SessionLauncherProvider, type SessionLink } from '@/components/session/SessionLauncher';
 import { SessionForm } from '@/components/session/SessionForm';
 import { MilestoneCelebration } from '@/components/streak/MilestoneCelebration';
 import { NotificationRunner } from '@/components/system/NotificationRunner';
@@ -18,6 +19,7 @@ import { ensureDefaultDomains } from '@/lib/db/init';
 
 export default function MainLayout({ children }: { children: ReactNode }) {
   const [fabOpen, setFabOpen] = useState(false);
+  const [sessionLink, setSessionLink] = useState<SessionLink | null>(null);
   const { createSession } = useSessions();
   const qc = useQueryClient();
 
@@ -62,22 +64,41 @@ export default function MainLayout({ children }: { children: ReactNode }) {
     };
   }, [refreshStreak]);
 
+  const launcher = {
+    openForLink: (link: SessionLink) => {
+      setSessionLink(link);
+      setFabOpen(true);
+    },
+  };
+
   return (
+    <SessionLauncherProvider value={launcher}>
     <div className="min-h-dvh pb-20">
       <div className="max-w-md mx-auto px-4 py-6">{children}</div>
-      <FAB onClick={() => setFabOpen(true)} />
+      <FAB
+        onClick={() => {
+          setSessionLink(null);
+          setFabOpen(true);
+        }}
+      />
       <CaptureLauncher />
       <TabBar />
       <SessionForm
         open={fabOpen}
+        initialLink={sessionLink}
         onSave={async (input) => {
           await createSession(input);
           setFabOpen(false);
+          setSessionLink(null);
         }}
-        onCancel={() => setFabOpen(false)}
+        onCancel={() => {
+          setFabOpen(false);
+          setSessionLink(null);
+        }}
       />
       <MilestoneCelebration />
       <NotificationRunner />
     </div>
+    </SessionLauncherProvider>
   );
 }

@@ -8,6 +8,7 @@ import { useInbox } from '@/hooks/useTasks';
 import { INBOX_OUTCOMES, outcomeForKey, type InboxOutcome } from '@/lib/tasks/outcomes';
 import { messageOf } from '@/lib/tasks/messages';
 import type { Task } from '@/lib/schemas/task';
+import { useSessionLauncher } from '@/components/session/SessionLauncher';
 
 type Step = 'choose' | 'next-action' | 'schedule' | 'make-project';
 
@@ -35,6 +36,9 @@ function fromLocalDateInput(value: string): Date | null {
 export function ProcessMode({ open, onClose }: Props) {
   const { inbox, isLoading, triage, undo } = useInbox();
   const toast = useToast();
+  const sessionLauncher = useSessionLauncher();
+  // After "Next action" the user can start right away instead of hunting the FAB.
+  const [startable, setStartable] = useState<Task | null>(null);
 
   // Snapshot the queue when the sheet opens, so the list does not shift under
   // the user while the inbox query refreshes after each decision.
@@ -91,6 +95,11 @@ export function ProcessMode({ open, onClose }: Props) {
         });
       } else {
         setLastAction(null);
+      }
+      if (outcome === 'next-action') {
+        setStartable({ ...current, nextAction });
+      } else {
+        setStartable(null);
       }
       advance();
       toast.show(
@@ -199,6 +208,11 @@ export function ProcessMode({ open, onClose }: Props) {
 
             <div className="rounded-2xl border border-border bg-surface p-4">
               <p className="font-serif text-lg text-text break-words">{current.title}</p>
+              {current.nextAction ? (
+                <p className="mt-1 text-xs text-text-muted">
+                  Pick up here: <span className="text-text">{current.nextAction}</span>
+                </p>
+              ) : null}
               <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-text-muted">
                 {current.estimateMin ? <span>~{current.estimateMin}m</span> : null}
                 {current.energy ? <span>{current.energy} energy</span> : null}
@@ -321,6 +335,20 @@ export function ProcessMode({ open, onClose }: Props) {
                   Undo {lastAction.label.toLowerCase()}
                 </Button>
               ) : null}
+              {startable ? (
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    sessionLauncher.openForLink({
+                      taskId: startable.id,
+                      label: (startable.nextAction || startable.title).slice(0, 50),
+                      estimateMin: startable.estimateMin ?? null,
+                    })
+                  }
+                >
+                  Start now
+                </Button>
+              ) : null}
             </div>
 
             {error ? (
@@ -334,6 +362,20 @@ export function ProcessMode({ open, onClose }: Props) {
             <p className="font-serif text-lg text-text">Inbox is clear.</p>
             <p className="text-sm text-text-muted">Nothing is waiting to be sorted.</p>
             <Button onClick={onClose}>Close</Button>
+            {startable ? (
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  sessionLauncher.openForLink({
+                    taskId: startable.id,
+                    label: (startable.nextAction || startable.title).slice(0, 50),
+                    estimateMin: startable.estimateMin ?? null,
+                  })
+                }
+              >
+                Start now
+              </Button>
+            ) : null}
             {lastAction ? (
               <Button variant="ghost" onClick={() => void undoLast()}>
                 Undo {lastAction.label.toLowerCase()}

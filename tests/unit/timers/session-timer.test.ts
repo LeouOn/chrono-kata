@@ -6,6 +6,48 @@ afterEach(() => {
 });
 
 describe('session timer storage', () => {
+  it('restores the task/project link added by Wave 9', () => {
+    writeSessionTimer({
+      startedAtMs: 1_700_000_000_000,
+      mode: 'timed',
+      durationMinutes: 20,
+      reps: null,
+      activityLabel: 'report',
+      note: '',
+      templateId: null,
+      softCapMinutes: null,
+      capPromptShown: false,
+      keepGoing: false,
+      taskId: '11111111-1111-4111-8111-111111111111',
+      projectId: '22222222-2222-4222-8222-222222222222',
+    });
+    const draft = readSessionTimer();
+    expect(draft?.taskId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(draft?.projectId).toBe('22222222-2222-4222-8222-222222222222');
+  });
+
+  it('restores an old draft without the link fields as unlinked', () => {
+    localStorage.setItem(
+      'chrono-kata-session-timer',
+      JSON.stringify({
+        startedAtMs: 1_700_000_000_000,
+        mode: 'timed',
+        durationMinutes: 15,
+        reps: null,
+        activityLabel: 'old draft',
+        note: '',
+        templateId: null,
+        softCapMinutes: null,
+        capPromptShown: false,
+        keepGoing: false,
+      }),
+    );
+    const draft = readSessionTimer();
+    expect(draft?.activityLabel).toBe('old draft');
+    expect(draft?.taskId).toBeNull();
+    expect(draft?.projectId).toBeNull();
+  });
+
   it('round-trips a running draft and clears it', () => {
     writeSessionTimer({
       startedAtMs: 1_700_000_000_000,
@@ -18,6 +60,8 @@ describe('session timer storage', () => {
       softCapMinutes: 20,
       capPromptShown: false,
       keepGoing: false,
+      taskId: null,
+      projectId: null,
     });
     expect(readSessionTimer()?.activityLabel).toBe('Walk');
     expect(readSessionTimer()?.softCapMinutes).toBe(20);

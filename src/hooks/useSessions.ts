@@ -8,6 +8,7 @@ import { streakRepo } from '@/lib/db/streak.repo';
 import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { checkInRepo } from '@/lib/db/check-in.repo';
+import { saveSessionWithOutcome } from '@/lib/db/session-outcome.repo';
 import { computeStreak } from '@/lib/streak/compute-streak';
 import { DEFAULT_LOW_ENERGY_REST_THRESHOLD } from '@/lib/schemas/settings';
 import { generateCoachCommentStream } from '@/lib/llm/llm-service';
@@ -169,8 +170,32 @@ export function useSessions() {
     qc.invalidateQueries({ queryKey: ['streak'] });
   };
 
+  // Task.actualMin / Project.breadcrumb are derived from sessions, so any edit
+  // or delete can move them. Unconditional is safe: invalidateQueries only
+  // refetches ACTIVE queries, so a practice-only or flag-off user does no
+  // task-store work.
+  const invalidateDerivedSurfaces = () => {
+    void qc.invalidateQueries({ queryKey: ['tasks'] });
+    void qc.invalidateQueries({ queryKey: ['projects'] });
+  };
+
   const createMutation = useMutation({
-    mutationFn: (input: SessionInput) => sessionRepo.save(input),
+    mutationFn: async (input: SessionInput) => {
+      // A session linked to a task/project must write its outcome atomically;
+      // unlinked (practice) sessions keep the ordinary single-write path.
+      if (input.taskId || input.projectId) {
+        const result = await saveSessionWithOutcome(input);
+        if (!result.ok) {
+          throw new Error(
+            result.reason === 'project-breadcrumb-required'
+              ? 'Add a pick-up note for this project, or save it as a practice session.'
+              : 'Could not save the session outcome.',
+          );
+        }
+        return result.session;
+      }
+      return sessionRepo.save(input);
+    },
     onMutate: async (input) => {
       await qc.cancelQueries({ queryKey: KEY });
       const optimistic: Session = {
@@ -189,9 +214,16 @@ export function useSessions() {
     onError: (_e, _input, ctx) => {
       if (ctx) qc.setQueryData(KEY, ctx.previous);
     },
-    onSuccess: async (saved) => {
+    onSuccess: async (saved, input) => {
       await recomputeStreakSideEffect();
       invalidateBoth();
+      // Only a linked session changed a task's actualMin/nextAction or a
+      // project's breadcrumb; a practice session must not cause task/project
+      // refetches (the same rule the repo-level recompute follows).
+      if (input.taskId || input.projectId) {
+        void qc.invalidateQueries({ queryKey: ['tasks'] });
+        void qc.invalidateQueries({ queryKey: ['projects'] });
+      }
       // Fire-and-forget coach comment (don't await; UI updates via liveQuery)
       void generateCoachCommentSideEffect(saved);
       // Fire-and-forget calendar sync (enqueues on failure)
@@ -207,6 +239,7 @@ export function useSessions() {
     onSettled: async (_data, _error, variables) => {
       await recomputeStreakSideEffect();
       invalidateBoth();
+      invalidateDerivedSurfaces();
       // Fire-and-forget: re-fetch the updated session and push to calendar
       void (async () => {
         const updated = await sessionRepo.getById(variables.id);
@@ -228,6 +261,7 @@ export function useSessions() {
     onSettled: async () => {
       await recomputeStreakSideEffect();
       invalidateBoth();
+      invalidateDerivedSurfaces();
     },
   });
 

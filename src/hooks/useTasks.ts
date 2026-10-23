@@ -140,3 +140,12 @@ export function useInbox(options: { enabled?: boolean } = {}) {
     undo: undo.mutateAsync,
   };
 }
+
+/** All projects, newest touch first; the 'Working on' picker filters to active ones. */
+export function useProjects(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: PROJECTS_KEY,
+    queryFn: () => projectRepo.getAll(),
+    enabled: options.enabled ?? true,
+  });
+}
