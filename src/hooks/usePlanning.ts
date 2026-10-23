@@ -10,7 +10,7 @@ import { useDomains } from '@/hooks/useDomains';
 import { blockRepo } from '@/lib/db/block.repo';
 import { dayPlanRepo } from '@/lib/db/day-plan.repo';
 import { resolveAnchors, resolveWakingHours } from '@/lib/planning/resolve';
-import { expandAnchors } from '@/lib/planning/anchors';
+import { anchorsWithinWindow } from '@/lib/planning/anchors';
 import { computeCapacity, type CapacityResult } from '@/lib/planning/capacity';
 import { rankPicks, type RankedPick } from '@/lib/planning/rank-picks';
 import { wakingWindow } from '@/lib/planning/time';
@@ -42,8 +42,11 @@ export function usePlanToday(dayKey?: string): DayPlanView {
   const enabled = useFlag('taskInbox');
   const today = dayKey ?? toLocalDateString(new Date());
   const { settings } = useSettings();
-  const wakingHours = resolveWakingHours(settings);
-  const anchors = resolveAnchors(settings);
+  // Memoise on the settings object: resolve* build new objects, but
+  // react-query keeps `settings` stable while the data is unchanged, so these
+  // identities hold until an input really changes (no per-render churn).
+  const wakingHours = useMemo(() => resolveWakingHours(settings), [settings]);
+  const anchors = useMemo(() => resolveAnchors(settings), [settings]);
 
   const tasksQuery = useTasks({ enabled });
   const projectsQuery = useProjects({ enabled });
@@ -112,10 +115,12 @@ export function usePlanToday(dayKey?: string): DayPlanView {
       domainTime,
       capacity,
       now: new Date(),
-      anchors: expandAnchors(anchors, today),
+      // Clip to the waking window, exactly like capacity, so an anchor outside
+      // it can never add availability to the ranking.
+      anchors: anchorsWithinWindow(anchors, today, window),
       domains: domainsQuery.data ?? [],
     });
-  }, [enabled, today, sessions, tasksQuery.data, projectsQuery.data, domainsQuery.data, capacity, anchors]);
+  }, [enabled, today, sessions, tasksQuery.data, projectsQuery.data, domainsQuery.data, capacity, anchors, window]);
 
   return {
     capacity,

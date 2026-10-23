@@ -10,7 +10,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { useDomains } from '@/hooks/useDomains';
 import { dispatchToast } from '@/components/ui/Toast';
 import { resolveAnchors, resolveWakingHours } from '@/lib/planning/resolve';
-import { AnchorSchema, type Anchor, type WakingHours } from '@/lib/schemas/settings';
+import { AnchorSchema, WakingHoursSchema, type Anchor, type WakingHours } from '@/lib/schemas/settings';
 import { newId } from '@/lib/utils/id';
 
 const DAYS: { value: number; label: string }[] = [
@@ -49,15 +49,24 @@ export function PlanningSettings() {
   if (!enabled) return null;
 
   async function saveWakingHours(next: WakingHours) {
+    // A cleared time input fires with '' — never write a row that fails the
+    // schema: the importer drops an invalid settings row wholesale, which
+    // would silently lose every setting on restore.
+    const parsed = WakingHoursSchema.safeParse(next);
+    if (!parsed.success) return;
     try {
-      await updateSettings({ wakingHours: next });
+      await updateSettings({ wakingHours: parsed.data });
     } catch (error) {
       dispatchToast(error instanceof Error ? error.message : 'Could not save waking hours', 'error');
     }
   }
 
   async function saveAnchors(next: Anchor[]) {
-    await updateSettings({ anchors: next });
+    try {
+      await updateSettings({ anchors: next });
+    } catch (error) {
+      dispatchToast(error instanceof Error ? error.message : 'Could not save protected windows', 'error');
+    }
   }
 
   return (

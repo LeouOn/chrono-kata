@@ -124,7 +124,26 @@ It runs in well under a second. `bufferPct` is also clamped to [0, 100]
   `DayPlan`, recompute on settings change and a settings row without planning
   fields; four mutations each red.
 
-The /plan screen, Today card, DayPlan persistence and E2E follow in PR B.
+Review fixes (PR #38): waking-hours writes are validated before they reach the
+settings row (a cleared time input used to persist an invalid row, and the
+importer then dropped the whole settings row on restore); anchor removes catch
+write failures; `usePlanToday` memoises the resolved settings, the anchors
+handed to ranking are clipped to the waking window through the same
+`anchorsWithinWindow` helper capacity uses (an out-of-window anchor could add
+availability), and an overnight fixed-block test now pins the waking-window
+range read. A Settings E2E covers persistence, the cleared-input case and
+removal. Mutations for each of these turn a test red.
+
+The /plan screen, Today card, DayPlan persistence and the end-to-end plan flow
+follow in PR B.
+
+## Known gaps
+
+- A time input fires one settings write per change. Fine for now; debounce if it
+  ever shows up in telemetry.
+- `settingsRepo.patch` still accepts any patch; a repo-level validation of the
+  merged row would close this class for every caller, but it could break legacy
+  partial patches and is deliberately a follow-up, not this wave.
 
 ## Deferred to part 2
 

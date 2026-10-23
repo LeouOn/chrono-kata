@@ -109,3 +109,31 @@ export function describeInterval(interval: AnchorInterval): string {
   const end = epochToLocalClock(interval.end.getTime());
   return `${start.clock}–${end.clock}`;
 }
+
+/**
+ * Anchor intervals that touch a waking window, clipped to it.
+ *
+ * Both `computeCapacity` and `rankPicks` must see the same thing: anchors for
+ * the window's day AND the next day (an overnight window reads past midnight),
+ * clipped to [window.start, window.end]. Keeping this in one helper stops the
+ * two from disagreeing — the seam where an out-of-window anchor used to add
+ * availability to the ranking.
+ */
+export function anchorsWithinWindow(
+  anchors: readonly Anchor[],
+  localDay: string,
+  window: { readonly start: number; readonly end: number },
+): AnchorInterval[] {
+  const pieces = [
+    ...expandAnchors(anchors, localDay),
+    ...expandAnchors(anchors, addDays(localDay, 1)),
+  ];
+  const clipped: AnchorInterval[] = [];
+  for (const piece of pieces) {
+    const from = Math.max(piece.start.getTime(), window.start);
+    const to = Math.min(piece.end.getTime(), window.end);
+    if (to <= from) continue;
+    clipped.push({ ...piece, start: new Date(from), end: new Date(to) });
+  }
+  return clipped;
+}
