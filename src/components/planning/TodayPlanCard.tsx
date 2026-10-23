@@ -40,7 +40,11 @@ export function TodayPlanCard() {
 
       {picks.length === 0 ? (
         <p className="text-sm text-text-muted">
-          {dayPlan ? 'All of today’s picks are done.' : 'Nothing picked yet.'}
+          {dayPlan
+            ? dayPlan.picks.length === 0
+              ? 'You left today unpicked.'
+              : 'All of today’s picks are done.'
+            : 'Nothing picked yet.'}
         </p>
       ) : (
         <ul className="space-y-2 pr-14">

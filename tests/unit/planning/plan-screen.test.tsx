@@ -204,6 +204,17 @@ describe('PlanScreen', () => {
     });
   });
 
+  it('does not claim an empty confirmed plan is all done', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await taskRepo.create({ title: 'candidate', status: 'next', source: 'manual', estimateMin: 20 });
+    await dayPlanRepo.upsert(TODAY, { picks: [], capacityMin: 200 });
+
+    renderWithProviders(<PlanScreen dayKey={TODAY} />);
+    await screen.findByText(/Suggested for the rest of today/);
+    expect(screen.queryByText(/All of today's picks are done/)).toBeNull();
+    expect(screen.getByRole('button', { name: /Confirm today/i })).toBeInTheDocument();
+  });
+
   it('lets the user swap a pick for another task', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     await seedNextTasks(['first', 'second', 'third', 'fourth']);

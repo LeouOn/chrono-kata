@@ -41,6 +41,16 @@ describe('TodayPlanCard', () => {
     await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 
+  it('says the day was left unpicked when the saved plan is empty', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await dayPlanRepo.upsert(TODAY, { picks: [], capacityMin: 200 });
+    renderCard();
+    expect(await screen.findByText(/You left today unpicked\./)).toBeInTheDocument();
+    expect(screen.queryByText(/All of today’s picks are done/)).toBeNull();
+    expect(screen.queryByText(/Nothing picked yet/)).toBeNull();
+    expect(screen.getByText(/Room for 200 minutes today\./)).toBeInTheDocument();
+  });
+
   it('invites a plan when none is confirmed', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     renderCard();

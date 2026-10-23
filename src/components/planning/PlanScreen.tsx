@@ -122,7 +122,10 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
   // is finished, the rows are fresh suggestions, not "your picks" - and the
   // action is a fresh confirmation.
   const listFromUserChoice = draftIds !== null ? draftIds.length > 0 : confirmedIds.length > 0;
-  const allConfirmedDone = confirmed && !listFromUserChoice && confirmedIds.length === 0;
+  // "All done" needs picks that were actually confirmed: an empty saved plan
+  // means the user left the day unpicked, not that they finished anything.
+  const allConfirmedDone =
+    confirmed && (dayPlan?.picks.length ?? 0) > 0 && !listFromUserChoice && confirmedIds.length === 0;
   const picksHeading =
     confirmed && listFromUserChoice
       ? 'Your picks'
