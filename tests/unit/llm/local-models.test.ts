@@ -99,6 +99,37 @@ describe('fetchLocalModels', () => {
     expect(result.error).toContain('mixed content');
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('refuses a non-local host in private mode, without fetching', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchLocalModels('https://api.openai.com/v1', { privateMode: true });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Private mode is on');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not follow redirects in private mode', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [{ id: 'a' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchLocalModels('http://localhost:1234/v1', { privateMode: true });
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ redirect: 'error' });
+  });
+
+  it('leaves redirect behaviour alone outside private mode', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchLocalModels('http://localhost:1234/v1');
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.redirect).toBeUndefined();
+  });
 });
 
 describe('checkLocalHost', () => {

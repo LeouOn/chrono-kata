@@ -1,4 +1,4 @@
-import { hostFromBaseUrl } from './local-provider';
+import { hostFromBaseUrl, isLocalBaseUrl } from './local-provider';
 
 /**
  * Model discovery and health check for a local OpenAI-compatible server
@@ -33,13 +33,24 @@ function describeTarget(baseUrl: string): string {
   return host ? `${host}` : baseUrl;
 }
 
+export interface LocalModelsOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  /**
+   * Private mode is on: only a local host may be contacted, and redirects are
+   * not followed (a local server that redirects elsewhere could carry the
+   * request off the machine).
+   */
+  privateMode?: boolean;
+}
+
 /**
  * Fetch the model list from a local server. Never throws: every failure comes
  * back as `{ ok: false, error }` with an actionable message.
  */
 export async function fetchLocalModels(
   baseUrl: string,
-  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  options: LocalModelsOptions = {},
 ): Promise<LocalModelsResult> {
   const trimmed = baseUrl.trim();
   if (!trimmed) {
@@ -60,6 +71,14 @@ export async function fetchLocalModels(
     };
   }
 
+  if (options.privateMode && !isLocalBaseUrl(trimmed)) {
+    return {
+      ok: false,
+      models: [],
+      error: `Private mode is on, so nothing was sent to ${describeTarget(trimmed)}: it is not a local host. Point the provider at this machine, your own network, or a .local name.`,
+    };
+  }
+
   if (url.protocol === 'http:' && pageIsHttps()) {
     return {
       ok: false,
@@ -77,7 +96,11 @@ export async function fetchLocalModels(
   const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
 
   try {
-    const response = await fetch(modelsUrl, { signal, cache: 'no-store' });
+    const response = await fetch(modelsUrl, {
+      signal,
+      cache: 'no-store',
+      ...(options.privateMode ? { redirect: 'error' as const } : {}),
+    });
     if (!response.ok) {
       return {
         ok: false,
@@ -110,7 +133,7 @@ export async function fetchLocalModels(
  */
 export async function checkLocalHost(
   baseUrl: string,
-  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  options: LocalModelsOptions = {},
 ): Promise<{ ok: boolean; message: string; models: string[] }> {
   const result = await fetchLocalModels(baseUrl, options);
   if (!result.ok) {

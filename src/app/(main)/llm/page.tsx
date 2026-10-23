@@ -12,6 +12,7 @@ import { discoverLocalProviders } from '@/lib/llm/local-discovery';
 import { createLLMProvider } from '@/lib/llm/provider-factory';
 import { checkLocalHost } from '@/lib/llm/local-models';
 import { isLocalProvider } from '@/lib/llm/local-provider';
+import { useFlag } from '@/hooks/useFlags';
 
 export default function LLMPage() {
   const {
@@ -24,6 +25,7 @@ export default function LLMPage() {
   const [environmentProviders, setEnvironmentProviders] = useState<Record<string, ProviderEntry>>({});
   const [testing, setTesting] = useState<string | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
+  const privateMode = useFlag('privateMode');
   const [connectionResult, setConnectionResult] = useState('');
 
   useEffect(() => {
@@ -56,7 +58,7 @@ export default function LLMPage() {
     setChecking(name);
     setConnectionResult('');
     try {
-      const result = await checkLocalHost(entry.baseUrl);
+      const result = await checkLocalHost(entry.baseUrl, { privateMode });
       setConnectionResult(`${name}: ${result.message}`);
     } finally {
       setChecking(null);

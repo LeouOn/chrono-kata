@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { PROVIDER_DEFAULTS, type ProviderName } from '@/lib/llm/provider-defaults';
 import { baseUrlFromHost, hostFromBaseUrl, isLocalProviderName } from '@/lib/llm/local-provider';
 import { checkLocalHost, fetchLocalModels } from '@/lib/llm/local-models';
+import { useFlag } from '@/hooks/useFlags';
 
 import type { ProviderEntry } from '@/lib/schemas/llm-settings';
 
@@ -26,6 +27,7 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
   // Local servers (LM Studio, Ollama) are addressed by host:port.
   const [host, setHost] = useState(() => hostFromBaseUrl(initial?.baseUrl ?? defaults.baseUrl));
   const [models, setModels] = useState<string[]>([]);
+  const privateMode = useFlag('privateMode');
   const [loadingModels, setLoadingModels] = useState(false);
   const [health, setHealth] = useState('');
 
@@ -46,7 +48,7 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
   async function loadModels() {
     setLoadingModels(true);
     setHealth('');
-    const result = await fetchLocalModels(baseUrl);
+    const result = await fetchLocalModels(baseUrl, { privateMode });
     setLoadingModels(false);
     if (!result.ok) {
       setHealth(result.error ?? 'Could not load models.');
@@ -63,7 +65,7 @@ export function ProviderEditor({ open, name, initial, onSave, onCancel }: Props)
   async function runHealthCheck() {
     setLoadingModels(true);
     setHealth('');
-    const result = await checkLocalHost(baseUrl);
+    const result = await checkLocalHost(baseUrl, { privateMode });
     setLoadingModels(false);
     setHealth(result.message);
   }
