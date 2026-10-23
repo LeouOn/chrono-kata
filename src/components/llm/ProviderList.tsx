@@ -2,6 +2,7 @@
 
 import { Card } from '@/components/ui/Card';
 import { PROVIDER_NAMES, PROVIDER_DEFAULTS, type ProviderName } from '@/lib/llm/provider-defaults';
+import { isLocalProvider, isLocalProviderName } from '@/lib/llm/local-provider';
 import type { ProviderEntry } from '@/lib/schemas/llm-settings';
 
 interface Props {
@@ -9,7 +10,9 @@ interface Props {
   environmentProviders?: Record<string, ProviderEntry>;
   onUseEnvironment?: (name: ProviderName) => void;
   onTest?: (name: ProviderName) => void;
+  onCheckHost?: (name: ProviderName) => void;
   testing?: string | null;
+  checking?: string | null;
   activeProviderName: string;
   onSelect: (name: ProviderName) => void;
   onConfigure: (name: ProviderName) => void;
@@ -22,7 +25,7 @@ export function ProviderList({
   onSelect,
   onConfigure,
   onRemove,
-  environmentProviders = {}, onUseEnvironment, onTest, testing,
+  environmentProviders = {}, onUseEnvironment, onTest, onCheckHost, testing, checking,
 }: Props) {
   return (
     <div className="space-y-2">
@@ -54,6 +57,11 @@ export function ProviderList({
                 <div className="flex flex-wrap gap-3 mt-2">
                   {environmentProviders[name] && configuredProviders[name]?.credentialSource !== 'environment' && <button type="button" className="text-xs text-accent" onClick={() => onUseEnvironment?.(name)}>Use desktop key</button>}
                   {isConfigured && <button type="button" className="text-xs text-accent disabled:opacity-40" disabled={!!testing} onClick={() => onTest?.(name)}>{testing === name ? 'Testing…' : 'Test connection'}</button>}
+                  {isConfigured && (isLocalProviderName(name) || isLocalProvider({ providerName: name, baseUrl: configuredProviders[name]?.baseUrl ?? defaults.baseUrl })) && (
+                    <button type="button" className="text-xs text-accent disabled:opacity-40" disabled={!!checking} onClick={() => onCheckHost?.(name)}>
+                      {checking === name ? 'Checking…' : 'Check host'}
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="flex gap-1 shrink-0">
