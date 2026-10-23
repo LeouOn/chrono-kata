@@ -100,6 +100,32 @@ It runs in well under a second. `bufferPct` is also clamped to [0, 100]
 - The buffer clamp covers the pure function; nothing in the UI can edit
   `bufferPct` yet, so the clamp is a guard, not a feature.
 
+## Part 2, PR A: planning settings and the plan hooks
+
+- **`resolveWakingHours` / `resolveAnchors`** (`src/lib/planning/resolve.ts`):
+  the 07:00–22:00 / `[]` defaults in one place, with invalid stored values
+  falling back safely. Planning callers no longer read the optional fields ad
+  hoc (the known gap from part 1).
+- **Planning section in Settings** (flag-gated by `taskInbox`): waking-hours
+  time inputs and anchors CRUD — title, weekday chips as a labelled button
+  group, start/end, optional domain. An anchor whose end is at or before its
+  start says plainly that it crosses midnight (not an error); removing one uses
+  a gentle confirm and changes nothing else. Everything saves through
+  `settingsRepo`, so backups already round-trip it.
+- **`usePlanToday(dayKey?)`**: composes `computeCapacity` (waking window from
+  `wakingWindow`, so overnight windows read past midnight; fixed blocks from
+  `blockRepo.range` over that window) with `rankPicks` (next tasks, sessions of
+  the last 7 local days for cadence, today's domain time derived from linked
+  sessions). Every query it adds is `enabled` only with the flag on, so the
+  flag-off app does no task/plan work — tested with spies.
+- Tests: resolve defaults/invalid rows; settings UI (flag gating, waking-hours
+  persistence, anchor add with midnight note, validation, gentle removal, a11y
+  tripwire over the dialog); hook wiring incl. capacity numbers, confirmed
+  `DayPlan`, recompute on settings change and a settings row without planning
+  fields; four mutations each red.
+
+The /plan screen, Today card, DayPlan persistence and E2E follow in PR B.
+
 ## Deferred to part 2
 
 The morning plan screen (fixed blocks and anchors shown, picks confirmed or
