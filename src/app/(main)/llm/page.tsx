@@ -10,6 +10,8 @@ import type { ProviderName } from '@/lib/llm/provider-defaults';
 import type { ProviderEntry } from '@/lib/schemas/llm-settings';
 import { discoverLocalProviders } from '@/lib/llm/local-discovery';
 import { createLLMProvider } from '@/lib/llm/provider-factory';
+import { checkLocalHost } from '@/lib/llm/local-models';
+import { isLocalProvider } from '@/lib/llm/local-provider';
 
 export default function LLMPage() {
   const {
@@ -21,6 +23,7 @@ export default function LLMPage() {
   const [editing, setEditing] = useState<ProviderName | null>(null);
   const [environmentProviders, setEnvironmentProviders] = useState<Record<string, ProviderEntry>>({});
   const [testing, setTesting] = useState<string | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
   const [connectionResult, setConnectionResult] = useState('');
 
   useEffect(() => {
@@ -45,6 +48,19 @@ export default function LLMPage() {
     } catch (error) {
       setConnectionResult(`${name}: ${error instanceof Error ? error.message : 'Connection failed.'}`);
     } finally { setTesting(null); }
+  }
+
+  async function checkHost(name: ProviderName) {
+    const entry = settings?.providers[name];
+    if (!entry || checking) return;
+    setChecking(name);
+    setConnectionResult('');
+    try {
+      const result = await checkLocalHost(entry.baseUrl);
+      setConnectionResult(`${name}: ${result.message}`);
+    } finally {
+      setChecking(null);
+    }
   }
 
   if (!settings) {
@@ -85,6 +101,8 @@ export default function LLMPage() {
           }}
           onTest={(name) => void testConnection(name)}
           testing={testing}
+          onCheckHost={(name) => void checkHost(name)}
+          checking={checking}
         />
       </div>
 

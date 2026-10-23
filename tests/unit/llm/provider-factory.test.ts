@@ -26,7 +26,7 @@ describe('createLLMProvider', () => {
   });
 
   it('returns OpenAICompatibleProvider for all other OpenAI-compatible providers', () => {
-    const openaiCompatible = ['deepseek', 'deepseek-pro', 'openrouter', 'zai', 'minimax', 'nemotron', 'ollama'] as const;
+    const openaiCompatible = ['deepseek', 'deepseek-pro', 'openrouter', 'zai', 'minimax', 'nemotron', 'ollama', 'lmstudio'] as const;
     for (const name of openaiCompatible) {
       expect(createLLMProvider(cfg(name))).toBeInstanceOf(OpenAICompatibleProvider);
     }
