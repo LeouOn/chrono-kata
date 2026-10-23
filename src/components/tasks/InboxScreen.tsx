@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useInbox } from '@/hooks/useTasks';
 import { ProcessMode } from './ProcessMode';
+import { InlineCapture } from './InlineCapture';
 import { toLocalDateString } from '@/lib/utils/date';
 
 /**
@@ -32,6 +33,8 @@ export function InboxScreen() {
           Process
         </Button>
       </div>
+
+      <InlineCapture />
 
       {isLoading ? <p className="text-sm text-text-muted">Loading…</p> : null}
 

@@ -135,9 +135,10 @@ Wave note: [docs/waves/wave-01.md](waves/wave-01.md).
 
 ## W2 — Capture (the inbox)
 
-**Status:** partial — part 1 (rule-based parser + bulk splitter, pure logic) shipped in
-`src/lib/capture/`; quick-capture UI, inbox screen, process mode, voice and the Android share
-target are still missing · **Size:** L · **Lanes:** B (UI) + C · **Depends on:** W1
+**Status:** partial — the rule-based parser + bulk splitter (`src/lib/capture/`) and the capture
+sheet, bulk preview, inbox and process mode (`/inbox`, behind the `taskInbox` flag, default off)
+now ship; voice capture and the Android share target remain · **Size:** L · **Lanes:** B (UI) + C ·
+**Depends on:** W1
 
 **Evidence**
 - Exists (adjacent): a global FAB — `src/components/ui/FAB.tsx`, mounted at
