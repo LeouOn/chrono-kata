@@ -155,11 +155,40 @@ function isFloating(time: ICAL.Time | null | undefined): boolean {
   return !time?.zone || time.zone.tzid === 'floating';
 }
 
-/** Resolve an ICAL time to an instant, honouring UTC / VTIMEZONE / TZID. */
+/** True when Intl knows the zone name (an IANA zone). */
+function isKnownIanaZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve an ICAL time to an instant.
+ * - all-day: local midnight;
+ * - UTC or a validated VTIMEZONE: exact instant via ical.js;
+ * - floating without TZID: the device's local wall clock;
+ * - floating with an IANA TZID: Intl (also correct when a VTIMEZONE in the file
+ *   disagrees with the real rule, e.g. Outlook's "+02:00 EU summer time");
+ * - anything else: null, so the caller skips the event instead of guessing.
+ */
 function resolveTime(time: ICAL.Time, tzid: string | null): Date | null {
   if (time.isDate) return localMidnight(partsOf(time));
-  if (!isFloating(time)) return time.toJSDate();
+  if (!isFloating(time)) {
+    // A VTIMEZONE claims the zone. ical.js throws while expanding unusable
+    // rules (and would otherwise resolve them to offset 0), so a zone we
+    // cannot evaluate is treated as unsupported rather than guessed.
+    try {
+      const resolved = time.toJSDate();
+      return Number.isFinite(resolved.getTime()) ? resolved : null;
+    } catch {
+      return null;
+    }
+  }
   if (!tzid) return localWallTime(partsOf(time));
+  if (!isKnownIanaZone(tzid)) return null;
   return wallTimeInZoneToUtc(partsOf(time), tzid);
 }
 
@@ -169,14 +198,36 @@ function propTzid(component: ICAL.Component, name: string): string | null {
   return typeof tzid === 'string' && tzid.length > 0 ? tzid : null;
 }
 
+/**
+ * A VTIMEZONE is only trusted when it defines at least one observance with a
+ * parseable DTSTART and a `±HHMM` TZOFFSETTO. A malformed one otherwise
+ * registers a zone whose offset resolves to zero, turning a wall time into a
+ * silently wrong UTC instant.
+ */
+function isUsableVtimezone(vtimezone: ICAL.Component): boolean {
+  const observances = [
+    ...vtimezone.getAllSubcomponents('standard'),
+    ...vtimezone.getAllSubcomponents('daylight'),
+  ];
+  if (observances.length === 0) return false;
+  return observances.every((observance) => {
+    const dtstart = observance.getFirstPropertyValue('dtstart');
+    const offsetTo = observance.getFirstPropertyValue('tzoffsetto');
+    return dtstart instanceof ICAL.Time && typeof offsetTo === 'string' && /^[+-]\d{4}$/.test(offsetTo);
+  });
+}
+
 function registerTimezones(calendar: ICAL.Component): void {
   for (const vtimezone of calendar.getAllSubcomponents('vtimezone')) {
     try {
       const tzid = vtimezone.getFirstPropertyValue('tzid');
-      if (typeof tzid !== 'string' || ICAL.TimezoneService.has(tzid)) continue;
+      if (typeof tzid !== 'string' || tzid.length === 0) continue;
+      if (ICAL.TimezoneService.has(tzid)) continue;
+      if (!isUsableVtimezone(vtimezone)) continue;
       ICAL.TimezoneService.register(new ICAL.Timezone(vtimezone));
     } catch {
-      // A broken VTIMEZONE is not fatal: the IANA TZID fallback may still work.
+      // A broken VTIMEZONE is not fatal: the event is skipped when its TZID is
+      // neither registered nor a known IANA zone.
     }
   }
 }
@@ -211,7 +262,18 @@ interface Master {
   allDay: boolean;
 }
 
-/** Start + duration of the event's first occurrence, or an error reason. */
+interface EventDescriptor {
+  vevent: ICAL.Component;
+  uid: string;
+  summary?: string;
+  startTzid: string | null;
+  endTzid: string | null;
+  master: Master;
+  /** Resolved RECURRENCE-ID start, when this event overrides one instance. */
+  recurId: Date | null;
+}
+
+/** Start + duration of the event's own occurrence, or an error reason. */
 function readMaster(
   event: ICAL.Event,
   vevent: ICAL.Component,
@@ -261,7 +323,56 @@ function endOfOccurrence(master: Master, start: Date): Date {
     : new Date(start.getTime() + master.durationMs);
 }
 
-export function icsToBlocks(text: string, options: IcsImportOptions): IcsImportResult {
+interface Expansion {
+  starts: Date[];
+  truncatedBy?: 'occurrences' | 'iterations';
+  error?: string;
+}
+
+function expandOccurrences(
+  descriptor: EventDescriptor,
+  window: { from: Date; to: Date },
+  maxOccurrences: number,
+): Expansion {
+  const { vevent, startTzid } = descriptor;
+  let event: ICAL.Event;
+  try {
+    event = new ICAL.Event(vevent);
+  } catch (error) {
+    return { starts: [], error: `unreadable event: ${error instanceof Error ? error.message : String(error)}` };
+  }
+
+  if (!event.isRecurring()) return { starts: [descriptor.master.start] };
+
+  const starts: Date[] = [];
+  try {
+    const expansion = new ICAL.RecurExpansion({ component: vevent, dtstart: event.startDate });
+    let cursor: ICAL.Time | null;
+    let iterations = 0;
+    while ((cursor = expansion.next())) {
+      const next: ICAL.Time = cursor;
+      iterations += 1;
+      if (iterations > MAX_RECURRENCE_ITERATIONS) return { starts, truncatedBy: 'iterations' };
+      const start = resolveTime(next, startTzid);
+      if (!start) return { starts, error: `unsupported timezone "${startTzid ?? 'unknown'}"` };
+      if (start.getTime() > window.to.getTime()) break;
+      if (start.getTime() < window.from.getTime()) continue;
+      starts.push(start);
+      if (starts.length > maxOccurrences) {
+        starts.pop();
+        return { starts, truncatedBy: 'occurrences' };
+      }
+    }
+  } catch (error) {
+    return {
+      starts,
+      error: `unsupported recurrence: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  return { starts };
+}
+
+export function icsToBlocks(rawText: string, options: IcsImportOptions): IcsImportResult {
   const defaultKind = options.defaultKind ?? 'fixed';
   const windowDays = options.windowDays ?? 366;
   const maxOccurrences = options.maxOccurrencesPerEvent ?? 500;
@@ -276,6 +387,8 @@ export function icsToBlocks(text: string, options: IcsImportOptions): IcsImportR
   const skip = (reason: string, uid?: string, summary?: string) =>
     skipped.push({ reason, uid, summary });
 
+  // Windows exports carry a UTF-8 BOM; the parser rejects the whole file with it.
+  const text = typeof rawText === 'string' && rawText.charCodeAt(0) === 0xfeff ? rawText.slice(1) : rawText;
   if (typeof text !== 'string' || text.trim() === '') {
     skip('invalid calendar: empty input');
     return { blocks, skipped, window };
@@ -297,6 +410,8 @@ export function icsToBlocks(text: string, options: IcsImportOptions): IcsImportR
     return { blocks, skipped, window };
   }
 
+  // Pass 1: normalize every VEVENT into a descriptor (or a skip).
+  const descriptors: EventDescriptor[] = [];
   for (const vevent of events) {
     const rawUid = vevent.getFirstPropertyValue('uid');
     const uid =
@@ -311,9 +426,7 @@ export function icsToBlocks(text: string, options: IcsImportOptions): IcsImportR
       skip('cancelled event', uid, summary);
       continue;
     }
-
-    const dtstart = vevent.getFirstProperty('dtstart');
-    if (!dtstart) {
+    if (!vevent.getFirstProperty('dtstart')) {
       skip('missing DTSTART', uid, summary);
       continue;
     }
@@ -333,79 +446,119 @@ export function icsToBlocks(text: string, options: IcsImportOptions): IcsImportR
       skip(read.error, uid, summary);
       continue;
     }
-    const master = read.master;
 
-    const occurrences: Date[] = [];
-    if (event.isRecurring()) {
-      let cursor: ICAL.Time | null;
-      try {
-        const expansion = new ICAL.RecurExpansion({ component: vevent, dtstart: event.startDate });
-        let iterations = 0;
-        let truncated = false;
-        // ical.js returns undefined (not null) once the series is exhausted.
-        while ((cursor = expansion.next())) {
-          const next: ICAL.Time = cursor;
-          iterations += 1;
-          if (iterations > MAX_RECURRENCE_ITERATIONS) {
-            truncated = true;
-            break;
-          }
-          const start = resolveTime(next, startTzid);
-          if (!start) {
-            skip(`unsupported timezone "${startTzid ?? 'unknown'}"`, uid, summary);
-            break;
-          }
-          if (start.getTime() > window.to.getTime()) break;
-          if (start.getTime() < window.from.getTime()) continue;
-          occurrences.push(start);
-          if (occurrences.length > maxOccurrences) {
-            occurrences.pop();
-            truncated = true;
-            break;
-          }
-        }
-        if (truncated) {
-          skip(`recurrence truncated at ${maxOccurrences} occurrences`, uid, summary);
-        }
-      } catch (error) {
-        skip(
-          `unsupported recurrence: ${error instanceof Error ? error.message : String(error)}`,
-          uid,
-          summary,
-        );
+    let recurId: Date | null = null;
+    const recurIdProperty = vevent.getFirstProperty('recurrence-id');
+    if (recurIdProperty) {
+      const value = recurIdProperty.getFirstValue() as ICAL.Time | null;
+      if (!(value instanceof ICAL.Time)) {
+        skip('unreadable RECURRENCE-ID', uid, summary);
         continue;
       }
-    } else {
-      occurrences.push(master.start);
+      const recurIdTzid = recurIdProperty.getParameter('tzid');
+      recurId = resolveTime(value, typeof recurIdTzid === 'string' ? recurIdTzid : startTzid);
+      if (!recurId) {
+        skip(`unsupported timezone "${startTzid ?? 'unknown'}"`, uid, summary);
+        continue;
+      }
     }
 
-    let invalidOccurrence = false;
-    for (const start of occurrences) {
-      const end = endOfOccurrence(master, start);
-      if (end.getTime() <= start.getTime()) {
-        invalidOccurrence = true;
+    descriptors.push({
+      vevent,
+      uid,
+      summary,
+      startTzid,
+      endTzid,
+      master: read.master,
+      recurId,
+    });
+  }
+
+  // Pass 2: group overrides with their series and emit blocks.
+  const groups = new Map<string, EventDescriptor[]>();
+  for (const descriptor of descriptors) {
+    const group = groups.get(descriptor.uid) ?? [];
+    group.push(descriptor);
+    groups.set(descriptor.uid, group);
+  }
+
+  const emit = (descriptor: EventDescriptor, start: Date, end: Date, idSeed: string): void => {
+    if (end.getTime() <= start.getTime()) {
+      skip('occurrence has no valid time range', descriptor.uid, descriptor.summary);
+      return;
+    }
+    const blockId =
+      uuidOrUndefined(descriptor.vevent.getFirstPropertyValue('x-chrono-kata-block-id')) ??
+      stableUuidFromString(`${descriptor.uid}#${idSeed}`);
+    const parsed = BlockSchema.safeParse({
+      id: blockId,
+      start,
+      end,
+      kind: kindOf(descriptor.vevent, defaultKind),
+      taskId: uuidOrUndefined(descriptor.vevent.getFirstPropertyValue('x-chrono-kata-task-id')) ?? null,
+      projectId: uuidOrUndefined(descriptor.vevent.getFirstPropertyValue('x-chrono-kata-project-id')) ?? null,
+      title: titleOf(descriptor.summary),
+      calendarRef: descriptor.uid.slice(0, MAX_CALENDAR_REF),
+      createdAt: now,
+      updatedAt: now,
+    });
+    if (parsed.success) blocks.push(parsed.data);
+    else skip('occurrence has no valid time range', descriptor.uid, descriptor.summary);
+  };
+
+  for (const [uid, group] of groups) {
+    const masters = group.filter((d) => d.recurId === null);
+    const overrides = group.filter((d) => d.recurId !== null);
+
+    if (masters.length === 0) {
+      // Detached overrides with no series in this file: each is its own block.
+      for (const override of overrides) {
+        emit(override, override.master.start, endOfOccurrence(override.master, override.master.start), override.master.start.toISOString());
+      }
+      continue;
+    }
+
+    for (const master of masters) {
+      const expansion = expandOccurrences(master, window, maxOccurrences);
+      if (expansion.error) {
+        skip(expansion.error, uid, master.summary);
         continue;
       }
-      const blockId =
-        uuidOrUndefined(vevent.getFirstPropertyValue('x-chrono-kata-block-id')) ??
-        stableUuidFromString(`${uid}#${start.toISOString()}`);
+      if (expansion.truncatedBy === 'occurrences') {
+        skip(`recurrence truncated at ${maxOccurrences} occurrences`, uid, master.summary);
+      } else if (expansion.truncatedBy === 'iterations') {
+        skip(`recurrence truncated at the ${MAX_RECURRENCE_ITERATIONS}-iteration cap`, uid, master.summary);
+      }
 
-      const parsed = BlockSchema.safeParse({
-        id: blockId,
+      const slots = expansion.starts.map((start) => ({
         start,
-        end,
-        kind: kindOf(vevent, defaultKind),
-        taskId: uuidOrUndefined(vevent.getFirstPropertyValue('x-chrono-kata-task-id')) ?? null,
-        projectId: uuidOrUndefined(vevent.getFirstPropertyValue('x-chrono-kata-project-id')) ?? null,
-        title: titleOf(summary),
-        calendarRef: uid.slice(0, MAX_CALENDAR_REF),
-        createdAt: now,
-        updatedAt: now,
-      });
-      if (parsed.success) blocks.push(parsed.data);
-      else invalidOccurrence = true;
+        end: endOfOccurrence(master.master, start),
+        idSeed: start.toISOString(),
+        overridden: false,
+        descriptor: master,
+      }));
+
+      // A RECURRENCE-ID replaces the occurrence it names (same slot identity,
+      // new time) instead of adding a duplicate block for the day.
+      for (const override of overrides) {
+        const index = slots.findIndex(
+          (slot) => !slot.overridden && Math.abs(slot.start.getTime() - override.recurId!.getTime()) < 1000,
+        );
+        if (index >= 0) {
+          const slot = slots[index]!;
+          slot.start = override.master.start;
+          slot.end = endOfOccurrence(override.master, override.master.start);
+          slot.overridden = true;
+          slot.descriptor = override;
+          continue;
+        }
+        // An override whose original occurrence is outside the window still
+        // deserves to appear, as its own block.
+        emit(override, override.master.start, endOfOccurrence(override.master, override.master.start), override.master.start.toISOString());
+      }
+
+      for (const slot of slots) emit(slot.descriptor, slot.start, slot.end, slot.idSeed);
     }
-    if (invalidOccurrence) skip('occurrence has no valid time range', uid, summary);
   }
 
   blocks.sort((a, b) => a.start.getTime() - b.start.getTime() || a.id.localeCompare(b.id));
