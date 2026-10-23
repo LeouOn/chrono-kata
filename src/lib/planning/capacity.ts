@@ -21,8 +21,7 @@
  */
 
 import type { Anchor, WakingHours } from '@/lib/schemas/settings';
-import { addDays } from '@/lib/pacing/days';
-import { expandAnchors } from './anchors';
+import { anchorsWithinWindow } from './anchors';
 import { elapsedMinutes, wakingWindow } from './time';
 
 export interface TimeInterval {
@@ -104,17 +103,12 @@ export function computeCapacity(input: CapacityInput): CapacityResult {
     window.start,
     window.end,
   );
-  // An overnight waking window can run into the next calendar day, so anchors
-  // that start tomorrow (or today's cross-midnight tail) must be considered
-  // too; the clip to the window keeps only the part that touches it.
-  const anchorSpans = clip(
-    [...expandAnchors(input.anchors, input.day), ...expandAnchors(input.anchors, addDays(input.day, 1))].map((interval) => ({
-      start: interval.start.getTime(),
-      end: interval.end.getTime(),
-    })),
-    window.start,
-    window.end,
-  );
+  // One shared helper (same day + day+1, clipped to the window) so capacity
+  // and ranking can never disagree about which anchor time exists.
+  const anchorSpans = anchorsWithinWindow(input.anchors, input.day, window).map((interval) => ({
+    start: interval.start.getTime(),
+    end: interval.end.getTime(),
+  }));
 
   const wakingMin = elapsedMinutes(window.start, window.end);
   const fixedMin = unionMinutes(fixedSpans);

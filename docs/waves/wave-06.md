@@ -100,6 +100,51 @@ It runs in well under a second. `bufferPct` is also clamped to [0, 100]
 - The buffer clamp covers the pure function; nothing in the UI can edit
   `bufferPct` yet, so the clamp is a guard, not a feature.
 
+## Part 2, PR A: planning settings and the plan hooks
+
+- **`resolveWakingHours` / `resolveAnchors`** (`src/lib/planning/resolve.ts`):
+  the 07:00–22:00 / `[]` defaults in one place, with invalid stored values
+  falling back safely. Planning callers no longer read the optional fields ad
+  hoc (the known gap from part 1).
+- **Planning section in Settings** (flag-gated by `taskInbox`): waking-hours
+  time inputs and anchors CRUD — title, weekday chips as a labelled button
+  group, start/end, optional domain. An anchor whose end is at or before its
+  start says plainly that it crosses midnight (not an error); removing one uses
+  a gentle confirm and changes nothing else. Everything saves through
+  `settingsRepo`, so backups already round-trip it.
+- **`usePlanToday(dayKey?)`**: composes `computeCapacity` (waking window from
+  `wakingWindow`, so overnight windows read past midnight; fixed blocks from
+  `blockRepo.range` over that window) with `rankPicks` (next tasks, sessions of
+  the last 7 local days for cadence, today's domain time derived from linked
+  sessions). Every query it adds is `enabled` only with the flag on, so the
+  flag-off app does no task/plan work — tested with spies.
+- Tests: resolve defaults/invalid rows; settings UI (flag gating, waking-hours
+  persistence, anchor add with midnight note, validation, gentle removal, a11y
+  tripwire over the dialog); hook wiring incl. capacity numbers, confirmed
+  `DayPlan`, recompute on settings change and a settings row without planning
+  fields; four mutations each red.
+
+Review fixes (PR #38): waking-hours writes are validated before they reach the
+settings row (a cleared time input used to persist an invalid row, and the
+importer then dropped the whole settings row on restore); anchor removes catch
+write failures; `usePlanToday` memoises the resolved settings, the anchors
+handed to ranking are clipped to the waking window through the same
+`anchorsWithinWindow` helper capacity uses (an out-of-window anchor could add
+availability), and an overnight fixed-block test now pins the waking-window
+range read. A Settings E2E covers persistence, the cleared-input case and
+removal. Mutations for each of these turn a test red.
+
+The /plan screen, Today card, DayPlan persistence and the end-to-end plan flow
+follow in PR B.
+
+## Known gaps
+
+- A time input fires one settings write per change. Fine for now; debounce if it
+  ever shows up in telemetry.
+- `settingsRepo.patch` still accepts any patch; a repo-level validation of the
+  merged row would close this class for every caller, but it could break legacy
+  partial patches and is deliberately a follow-up, not this wave.
+
 ## Deferred to part 2
 
 The morning plan screen (fixed blocks and anchors shown, picks confirmed or
