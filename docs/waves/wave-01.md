@@ -1,7 +1,7 @@
 # Wave 1 — Unified data model (tasks, projects, domains)
 
 **Shipped:** 2026-10-23 · **PRs:** #14 (migration, reviewed by check-g before merge),
-#17 (repositories, links, backup, docs) · **Lane:** A (data)
+#19 (repositories, links, backup, docs) · **Lane:** A (data)
 
 ## What shipped
 
@@ -56,5 +56,5 @@ The roadmap's shapes were adapted to existing conventions:
 - No UI, no LLM, no settings changes in W1 (per the wave's scope; W2+ build on the repos).
 - Linking existing habits/kata templates to the seeded Practice domain is left manual
   (optional field, no automatic backfill — avoiding a guess the user didn't make).
-- `docs/ROADMAP_STATUS.md` W1 section updated in PR #17; d1's #16 adds the v6 fixture
+- `docs/ROADMAP_STATUS.md` W1 section updated in PR #19; d1's #16 adds the v6 fixture
   test alongside the v7 rows in `migrations.test.ts` (kept both per d1's note).
