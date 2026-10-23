@@ -95,6 +95,8 @@ export function buildDailyBriefingUserText(context: PacingContext): string {
     'Pacing decision. Phrase it. Do not change the action.',
     JSON.stringify(context),
     '',
+    'load7 is the last 7 days of load and previousLoad7 is the 7 days before that; if load7 is higher than previousLoad7, the load trend is up, if lower, it is down.',
+    '',
     'Reply with JSON only: {"summary":"...","suggestion":"...","tone":"gentle"|"steady"|"encouraging"}.',
   ].join('\n');
 }
