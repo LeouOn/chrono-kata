@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DECOMPOSITION_FEATURE } from '@/lib/decomposition/schema';
 import { CoachPersonalitySchema } from './coach-personality';
 
 export const ThemeModeSchema = z.enum(['system', 'light', 'dark']);
@@ -59,7 +60,7 @@ export const LLM_FEATURES = [
   'weeklyReflection',
   'conversationReply',
   'labelSuggestion',
-  'decomposition',
+  DECOMPOSITION_FEATURE,
   'estimate',
 ] as const;
 export type LLMFeature = (typeof LLM_FEATURES)[number];

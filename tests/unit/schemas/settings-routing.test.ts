@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_SETTINGS, LLMRoutingSchema, SettingsSchema } from '@/lib/schemas/settings';
+import { DEFAULT_SETTINGS, LLM_FEATURES, LLMRoutingSchema, SettingsSchema } from '@/lib/schemas/settings';
+import { DECOMPOSITION_FEATURE } from '@/lib/decomposition/schema';
 
 const now = new Date('2026-10-23T12:00:00Z');
 
@@ -41,5 +42,11 @@ describe('provider routing on the settings row', () => {
   it('rejects an empty provider name', () => {
     expect(LLMRoutingSchema.safeParse({ default: '' }).success).toBe(false);
     expect(LLMRoutingSchema.safeParse({ features: { dailyBriefing: '' } }).success).toBe(false);
+  });
+
+  it('uses the shared decomposition feature name', () => {
+    // The decomposition module owns the name; the routing slot must not drift
+    // from it.
+    expect(LLM_FEATURES).toContain(DECOMPOSITION_FEATURE);
   });
 });
