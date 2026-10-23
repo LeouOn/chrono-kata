@@ -31,4 +31,4 @@ fi
 echo "==> typecheck"
 npm run typecheck
 
-echo "==> ready: npm run ci runs typecheck + lint + tests + production build"
+echo "==> ready: npm run ci runs typecheck + lint + unit tests + build + e2e"

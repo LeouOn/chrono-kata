@@ -16,8 +16,9 @@ test.describe('Onboarding & Navigation', () => {
     await expect(zenCard).toBeVisible();
     await zenCard.click();
 
-    // Should redirect to home page
-    await expect(page).toHaveURL(/.*:(3000|3008)\/?$/);
+    // Should redirect to home page. Assert the path, not the port: the e2e
+    // server port comes from PLAYWRIGHT_PORT (default 3008).
+    await expect(page).toHaveURL(/:\d+\/?$/);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
