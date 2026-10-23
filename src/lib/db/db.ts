@@ -168,9 +168,23 @@ export class ChronoKataDB extends Dexie {
       });
     // Fresh installs: seed the four default domains once, at creation.
     this.on('populate', (tx) => {
-      void seedDefaultDomains(tx.table('domains'));
+      seedDefaultDomainsOnPopulate(tx.table('domains'));
     });
   }
+}
+
+/**
+ * Seed the default domains on a fresh install.
+ *
+ * The populate transaction can be aborted — for example when the database is
+ * deleted while it is still opening — and an aborted seed must not surface as
+ * an unhandled promise rejection. It is fire-and-forget on purpose: the seed
+ * is a convenience, never a reason to fail opening the database.
+ */
+export function seedDefaultDomainsOnPopulate(
+  table: { count(): Promise<number>; bulkPut(rows: Domain[]): Promise<unknown> },
+): void {
+  void seedDefaultDomains(table).catch(() => {});
 }
 
 let dbInstance: ChronoKataDB | null = null;
