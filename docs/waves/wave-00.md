@@ -30,8 +30,8 @@ Wave 0 is an audit wave: no product behaviour changes.
   longer collide; `npm run ci` inherits it. The one spec that asserted the old
   port now asserts the redirected path instead.
 - `npm run setup:worktree` (`scripts/setup-worktree.sh`) — make a fresh
-  `git worktree add` or clean checkout usable: install dependencies when
-  missing, then typecheck. The gitignored Athena persona is materialized by the
+  `git worktree add` or clean checkout usable: run `npm install` (idempotent,
+  also repairs a stale install), then typecheck. The gitignored Athena persona is materialized by the
   `postinstall` hook, not by this script. Proven on a brand-new worktree with
   no `node_modules` (7 s, exit 0).
 - `tests/fixtures/` — synthetic data for future migration tests: a complete

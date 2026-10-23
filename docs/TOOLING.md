@@ -16,8 +16,9 @@ npm run dev          # web dev server
 ```
 
 `scripts/setup-worktree.sh` (wired as `npm run setup:worktree`) exists for
-`git worktree add` / clean checkouts: it installs dependencies when
-`node_modules` is missing and then typechecks. The `postinstall` hook
+`git worktree add` / clean checkouts: it runs `npm install` (a cheap no-op when
+everything is present, and the only way to repair a stale or partial install)
+and then typechecks. The `postinstall` hook
 (`scripts/ensure-athena-persona.mjs`) materializes the gitignored
 `src/lib/coaches/athena-persona.ts` from its tracked `.example`; the setup
 script does not duplicate that.
@@ -45,6 +46,10 @@ Notes that cost agents time before:
 
 - Runs sequentially; the first failure stops the gate. It covers the roadmap's
   definition of done (typecheck, lint, unit tests, e2e, build).
+- `ci` **assumes dependencies are installed** — it does not run `npm install`.
+  In a fresh worktree run `npm run setup:worktree` (or `npm install`) first;
+  otherwise it stops with `tsc: command not found`, which means "not
+  bootstrapped", not "broken gate".
 - Warm run on this machine: **~45 s** (typecheck ~5 s, lint ~1 s, Vitest ~7 s,
   production build ~5 s, Playwright 18 specs ~25 s).
 - The build **works offline**: `rm -rf .next && unshare -rn npx next build`
@@ -57,7 +62,8 @@ Notes that cost agents time before:
   asks for hosted CI.
 
 **Parallel e2e runs:** `playwright.config.ts` reads `PLAYWRIGHT_PORT`
-(default `3008`) for both `baseURL` and the `next start` web server. Several
+(default `3008`; an empty value also falls back to 3008) for both `baseURL` and
+the `next start` web server. Several
 agents share one host, so export a distinct port per seat:
 
 ```bash

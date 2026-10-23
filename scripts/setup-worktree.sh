@@ -16,15 +16,12 @@ cd "$root"
 
 echo "==> worktree: $root"
 
-# A bare worktree has no node_modules; a stale checkout can be missing a
-# dependency that package.json already declares (typecheck once failed on
-# @capacitor/local-notifications for exactly that reason).
-if [[ -d node_modules/next ]]; then
-  echo "==> dependencies: present, skipping npm install"
-else
-  echo "==> dependencies: npm install"
-  npm install
-fi
+# Always install: a bare worktree has no node_modules, and a stale checkout can
+# be missing a dependency that package.json already declares (typecheck once
+# failed on @capacitor/local-notifications for exactly that reason). npm install
+# is a cheap no-op when everything is present.
+echo "==> dependencies: npm install"
+npm install
 
 # Prove the install was enough: typecheck reaches every source file, including
 # the coach persona import.

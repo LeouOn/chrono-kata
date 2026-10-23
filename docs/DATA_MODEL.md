@@ -22,10 +22,11 @@ singleton `getDb()` in `src/lib/db/db.ts`. There is no server-side store.
 | 6 | kata id links | `sessions` gains `kataTemplateId` index; upgrade backfills `sessions.kataTemplateId` and `habits.linkedKataTemplateId` from normalized template names |
 | 7 | Wave 1 planning entities | `sessions` gains `taskId`/`projectId` indexes; new `domains: 'id, order'`, `projects: 'id, domainId, status, lastTouchedAt'`, `tasks: 'id, status, domainId, projectId, parentId, touchedAt'`, `blocks: 'id, start, kind, taskId, projectId'`, `dayPlans: 'date'`, `estimates: 'id, taskId, createdAt'`; upgrade and `populate` seed the four default domains |
 
-Current (v6) full store map:
+Current (v7) full store map:
 
 ```
-sessions             id, startedAt, calendarEventId, conversationId, kataTemplateId
+sessions             id, startedAt, calendarEventId, conversationId, kataTemplateId,
+                     taskId, projectId             (taskId/projectId from v7)
 reflections          id, periodStart, periodEnd
 streak               id
 settings             id
@@ -45,8 +46,6 @@ blocks               id, start, kind, taskId, projectId  (v7)
 dayPlans             date                               (v7)
 estimates            id, taskId, createdAt              (v7)
 ```
-
-`sessions` also carries the v7 `taskId` and `projectId` indexes.
 
 Singletons: `streak`, `settings`, `llmSettings` (primary key `'singleton'`),
 `tokens` (primary key `'google'`).
@@ -101,6 +100,12 @@ Schemas are the boundary: repos validate on write, import validates on read.
   reminder time, notifications, theme/accent/rating style, confirmation flags,
   goals, rest days, freeze tokens, recovery mode and low-energy threshold) and
   timestamps. Missing optionals fall back to `DEFAULT_SETTINGS` readers.
+  It also carries `flags`: an optional, non-indexed object holding any subset
+  of the closed flag set `FLAG_NAMES` (`privateMode`, `nativeCalendar`,
+  `nudgeKinds`, `sync`). Flags are read/written only via
+  `src/lib/settings/flags.ts` (`flagValue`, `withFlag`, `isFlagName`), so an
+  unset or missing flag reads as off. Adding a flag name needs no Dexie
+  version.
 - **llmSettings** (`llm-settings.ts`): `id: 'singleton'`,
   `activeProviderName`, `providers` (record of `{baseUrl, model, apiKey,
   credentialSource?}`), `dismissedEnvironmentProviders?`,

@@ -299,10 +299,13 @@ These contradict or extend the roadmap; they are reported, not fixed, in Wave 0.
 5. **`/reflect` already ships an AI weekly reflection** (roadmap Wave 11/14
    overlap) and **`/insights` already ships heatmaps, trends and load-response**
    (roadmap Wave 13 overlap).
-6. **Settings are a single `singleton` row with optional fields**; there is no
-   `settings.flags.*` namespace that roadmap principle 8 assumes. Lead decision
-   Q4 plans it as an optional, non-indexed field on that row before W5/W8/W16/W18
-   (`docs/ROADMAP_STATUS.md`), which needs no Dexie version bump.
+6. **Settings are a single `singleton` row with optional fields.** Roadmap
+   principle 8's `settings.flags.*` namespace now exists as one optional,
+   non-indexed `flags` object (`src/lib/schemas/settings.ts`, closed union
+   `FLAG_NAMES`), read and written only through
+   `src/lib/settings/flags.ts` (`flagValue`, `withFlag`). It needs no Dexie
+   version bump, so later waves must add a flag name there rather than invent a
+   second mechanism.
 7. **The daily briefing is cached in `localStorage`** under
    `chrono-kata-briefing-<local date>-<personality>-<payload hash>`
    (`hooks/useDailyBriefing.ts`), so a changed pacing payload invalidates it;
