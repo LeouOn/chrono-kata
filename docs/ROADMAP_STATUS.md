@@ -93,7 +93,7 @@ actually exists.
 
 ## W1 — Unified data model for tasks, projects, domains
 
-**Status:** exists (shipped 2026-10-23, PRs #14 + #17) · **Size:** L · **Lanes:** A (data) · **Depends on:** W0
+**Status:** exists (shipped 2026-10-23, PRs #14 + #19) · **Size:** L · **Lanes:** A (data) · **Depends on:** W0
 
 **Evidence**
 - Shipped: Zod schemas `domain`/`project`/`task`/`block`/`day-plan`/`estimate` in
