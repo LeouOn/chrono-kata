@@ -56,6 +56,11 @@ export function captureToTaskInput(
     title: title.slice(0, 200),
     status: 'inbox',
     source: options.source ?? 'manual',
+    domainId: null,
+    estimateMin: null,
+    energy: null,
+    context: null,
+    deferUntil: null,
   });
   return fallback.success ? fallback.data : null;
 }

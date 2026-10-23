@@ -101,7 +101,7 @@ describe('captureToTaskInput is total', () => {
       expect(input.title.length).toBeLessThanOrEqual(200);
       expect((input.context ?? []).length).toBeLessThanOrEqual(10);
       for (const context of input.context ?? []) expect(context.length).toBeLessThanOrEqual(50);
-      expect(input.deferUntil === null || input.deferUntil instanceof Date).toBe(true);
+      expect(input.deferUntil == null || input.deferUntil instanceof Date).toBe(true);
       if (input.deferUntil instanceof Date) expect(Number.isFinite(input.deferUntil.getTime())).toBe(true);
     }
   });
