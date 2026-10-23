@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Dexie from 'dexie';
 import { getDb, resetDbForTesting } from '@/lib/db/db';
 import { checkInRepo } from '@/lib/db/check-in.repo';
+import { DEXIE_V6_FIXTURES } from '../../fixtures/dexie-v6';
 
 /**
  * Migration harness: create the database at an old version with raw Dexie,
@@ -10,7 +11,7 @@ import { checkInRepo } from '@/lib/db/check-in.repo';
  *
  * The store definitions below are a frozen snapshot of what shipped at each
  * version. Don't edit them to match `db.ts`; add the next version instead.
- * T8 adds v5 → v6 here.
+ * v6 was added together with the synthetic dump in `tests/fixtures/dexie-v6.ts`.
  */
 const HISTORICAL_STORES: Record<number, Record<string, string>> = {
   1: {
@@ -35,6 +36,21 @@ const HISTORICAL_STORES: Record<number, Record<string, string>> = {
     habitLogs: 'id, habitId, date, sessionId, [habitId+date]',
   },
   5: {
+    checkIns: 'date',
+  },
+  6: {
+    sessions: 'id, startedAt, calendarEventId, conversationId, kataTemplateId',
+    reflections: 'id, periodStart, periodEnd',
+    streak: 'id',
+    settings: 'id',
+    llmSettings: 'id',
+    pendingCalendarOps: 'id, sessionId',
+    tokens: 'id',
+    conversations: 'id, sessionId',
+    messages: 'id, conversationId, parentId',
+    kataTemplates: 'id, name, order, createdAt',
+    habits: 'id, order',
+    habitLogs: 'id, habitId, date, sessionId, [habitId+date]',
     checkIns: 'date',
   },
 };
@@ -249,5 +265,23 @@ describe('Dexie migrations', () => {
     expect((await db.sessions.get('123e4567-e89b-12d3-a456-426614174014'))?.kataTemplateId).toBe(otherId);
     expect((await db.habits.get('123e4567-e89b-12d3-a456-426614174015'))?.linkedKataTemplateId).toBe(templateId);
     expect((await db.habits.get('123e4567-e89b-12d3-a456-426614174016'))?.linkedKataTemplateId).toBeUndefined();
+  });
+
+  it('opens the synthetic v6 dump with every row intact', async () => {
+    await seedLegacyDb(6, DEXIE_V6_FIXTURES);
+
+    const db = getDb();
+    await db.open();
+    expect(db.verno).toBe(6);
+
+    for (const [table, rows] of Object.entries(DEXIE_V6_FIXTURES)) {
+      expect(await db.table(table).count(), table).toBe(rows.length);
+    }
+
+    // Indexes that later waves may rely on still resolve on the fixture data.
+    expect(await db.sessions.where('kataTemplateId').equals('b7a04fe2-0b66-4d86-b40c-afa2b45af613').count()).toBe(1);
+    expect(await db.habitLogs.where('habitId').equals('c0dca0e9-d048-4f8e-92b5-116ec0d64eac').count()).toBe(2);
+    expect(await db.messages.where('parentId').equals('06d2d4b4-55f1-4a9b-b694-d71aa78315a3').count()).toBe(2);
+    expect(await checkInRepo.getByDate('2026-10-20')).toMatchObject({ energy: 4, fog: 1 });
   });
 });
