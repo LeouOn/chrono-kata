@@ -8,6 +8,7 @@ import { useFlag } from '@/hooks/useFlags';
 import { useTasks } from '@/hooks/useTasks';
 import { usePlanToday, useTodayKey } from '@/hooks/usePlanning';
 import { useSessionLauncher } from '@/components/session/SessionLauncher';
+import { DEFAULT_PICK_MINUTES } from '@/lib/planning/overcommit';
 
 /**
  * Today's confirmed picks on the home page (roadmap Wave 6), behind the
@@ -39,7 +40,7 @@ export function TodayPlanCard() {
 
       {picks.length === 0 ? (
         <p className="text-sm text-text-muted">
-          Nothing picked yet. {capacity.capacityMin > 0 ? `${capacity.capacityMin} minutes are available.` : ''}
+          {dayPlan ? 'All of today’s picks are done.' : 'Nothing picked yet.'}
         </p>
       ) : (
         <ul className="space-y-2 pr-14">
@@ -75,7 +76,7 @@ export function TodayPlanCard() {
         {dayPlan
           ? picks.length > 0
             ? `Room for ${dayPlan.capacityMin} minutes today; these picks come to about ${picks.reduce(
-                (sum, task) => sum + (task.estimateMin ?? 25),
+                (sum, task) => sum + (task.estimateMin ?? DEFAULT_PICK_MINUTES),
                 0,
               )}.`
             : `Room for ${dayPlan.capacityMin} minutes today.`

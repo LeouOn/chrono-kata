@@ -181,6 +181,29 @@ describe('PlanScreen', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/These add up to 20 minutes/);
   });
 
+  it('labels suggestions honestly when every confirmed pick is done', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const done = await taskRepo.create({ title: 'finished task', status: 'next', source: 'manual', estimateMin: 40 });
+    await taskRepo.create({ title: 'next candidate', status: 'next', source: 'manual', estimateMin: 20 });
+    await taskRepo.setStatus(done.id, 'done');
+    await dayPlanRepo.upsert(TODAY, { picks: [done.id], capacityMin: 200 });
+
+    renderWithProviders(<PlanScreen dayKey={TODAY} />);
+    await screen.findByText(/Suggested for the rest of today/);
+    expect(screen.queryByText('Your picks')).toBeNull();
+    expect(screen.getByText(/All of today's picks are done/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Confirm today/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Update today/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /Remove next candidate/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Confirm today/i }));
+    await waitFor(async () => {
+      const plan = await dayPlanRepo.getByDate(TODAY);
+      expect(plan?.picks).toHaveLength(1);
+      expect(plan?.picks[0]).not.toBe(done.id);
+    });
+  });
+
   it('lets the user swap a pick for another task', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     await seedNextTasks(['first', 'second', 'third', 'fourth']);

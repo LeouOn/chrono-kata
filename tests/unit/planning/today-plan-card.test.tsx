@@ -78,7 +78,10 @@ describe('TodayPlanCard', () => {
     // Wait until the plan AND tasks queries have resolved, otherwise the
     // loading-state empty card would satisfy the assertion.
     expect(await screen.findByText(/Room for 200 minutes today\./)).toBeInTheDocument();
-    expect(await screen.findByText(/Nothing picked yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/All of today’s picks are done\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing picked yet/)).toBeNull();
+    // The room line appears exactly once.
+    expect((container.textContent ?? '').match(/Room for 200 minutes/g)).toHaveLength(1);
     expect(container.textContent ?? '').not.toMatch(/overdue|late\b|behind|missed|failed|should have/i);
     expect(screen.queryByRole('button', { name: /Start a session for done task/ })).toBeNull();
   });

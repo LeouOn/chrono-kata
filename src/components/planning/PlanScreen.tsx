@@ -118,6 +118,19 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
   }
 
   const confirmed = dayPlan != null;
+  // Label the list by where it actually comes from: once every confirmed pick
+  // is finished, the rows are fresh suggestions, not "your picks" - and the
+  // action is a fresh confirmation.
+  const listFromUserChoice = draftIds !== null ? draftIds.length > 0 : confirmedIds.length > 0;
+  const allConfirmedDone = confirmed && !listFromUserChoice && confirmedIds.length === 0;
+  const picksHeading = listFromUserChoice
+    ? 'Your picks'
+    : confirmed
+      ? 'Suggested for the rest of today'
+      : 'Suggested for today';
+  const confirmLabel = listFromUserChoice
+    ? 'Update today’s plan'
+    : 'Confirm today’s picks';
 
   return (
     <div className="space-y-4 pb-24">
@@ -151,8 +164,11 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
       {!isLoading ? (
       <section className="space-y-2" aria-labelledby="picks-heading">
         <h2 id="picks-heading" className="text-xs uppercase tracking-wide text-text-muted">
-          {confirmed ? 'Your picks' : 'Suggested for today'}
+          {picksHeading}
         </h2>
+        {allConfirmedDone ? (
+          <p className="text-xs text-text-muted">All of today&apos;s picks are done. Anything else?</p>
+        ) : null}
 
         {draftTasks.length === 0 ? (
           <Card>
@@ -253,7 +269,7 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
         ) : null}
 
         <Button onClick={() => void onConfirm()} disabled={saving} className="w-full min-h-11">
-          {saving ? 'Saving…' : confirmed ? 'Update today’s plan' : 'Confirm today’s picks'}
+          {saving ? 'Saving…' : confirmLabel}
         </Button>
       </section>
       ) : null}
