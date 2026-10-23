@@ -6,10 +6,15 @@ import { ProviderList } from '@/components/llm/ProviderList';
 import { ProviderEditor } from '@/components/llm/ProviderEditor';
 import { TokenMeter } from '@/components/llm/TokenMeter';
 import { WhatGetsSent } from '@/components/llm/WhatGetsSent';
+import { ProviderRouting } from '@/components/llm/ProviderRouting';
+import { PrivateModeCard } from '@/components/llm/PrivateModeCard';
 import type { ProviderName } from '@/lib/llm/provider-defaults';
 import type { ProviderEntry } from '@/lib/schemas/llm-settings';
 import { discoverLocalProviders } from '@/lib/llm/local-discovery';
 import { createLLMProvider } from '@/lib/llm/provider-factory';
+import { checkLocalHost } from '@/lib/llm/local-models';
+import { isLocalProvider } from '@/lib/llm/local-provider';
+import { useFlag } from '@/hooks/useFlags';
 
 export default function LLMPage() {
   const {
@@ -21,6 +26,8 @@ export default function LLMPage() {
   const [editing, setEditing] = useState<ProviderName | null>(null);
   const [environmentProviders, setEnvironmentProviders] = useState<Record<string, ProviderEntry>>({});
   const [testing, setTesting] = useState<string | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
+  const privateMode = useFlag('privateMode');
   const [connectionResult, setConnectionResult] = useState('');
 
   useEffect(() => {
@@ -37,7 +44,7 @@ export default function LLMPage() {
     setTesting(name);
     setConnectionResult('');
     try {
-      const response = await createLLMProvider({ providerName: name, ...entry }).completeSingle({
+      const response = await createLLMProvider({ providerName: name, ...entry }, { privateMode }).completeSingle({
         systemPrompt: 'Reply with OK only.', userText: 'Connection test.', signal: AbortSignal.timeout(30_000),
       });
       if (!response.content) throw new Error('Provider returned no text.');
@@ -45,6 +52,19 @@ export default function LLMPage() {
     } catch (error) {
       setConnectionResult(`${name}: ${error instanceof Error ? error.message : 'Connection failed.'}`);
     } finally { setTesting(null); }
+  }
+
+  async function checkHost(name: ProviderName) {
+    const entry = settings?.providers[name];
+    if (!entry || checking) return;
+    setChecking(name);
+    setConnectionResult('');
+    try {
+      const result = await checkLocalHost(entry.baseUrl, { privateMode });
+      setConnectionResult(`${name}: ${result.message}`);
+    } finally {
+      setChecking(null);
+    }
   }
 
   if (!settings) {
@@ -59,6 +79,10 @@ export default function LLMPage() {
       <p className="text-sm text-text-muted">Desktop keys appear when you run the app with <code>npm run dev:local</code>. On Android, tap Add and paste your key. Connection tests make a small provider request.</p>
       {connectionResult && <p role="status" className="text-sm text-text">{connectionResult}</p>}
       <WhatGetsSent />
+
+      <PrivateModeCard />
+
+      <ProviderRouting />
 
       <TokenMeter
         totalTokensThisMonth={settings.totalTokensThisMonth}
@@ -85,6 +109,8 @@ export default function LLMPage() {
           }}
           onTest={(name) => void testConnection(name)}
           testing={testing}
+          onCheckHost={(name) => void checkHost(name)}
+          checking={checking}
         />
       </div>
 

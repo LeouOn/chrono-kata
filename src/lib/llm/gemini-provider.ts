@@ -1,4 +1,5 @@
 import { providerFetch } from './provider-fetch';
+import { privateModeFetchError, privateModeFetchOptions } from './privacy';
 import type { ChatResponse, LLMProvider, StreamChunk } from './types';
 import { LLMException, StopReason } from './types';
 import { mapFetchError, mapResponseStatus } from './error-mapper';
@@ -57,9 +58,10 @@ export class GeminiProvider implements LLMProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: input.signal,
+        ...privateModeFetchOptions(this.config),
       });
     } catch (e) {
-      throw mapFetchError(e);
+      throw privateModeFetchError(this.config, e) ?? mapFetchError(e);
     }
 
     const statusError = mapResponseStatus(resp.status, resp.statusText);
@@ -151,9 +153,10 @@ export class GeminiProvider implements LLMProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: input.signal,
+        ...privateModeFetchOptions(this.config),
       });
     } catch (e) {
-      throw mapFetchError(e);
+      throw privateModeFetchError(this.config, e) ?? mapFetchError(e);
     }
 
     const statusError = mapResponseStatus(resp.status, resp.statusText);

@@ -12,6 +12,9 @@ import { LLMException, LLMExceptionKind } from './types';
 import type { StreamChunk, StreamingLLMProvider } from './types';
 import type { ProviderConfig } from './provider-config';
 import { cleanLLMResponse, filterStreamingText, parseCoachBriefing } from './clean-response';
+import { readLLMAppState, type LLMAppState } from './app-state';
+import { assertProviderAllowed } from './privacy';
+import type { LLMFeature } from '@/lib/schemas/settings';
 
 const LLM_TIMEOUT_MS = 30_000;
 
@@ -77,7 +80,7 @@ export async function generateCoachComment(
   }
 
   const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  const config = resolveActiveProvider(input.llmSettings, input.providerOverride);
+  const config = await resolveProviderFor(input.llmSettings, input.providerOverride, 'sessionCoachComment');
   const provider = createLLMProvider(config);
   const systemPrompt = personalizeSystemPrompt(
     getCoachSystemPrompt(input.personality),
@@ -124,7 +127,7 @@ export async function generateCoachCommentStream(
   }
 
   const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  const config = resolveActiveProvider(input.llmSettings, input.providerOverride);
+  const config = await resolveProviderFor(input.llmSettings, input.providerOverride, 'sessionCoachComment');
   const provider = createLLMProvider(config);
   const userText = buildCoachUserText(input.currentSession, input.recentSessions);
 
@@ -204,7 +207,7 @@ export async function generateConversationReply(
   }
 
   const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  const config = resolveActiveProvider(input.llmSettings, input.providerOverride);
+  const config = await resolveProviderFor(input.llmSettings, input.providerOverride, 'conversationReply');
   const provider = createLLMProvider(config);
   const systemPrompt = personalizeSystemPrompt(
     getCoachSystemPrompt(input.personality),
@@ -307,7 +310,7 @@ export async function generateWeeklyReflection(
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     throw new LLMException('Offline — cannot generate reflection.', LLMExceptionKind.Offline);
   }
-  const config = resolveActiveProvider(input.llmSettings);
+  const config = await resolveProviderFor(input.llmSettings, undefined, 'weeklyReflection');
   const provider = createLLMProvider(config);
   const systemPrompt = personalizeSystemPrompt(
     getCoachSystemPrompt(input.personality),
@@ -356,7 +359,7 @@ export async function suggestLabel(input: LabelSuggestionInput): Promise<string>
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     throw new LLMException('Offline.', LLMExceptionKind.Offline);
   }
-  const config = resolveActiveProvider(input.llmSettings);
+  const config = await resolveProviderFor(input.llmSettings, undefined, 'labelSuggestion');
   const provider = createLLMProvider(config);
   const systemPrompt =
     'You suggest short activity labels (1-3 words) for a practice session based on the user\'s note. ' +
@@ -399,7 +402,7 @@ export async function generateDailyBriefing(
     throw new LLMException('Offline — briefing skipped.', LLMExceptionKind.Offline);
   }
 
-  const config = resolveActiveProvider(input.llmSettings);
+  const config = await resolveProviderFor(input.llmSettings, undefined, 'dailyBriefing');
   const provider = createLLMProvider(config);
   const rawSystemPrompt = getCoachSystemPrompt(input.personality);
   const systemPrompt = personalizeSystemPrompt(rawSystemPrompt, input.displayName);
@@ -423,22 +426,42 @@ export async function generateDailyBriefing(
   };
 }
 
-function resolveActiveProvider(settings: LLMSettings, providerOverride?: string): ProviderConfig {
-  const name = providerOverride || settings.activeProviderName;
+/**
+ * Pick the provider for one AI surface and check it may be used.
+ *
+ * Precedence: an explicit override from the caller, then the routing entry
+ * for that feature, then the routing default, then the active provider.
+ *
+ * Private mode is enforced here and in the provider factory, so a request to
+ * a non-local provider is refused before any fetch happens.
+ */
+async function resolveProviderFor(
+  settings: LLMSettings,
+  providerOverride: string | undefined,
+  feature: LLMFeature,
+): Promise<ProviderConfig> {
+  const appState: LLMAppState = await readLLMAppState();
+  const routedName = appState.routing?.features?.[feature] ?? appState.routing?.default;
+  const name = providerOverride || routedName || settings.activeProviderName;
   const entry = settings.providers[name];
   if (!entry) {
-    throw new LLMException(
-      `No provider configured with name "${name}". Add it in LLM settings.`,
-      LLMExceptionKind.AuthFailed,
-    );
+    const because = routedName && !providerOverride
+      ? `Routing sends ${feature} to "${routedName}", but no provider with that name is configured.`
+      : `No provider configured with name "${name}".`;
+    throw new LLMException(`${because} Add it in LLM settings.`, LLMExceptionKind.AuthFailed);
   }
-  return {
+  const config: ProviderConfig = {
     providerName: name,
     baseUrl: entry.baseUrl,
     apiKey: entry.apiKey,
     model: entry.model,
     credentialSource: entry.credentialSource,
+    // The adapter needs to know: while private mode is on it must not follow
+    // a redirect to somewhere else.
+    privateMode: appState.privateMode,
   };
+  assertProviderAllowed(config, appState.privateMode);
+  return config;
 }
 
 function personalizeSystemPrompt(prompt: string, displayName?: string): string {

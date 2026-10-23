@@ -19,6 +19,7 @@ export const PROVIDER_DEFAULTS = {
   minimax:        { baseUrl: 'https://api.minimax.io/v1',                            model: 'minimax-m3' },
   nemotron:       { baseUrl: 'https://integrate.api.nvidia.com/v1',                model: 'nvidia/llama-3.1-nemotron-ultra-253b-v1' },
   ollama:         { baseUrl: 'http://localhost:11434/v1',                          model: 'llama3.3' },
+  lmstudio:       { baseUrl: 'http://localhost:1234/v1',                            model: 'local-model' },
   gemini:         { baseUrl: 'https://generativelanguage.googleapis.com/v1beta',   model: 'gemini-2.0-flash' },
   claude:         { baseUrl: 'https://api.anthropic.com/v1',                       model: 'claude-sonnet-4-20250514' },
 } as const;

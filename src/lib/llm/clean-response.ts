@@ -34,7 +34,7 @@ function contradicts(action: RecommendAction, reply: { summary: string; suggesti
   return (action === 'rest' || action === 'reduce') && CONTRADICTION.test(`${reply.summary} ${reply.suggestion}`);
 }
 
-function parseJsonObject(text: string): unknown {
+export function parseJsonObject(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const body = (fenced?.[1] ?? text).trim();
   const start = body.indexOf('{');

@@ -27,6 +27,7 @@ export enum LLMExceptionKind {
   RateLimited = 'rateLimited',  // HTTP 429
   Timeout = 'timeout',          // network timeout
   Offline = 'offline',          // navigator.onLine === false
+  PrivacyBlocked = 'privacyBlocked', // refused locally: private mode forbids this provider
   Provider = 'provider',        // other provider-side failure
   Unknown = 'unknown',
 }
