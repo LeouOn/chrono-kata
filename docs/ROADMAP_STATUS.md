@@ -222,7 +222,8 @@ ahead of the analytics in W13.
 
 ## W5 — Local LLM backbone
 
-**Status:** partial → mostly built (Wave 5, PRs to be linked here; wave note `docs/waves/wave-05.md`) · **Size:** M ·
+**Status:** partial → mostly built (Wave 5: PR #21 LM Studio + local predicate, PR #22 private mode +
+routing + context budget; wave note `docs/waves/wave-05.md`) · **Size:** M ·
 **Lanes:** C · **Depends on:** —
 
 **Evidence**
