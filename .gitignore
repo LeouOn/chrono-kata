@@ -1,4 +1,5 @@
-node_modules/
+# No trailing slash: this must also match a symlinked node_modules in a worktree.
+node_modules
 .next/
 out/
 .codegraph/
