@@ -1,6 +1,6 @@
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { resetDbForTesting } from '@/lib/db/db';
 import { settingsRepo } from '@/lib/db/settings.repo';
@@ -87,18 +87,27 @@ describe('PlanningSettings', () => {
 
   it('never writes an invalid waking-hours row when the field is cleared', async () => {
     await settingsRepo.setFlag('taskInbox', true);
+    const patch = vi.spyOn(settingsRepo, 'patch');
     renderWithProviders(<PlanningSettings />);
 
     const start = await screen.findByLabelText('Awake from');
     fireEvent.change(start, { target: { value: '08:00' } });
     await waitFor(async () => expect((await settingsRepo.get()).wakingHours?.start).toBe('08:00'));
+    expect(patch).toHaveBeenCalled();
+    patch.mockClear();
 
-    // Clearing a time input fires onChange with ''. It must not be persisted.
+    // Clearing a time input fires onChange with ''. It must not be persisted -
+    // not as {start:''}, and not as undefined (which would wipe the field).
     fireEvent.change(start, { target: { value: '' } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
 
+    expect(patch).not.toHaveBeenCalled();
     const stored = await settingsRepo.get();
     expect(stored.wakingHours).toEqual({ start: '08:00', end: '22:00' });
     expect(SettingsSchema.safeParse(stored).success).toBe(true);
+    patch.mockRestore();
   });
 
   it('keeps the settings row valid after every interaction', async () => {
