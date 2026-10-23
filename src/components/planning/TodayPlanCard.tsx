@@ -42,19 +42,19 @@ export function TodayPlanCard() {
           Nothing picked yet. {capacity.capacityMin > 0 ? `${capacity.capacityMin} minutes are available.` : ''}
         </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2 pr-14">
           {picks.map((task) => (
-            <li key={task.id} className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-sm text-text break-words">{task.title}</p>
-                <p className="text-[11px] text-text-muted">
-                  {task.estimateMin != null ? `~${task.estimateMin}m` : ''}
-                  {task.actualMin ? `${task.estimateMin != null ? ' · ' : ''}${task.actualMin}m logged` : ''}
-                </p>
-              </div>
+            <li key={task.id} className="space-y-1">
+              <p className="text-sm text-text break-words">{task.title}</p>
+              <p className="text-[11px] text-text-muted">
+                {task.estimateMin != null ? `~${task.estimateMin}m` : ''}
+                {task.actualMin ? `${task.estimateMin != null ? ' · ' : ''}${task.actualMin}m logged` : ''}
+              </p>
+              {/* Full-width Start under the title: right-aligned buttons sit
+                  behind the fixed practice FAB at phone width. */}
               <Button
                 variant="ghost"
-                className="min-h-11 px-3 text-sm border border-border"
+                className="w-full min-h-11 px-3 text-sm border border-border"
                 aria-label={`Start a session for ${task.title}`}
                 onClick={() =>
                   sessionLauncher.openForLink({

@@ -271,8 +271,10 @@ first, which is why it landed as a prerequisite (PR #15).
 
 ## W6 — Daily planning (picks and capacity)
 
-**Status:** partial — part 1 (pure planning core) and part 2 PR A (planning settings UI, resolve
-helpers, `usePlanToday`) ship; the /plan screen, the Today card and `DayPlan` persistence are in PR B · **Size:** L · **Lanes:** A (math) + B (UI) · **Depends on:** W1, W2
+**Status:** done — planning settings (waking hours, anchors), the pure planning core (capacity with
+DST/midnight handling, deterministic pick ranking, overcommit), the /plan screen with confirm/swap/add,
+`DayPlan` persistence, the Today card with Start actions and day rollover all ship behind the
+`taskInbox` flag; calendar-fed fixed blocks remain W8 part 2 · **Size:** L · **Lanes:** A (math) + B (UI) · **Depends on:** W1, W2
 
 **Evidence**
 - Missing: no pick entity — `grep -rInE "\bpicks?\b" src tests` → 2 hits, both false positives

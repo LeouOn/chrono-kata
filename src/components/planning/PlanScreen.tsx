@@ -111,7 +111,7 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
   const confirmed = dayPlan != null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="font-serif text-2xl text-text mb-1">Plan</h1>

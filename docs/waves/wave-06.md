@@ -134,8 +134,36 @@ availability), and an overnight fixed-block test now pins the waking-window
 range read. A Settings E2E covers persistence, the cleared-input case and
 removal. Mutations for each of these turn a test red.
 
-The /plan screen, Today card, DayPlan persistence and the end-to-end plan flow
-follow in PR B.
+## Part 2, PR B: the plan screen, Today card and DayPlan
+
+- **/plan** (flag-gated): capacity as one calm sentence plus the breakdown,
+  suggested 1–3 picks with `rankPicks`' reasons, and the neutral overcommit
+  message. The user removes, swaps or adds picks by hand (max 3); **nothing is
+  saved until Confirm**, which writes the `DayPlan` (date key, picks, capacity)
+  through the repository with an in-flight guard. Reopening shows the confirmed
+  plan, not fresh suggestions.
+- **Today card** on Home (flag-gated): confirmed picks with **Start** buttons
+  (the session form opens pre-linked), the capacity line, and "Plan your day"
+  when nothing is confirmed. A task completed elsewhere drops out; a flagged-off
+  home is unchanged.
+- **Day rollover**: `useTodayKey` refreshes on focus/visibility and a minute
+  tick, so yesterday's plan is never shown as today's.
+- **Test flake found and root-caused**: the draft was initialised once by an
+  effect from asynchronously arriving data, so a render before the task query
+  resolved could freeze a short list (and the E2E assumed a particular task was
+  in the top 3 although ties break by `createdAt` then `id`). The draft is now
+  **derived** (`draft ?? confirmed plan ?? suggestions`) until the user edits,
+  `isLoading` also covers the flag/settings query, and the tests read the
+  expected tasks from the screen instead of assuming the ranking. 10/10 clean
+  suite runs after the change.
+
+## Known gaps (W6)
+
+- A time input fires one settings write per change; debounce later if needed.
+- `settingsRepo.patch` accepts any patch; validating the merged row at the
+  repository would close the invalid-row class for every caller (follow-up).
+- Calendar events do not feed `fixedBlocks` yet (W8 part 2); for now fixed
+  blocks come only from the `Block` table.
 
 ## Known gaps
 
