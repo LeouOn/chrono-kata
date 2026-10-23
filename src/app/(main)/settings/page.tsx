@@ -14,6 +14,7 @@ import { HabitSettings } from '@/components/settings/HabitSettings';
 import { ConfirmationSettings } from '@/components/settings/ConfirmationSettings';
 import { ClearDataSettings } from '@/components/settings/ClearDataSettings';
 import { GoalSettings } from '@/components/settings/GoalSettings';
+import { TaskInboxSettings } from '@/components/settings/TaskInboxSettings';
 import {
   type CoachPersonality,
 } from '@/lib/schemas/coach-personality';
@@ -62,6 +63,8 @@ export default function SettingsPage() {
       </Card>
 
       <GoalSettings />
+
+      <TaskInboxSettings />
 
       <Card>
         <label className="flex items-center justify-between gap-3 cursor-pointer min-h-11">
