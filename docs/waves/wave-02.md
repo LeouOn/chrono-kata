@@ -14,9 +14,13 @@ table-driven tests (this part). This PR does the second half.
   injected so results are deterministic and timezone-testable.
 - `src/lib/capture/split-bulk.ts` — `splitBulk(text)` and `parseBulk(text, options)`
   for messy multi-line pastes, with a stable `index` per item for a preview UI.
-- `tests/unit/capture/` — 70 tests: 44 table-driven parser cases (syntax,
-  order, repetition, adversarial input), 12 splitter cases, 2 parser contract
-  cases, 10 timezone/DST cases.
+- `src/lib/capture/task-input.ts` — `captureToTaskInput()` / `localDayKeyToDate()`:
+  the bridge from a parsed capture to the Wave 1 `TaskInputSchema` contract.
+  Dates become local midday `Date`s (never UTC midnight), and an empty line
+  yields `null` rather than an invalid row.
+- `tests/unit/capture/` — 82 tests: 51 table-driven parser cases (syntax,
+  order, repetition, adversarial input), 14 splitter cases, 10 timezone/DST
+  cases, 7 task-input contract cases.
 
 ## Syntax
 
@@ -45,26 +49,32 @@ word was a token, it falls back to the raw line.
 3. **Date phrases set `deferUntil`, not `dueAt`**, following the roadmap's own
    example ("deferUntil = tomorrow"). `dueAt` (a real deadline) is a triage
    decision, not something a shorthand line should set.
-4. **Bare weekday includes today** (`fri` on a Friday means today);
+4. **Bare weekdays only count as dates when the line ends there.** Weekday
+   names are also ordinary nouns, so `Friday night plan` stays a title while
+   `review sprint fri` and `review sprint fri.` defer to Friday. `tomorrow`,
+   `next mon`, `in 3 days` and ISO dates are unambiguous and work anywhere.
+   **Bare weekday includes today** (`fri` on a Friday means today);
    **`next <weekday>` skips today** (`next fri` on a Friday means +7 days).
-   Safer than the reverse for "plan the week" phrasing.
-5. **Estimates are whole minutes** and out-of-range values (`~0m`, `~200h`) are
+5. **A token that ends a sentence takes its punctuation with it** (`fri.`,
+   `@phone.`, `!high.`), so the title does not collect a dangling full stop;
+   punctuation inside a line is untouched.
+6. **Estimates are whole minutes** and out-of-range values (`~0m`, `~200h`) are
    not consumed — they stay visible in the title instead of failing validation
    later.
-6. **Title is capped at 200 characters** (TaskSchema max), on a plain slice;
+7. **Title is capped at 200 characters** (TaskSchema max), on a plain slice;
    the raw line is preserved in `raw`.
-7. **Bulk splitter**: bullet/number/checkbox markers are stripped (stacked
+8. **Bulk splitter**: bullet/number/checkbox markers are stripped (stacked
    markers too), an indented non-marker line continues the previous item,
    blank lines separate, trailing `;`/`,` are dropped but a final `.` is kept.
-8. **Domain normalization** lowercases and drops non-alphanumerics, so
+9. **Domain normalization** lowercases and drops non-alphanumerics, so
    `#career/build` matches *Career/Build*; matching is case-insensitive and
    space-insensitive for the same reason.
 
 ## Gates
 
-- Parser tests, default TZ: `vitest run tests/unit/capture` → **exit 0**, 70/70.
+- Parser tests, default TZ: `vitest run tests/unit/capture` → **exit 0**, 82/82.
 - Same under `TZ=Europe/Helsinki`, `TZ=America/Los_Angeles`,
-  `TZ=Pacific/Kiritimati` → **exit 0**, 70/70 each.
+  `TZ=Pacific/Kiritimati` → **exit 0**, 82/82 each.
 - `npm run typecheck` → exit 0; `npm run lint` → exit 0.
 - `npm run precommit`: 616/616 tests pass, but the run exits 1 on a
   **pre-existing** unhandled-rejection flake (see below), not on a test failure.
@@ -77,8 +87,9 @@ word was a token, it falls back to the raw line.
 - English only: no locale-specific month/weekday names, times of day
   ("at 5pm"), ranges, or recurrence ("every mon"). Recurring phrases would be
   Wave 10/15 material.
-- A weekday word is always treated as a date, so a title that *starts* with
-  "Monday standup" loses "Monday" into `deferUntil`. Documented limitation.
+- A terminal weekday is always treated as a date, so a title that *ends* in a
+  weekday word ("sprint review friday") defers instead of saying "friday".
+  Put the weekday anywhere else (or use `next friday`) to keep it as text.
 
 ## Pre-existing blockers observed while gating
 

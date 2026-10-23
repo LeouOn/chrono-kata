@@ -196,6 +196,31 @@ const CASES: Case[] = [
     expected: { title: 'visit grandma', deferUntil: '2026-10-25' },
   },
   {
+    name: 'weekday at the start of a title is a word, not a date',
+    line: 'Friday night plan',
+    expected: { title: 'Friday night plan', deferUntil: null },
+  },
+  {
+    name: 'weekday followed by a noun stays in the title',
+    line: 'Monday standup notes tomorrow',
+    expected: { title: 'Monday standup notes', deferUntil: '2026-10-24' },
+  },
+  {
+    name: 'weekday followed by more text is left alone',
+    line: 'mon call plumber',
+    expected: { title: 'mon call plumber', deferUntil: null },
+  },
+  {
+    name: 'weekday with trailing punctuation still resolves',
+    line: 'review sprint fri.',
+    expected: { title: 'review sprint', deferUntil: '2026-10-23' },
+  },
+  {
+    name: 'next weekday resolves anywhere in the line',
+    line: 'next mon plan the week',
+    expected: { title: 'plan the week', deferUntil: '2026-10-26' },
+  },
+  {
     name: 'in N days',
     line: 'renew domain in 3 days',
     expected: { title: 'renew domain', deferUntil: '2026-10-26' },

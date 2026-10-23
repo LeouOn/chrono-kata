@@ -132,6 +132,11 @@ function dayKeyForWeekday(now: Date, target: Weekday, skipToday: boolean): strin
   return dayKeyFrom(now, delta);
 }
 
+/** True when only whitespace or punctuation remains after `end`. */
+function isTerminalToken(raw: string, end: number): boolean {
+  return /^[\s.,;:!?)\]-]*$/.test(raw.slice(end));
+}
+
 /** Resolve a `#tag` to a domain: exact name/alias first, then unambiguous prefix. */
 function resolveDomain(
   tag: string,
@@ -224,9 +229,13 @@ function takeDates(raw: string, now: Date, acc: Accumulator): void {
     return true;
   });
 
-  scan(raw, BARE_WEEKDAY, acc, (m, start) => {
+  // Bare weekday names are also ordinary nouns ("Friday night plan",
+  // "Monday standup"), so they only become dates when nothing follows them.
+  // 'next friday', 'tomorrow' and explicit phrases are unambiguous anywhere.
+  scan(raw, BARE_WEEKDAY, acc, (m, start, end) => {
     const target = WEEKDAY_PATTERNS[m[2]!.toLowerCase()];
     if (!target) return false;
+    if (!isTerminalToken(raw, end)) return false;
     found.push({ at: start, key: dayKeyForWeekday(now, target, false) });
     return true;
   });
@@ -289,9 +298,26 @@ function takeDomain(raw: string, domains: readonly CaptureDomain[], acc: Accumul
   });
 }
 
+const TRAILING_PUNCTUATION = '.,;:!?)';
+
+/**
+ * A token that ends a sentence leaves its punctuation behind ('fri.',
+ * '@phone.'). Swallow that one character so the title does not collect a
+ * dangling full stop; punctuation inside the line or before a word is kept.
+ */
+function extendOverTerminalPunctuation(raw: string, end: number): number {
+  const next = raw[end];
+  if (next === undefined || !TRAILING_PUNCTUATION.includes(next)) return end;
+  const after = raw[end + 1];
+  if (after !== undefined && !/[\s]/.test(after)) return end;
+  return end + 1;
+}
+
 function buildTitle(raw: string, consumed: Array<[number, number]>): string {
   if (consumed.length === 0) return capTitle(raw.trim());
-  const sorted = [...consumed].sort((a, b) => a[0] - b[0]);
+  const sorted = [...consumed]
+    .map(([start, end]) => [start, extendOverTerminalPunctuation(raw, end)] as [number, number])
+    .sort((a, b) => a[0] - b[0]);
   let result = '';
   let cursor = 0;
   for (const [start, end] of sorted) {
