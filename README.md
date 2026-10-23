@@ -28,6 +28,12 @@ Visit http://localhost:3000.
 (gitignored) when that file is missing, so a fresh clone builds, typechecks and tests
 without a manual step. Replace its contents with your own prompt to enable Athena.
 
+The placeholder is written by the `postinstall`, `predev`, `prebuild`, `pretypecheck` and
+`pretest` npm hooks. Scripts that start Next.js on their own (`dev:local`, `dev:clean`,
+`build:android`, `cap:sync`) and installs run with `--ignore-scripts` skip those hooks; run
+`node scripts/ensure-athena-persona.mjs` once in that case. The script never overwrites a
+persona you have already written.
+
 ## Desktop environment keys and Android setup
 
 Run `npm run dev:local` on your computer to discover provider keys from the
