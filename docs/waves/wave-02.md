@@ -1,11 +1,38 @@
-# Wave 2 — Capture (part 1: parser)
+# Wave 2 — Capture (parser + inbox UI)
 
-**Status:** part 1 complete (this PR) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 2
-**Status map:** `docs/ROADMAP_STATUS.md` W2 (now "partial")
+**Status:** parser and inbox UI complete behind the `taskInbox` flag · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 2
+**Status map:** `docs/ROADMAP_STATUS.md` W2 ("partial" — voice and share target remain)
 
-Wave 2's done-when has two halves: a captured item survives an app restart
-(part 2, needs the inbox UI and a repository write) and the parser has ≥ 30
-table-driven tests (this part). This PR does the second half.
+Wave 2's done-when: a captured item survives an app restart **and** the parser
+has ≥ 30 table-driven tests. Both are met: the parser (part 1) has 91 tests, and
+the inbox UI (part 2, behind `taskInbox`) stores captures in IndexedDB through
+the Wave 1 task repository, verified by an E2E reload test.
+
+## Part 2: capture and inbox UI (behind `taskInbox`, default OFF)
+
+- **Capture sheet**: one line in, one inbox task out; parsed chips show
+  domain/estimate/energy/day/contexts; Enter saves, clears and refocuses for the
+  next line; unrecognised text (including unknown `#tags`) stays in the title.
+- **Entry points**: a distinct "Capture a task" control above the practice FAB
+  (practice FAB untouched) and `Ctrl/Cmd+K`. W19's command palette will absorb
+  the shortcut later; until then it opens this sheet directly. An inline "Add a
+  task" field sits at the top of `/inbox`, so capture is where the user is.
+- **Bulk paste**: a multi-line paste switches to a preview; each row can be
+  edited or dropped and nothing is written until "Add N".
+- **Inbox** (`/inbox`): status `inbox`, newest first, neutral count, calm empty
+  state; the Process button is natively `disabled` when empty (asserted).
+- **Process mode**: the six outcomes (Do now, Next action, Schedule, Waiting,
+  Drop, Make project) with keys 1–6 and `s` to skip, neutral "N of M" progress,
+  inline undo for Done/Dropped. The queue derives from the live inbox, and a
+  pending query shows "Loading inbox…" rather than claiming the inbox is clear.
+- **Persistence**: captures survive a reload (E2E: capture → reload → still in
+  the inbox).
+- **Accessibility**: Modal focus trap/restore, labelled inputs, 44px controls,
+  native disabled state, no colour-only signalling; no red/overdue language.
+- **Flag off = nothing new**: no capture control, no Inbox pill, `/inbox`
+  redirects home (E2E covers this).
+
+## Part 1: parser
 
 ## Shipped
 
