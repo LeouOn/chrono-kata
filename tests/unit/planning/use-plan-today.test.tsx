@@ -112,6 +112,20 @@ describe('usePlanToday', () => {
     expect(result.current.capacity.wakingMin).toBe(360);
   });
 
+  it('never logs the react-query undefined-data error', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => usePlanToday(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const logged = errorSpy.mock.calls.flat().join(' ');
+    expect(logged).not.toMatch(/cannot be undefined/i);
+    // A missing plan is valid data (null), not an error state.
+    expect(result.current.dayPlan).toBeNull();
+    errorSpy.mockRestore();
+  });
+
   it('keeps object identity across renders until settings change', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     const { result, rerender } = renderHook(() => usePlanToday(), { wrapper: wrapper() });
