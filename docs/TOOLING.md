@@ -22,6 +22,12 @@ npm run dev          # web dev server
 `src/lib/coaches/athena-persona.ts` from its tracked `.example`; the setup
 script does not duplicate that.
 
+**Windows:** the setup script is a POSIX `bash` script, so on the human's
+Windows checkout the portable path is plain `npm install` (which runs the same
+`postinstall` hook) followed by `npm run typecheck`. `npm run ci` and the other
+npm scripts are cross-platform; only the shell script wrapper is not. Git Bash
+or WSL can run the wrapper if desired.
+
 Notes that cost agents time before:
 
 - `node_modules` must be reinstalled after a `git pull` that adds a dependency.
