@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { LoadResponse } from '@/components/insights/LoadResponse';
@@ -6,7 +6,10 @@ import type { CheckIn } from '@/lib/schemas/check-in';
 import type { KataTemplate } from '@/lib/schemas/kata-template';
 import type { Session } from '@/lib/schemas/session';
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe('LoadResponse Component', () => {
   it('renders demo data by default when user has no check-ins', () => {
@@ -48,6 +51,10 @@ describe('LoadResponse Component', () => {
   });
 
   it('renders user data when provided with insufficient pairs count', () => {
+    // The cap callout counts this calendar month, so pin "now" inside the fixture's month.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-26T12:00:00'));
+
     const checkIns: CheckIn[] = [
       {
         date: '2026-09-25',
@@ -101,7 +108,8 @@ describe('LoadResponse Component', () => {
     // Since user has check-ins, it defaults to My Data (2)
     expect(screen.getByText('My Data (2)')).toBeInTheDocument();
     expect(screen.getByText(/Need 12 more check-in days for envelope/)).toBeInTheDocument();
-    expect(screen.getByText('1')).toBeInTheDocument(); // stoppedAtCapMonthCount is 1
+    const capLine = screen.getByText(/stopped at soft cap/);
+    expect(capLine.firstElementChild?.textContent).toBe('1'); // stoppedAtCapMonthCount is 1
   });
 
   it('inspects a day on click or hover to show tooltip details', () => {
