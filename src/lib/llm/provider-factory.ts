@@ -3,13 +3,21 @@ import type { ProviderConfig } from './provider-config';
 import { OpenAICompatibleProvider } from './openai-compatible-provider';
 import { ClaudeProvider } from './claude-provider';
 import { GeminiProvider } from './gemini-provider';
+import { assertProviderAllowed } from './privacy';
 
 /**
  * Construct the concrete LLMProvider for a given config.
  * Unknown provider names fall back to OpenAICompatibleProvider (the de-facto
  * standard for self-hosted and third-party gateways).
+ *
+ * When `privateMode` is on, a non-local provider is refused here — before an
+ * adapter exists, so before any request can be made.
  */
-export function createLLMProvider(config: ProviderConfig): LLMProvider {
+export function createLLMProvider(
+  config: ProviderConfig,
+  options: { privateMode?: boolean } = {},
+): LLMProvider {
+  assertProviderAllowed(config, options.privateMode === true);
   switch (config.providerName) {
     case 'claude':
       return new ClaudeProvider(config);

@@ -222,36 +222,46 @@ ahead of the analytics in W13.
 
 ## W5 — Local LLM backbone
 
-**Status:** partial · **Size:** M · **Lanes:** C · **Depends on:** —
+**Status:** partial → mostly built (Wave 5, PRs to be linked here; wave note `docs/waves/wave-05.md`) · **Size:** M ·
+**Lanes:** C · **Depends on:** —
 
 **Evidence**
 - Exists: a local provider preset — `ollama` → `http://localhost:11434/v1` in
-  `src/lib/llm/provider-defaults.ts`; the OpenAI-compatible adapter would serve any local
+  `src/lib/llm/provider-defaults.ts`; the OpenAI-compatible adapter serves any local
   OpenAI-shaped endpoint.
 - Exists: desktop env-key discovery — `src/lib/llm/local-discovery.ts`, `src/app/api/local-ai/route.ts`,
   `scripts/local-dev.mjs` (loopback-only server, `NEXT_PUBLIC` keys excluded).
 - Exists: the app is genuinely local-first — all data is in IndexedDB; only LLM calls leave the
   device, and with no provider configured the practice loop still works (the briefing card surfaces
   a plain error, sessions/habits/check-ins never touch the network).
-- Missing: LM Studio as a first-class provider — `grep -rInE "lm[ -]?studio|:1234" src tests` → **0 hits**;
-  no host field, no `/v1/models` picker, no health check. It is reachable only by hand-adding a
-  custom OpenAI-compatible base URL.
-- Missing: per-feature provider routing — `src/lib/schemas/llm-settings.ts` keeps one active provider
-  per provider entry; no routing table (decomposition → local, review → cloud).
-- Missing: context budget manager — `grep -rInE "ctx|contextBudget|tokenBudget" src tests` → **0 hits**.
-- Missing: cleartext LAN HTTP policy for release builds — `capacitor.config.ts` sets `cleartext: true`
-  only for the live-reload dev server; no Android network-security config for a LAN LM host.
+- **Now exists (Wave 5):** LM Studio as a first-class provider (`lmstudio` preset,
+  `http://localhost:1234/v1`) with a **host field**, a **model picker** fed by `GET /v1/models`
+  and a **health check** next to "Test connection" (`src/components/llm/ProviderEditor.tsx`,
+  `src/components/llm/ProviderList.tsx`, `src/lib/llm/local-models.ts`); one definition of "local"
+  (`src/lib/llm/local-provider.ts`: local preset **or** loopback/RFC1918/link-local/mDNS address);
+  **private mode enforced at the service and factory seam** so a non-local provider is refused
+  before any fetch (`src/lib/llm/privacy.ts`, `src/lib/llm/app-state.ts`);
+  **per-feature routing** on the settings row (`settings.llmRouting`, optional and non-indexed,
+  no Dexie version) with named slots for W3/W4; a **context budget** that keeps whole items
+  (`src/lib/llm/context-budget.ts`, one token ≈ four characters); and "What gets sent" now shows
+  the provider and the private-mode state.
+- Still missing: **the Android cleartext-LAN decision** — `android/` is untouched; the trade-off
+  (narrow cleartext exception vs a TLS reverse proxy) is written up as a proposal in
+  `docs/waves/wave-05.md` for the human. Also missing: which surfaces actually use the context
+  budget (W3/W6 decide that), and LAN host auto-discovery.
 
 **Skip / extend / net-new**
 - Skip: a new provider class — the OpenAI-compatible adapter covers LM Studio.
-- Extend: `provider-defaults.ts` gains an `lmstudio` preset; the LLM tab (`src/app/(main)/llm/page.tsx`)
-  gains a host field + model picker + health check next to the existing "Test connection".
-- Net-new: per-feature routing in settings, a context-budget/truncation step, a "private mode
-  (local only)" switch, and the cleartext-LAN decision for Android.
+- Extend: `provider-defaults.ts` gains an `lmstudio` preset; the LLM tab gains a host field, a
+  model picker and a health check; the routing table lives on the settings row, not in
+  `llmSettings`.
+- Net-new (done): the local-provider predicate, private mode, routing, context budget, and the
+  wave note. Net-new (open): the cleartext-LAN decision and per-surface budgets.
 
 **Conflicts:** W5's "private mode → local only" and W4's "local only mode" are the same switch —
-build it once. Also: a routing table needs the feature-flag mechanism that does not exist yet
-(see [Cross-cutting rules](#cross-cutting-rules-and-conflicts)).
+built once, as the `privateMode` flag (decision Q4). The routing table needed the flag mechanism
+first, which is why it landed as a prerequisite (PR #15).
+
 
 ---
 
