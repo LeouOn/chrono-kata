@@ -44,7 +44,7 @@ export default function LLMPage() {
     setTesting(name);
     setConnectionResult('');
     try {
-      const response = await createLLMProvider({ providerName: name, ...entry }).completeSingle({
+      const response = await createLLMProvider({ providerName: name, ...entry }, { privateMode }).completeSingle({
         systemPrompt: 'Reply with OK only.', userText: 'Connection test.', signal: AbortSignal.timeout(30_000),
       });
       if (!response.content) throw new Error('Provider returned no text.');
