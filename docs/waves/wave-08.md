@@ -80,11 +80,12 @@ events are imported regardless of the window.
   project.
 - **Audit:** `npm audit` reports no advisory for `ical.js` (its only findings
   are pre-existing, dev-only `vitest`/`vite` advisories).
-- **Size:** `dist/ical.js` (the ESM entry) is 264 KB raw; the minified build is
-  76 KB and **22.9 KB gzipped**. Today nothing imports the import module, so the
-  shipped bundle is unchanged; the +22.9 KB gzip cost lands when the Wave 8 UI
-  imports `icsToBlocks`. It is pure JS (no WASM), so it runs offline and inside
-  the Capacitor WebView with no network or native access.
+- **Size:** the package's export entry, `dist/ical.js`, is 268 KB raw / **62 KB
+  gzipped as installed**; the minified build is 76 KB / 22.9 KB gzipped, which is
+  the order of magnitude Vite will add to the app bundle once part 2 imports
+  `icsToBlocks`. Today nothing imports the import module, so the shipped bundle
+  is unchanged. It is pure JS (no WASM), so it runs offline and inside the
+  Capacitor WebView with no network or native access.
 - Export is hand-rolled (folding, escaping, CRLF) because it is a small,
   fully-tested RFC 5545 subset and needs no library.
 
@@ -106,6 +107,26 @@ event). No real calendar data.
   `heatmap.test.ts` failure under `TZ=Pacific/Kiritimati`, fixed separately in
   PR #23.
 
+## Known follow-ups from the #26 review (none block the pure-module merge)
+
+A. **Unknown TZID with a broken VTIMEZONE is not skipped.** A file whose
+   VTIMEZONE cannot be registered and whose TZID is not an IANA zone currently
+   falls through to the floating branch, so the wall time is taken as UTC and no
+   skip is reported. Fix: before resolving, require the TZID to be either a
+   registered VTIMEZONE or a name `Intl` accepts; otherwise skip with a reason.
+   (The same TZID *without* a VTIMEZONE is already refused correctly.) Fix this
+   before the importer is wired into the UI.
+B. **`RECURRENCE-ID` instances are imported twice.** A modified instance becomes
+   an extra block next to the series occurrence. Real calendars emit this; fix by
+   keying expanded occurrences on `(UID, RECURRENCE-ID)` and replacing the
+   matching occurrence.
+C. **A UTF-8 BOM loses the whole file** with a confusing parser error (Windows
+   exports carry one). Strip a leading BOM before parsing and report "file starts
+   with a BOM" if it is still unreadable.
+D. **Truncation reason is imprecise**: the 100 000-iteration cap reports
+   "truncated at 500 occurrences" even when fewer were produced. Report which
+   cap fired.
+
 ## Not tested / not in scope
 
 - File picker, share sheet, pasted subscription URL fetch, export/import
@@ -116,6 +137,12 @@ event). No real calendar data.
 - Ambiguous wall times in the repeated DST hour resolve to the second
   occurrence (ical.js/VTIMEZONE semantics); a block whose DTEND is written
   inside the repeated hour is inherently ambiguous.
+- A Windows-style VTIMEZONE can disagree with the real zone rule (Outlook's
+  "W. Europe Standard Time" says +02:00 for EU summer time where the real rule
+  is +03:00), so those files yield instants one hour off. That is in the file,
+  not the parser; prefer the IANA path when the name is known.
+- The exporter was re-read by ical.js (a different implementation), not by an
+  independent third-party parser or a real calendar app.
 - `VTIMEZONE` with broken rules falls back to the IANA TZID when the name is an
   IANA zone, otherwise the event is reported as unsupported rather than guessed.
 - Multi-calendar imports (`VCALENDAR` with several `VEVENT`s is supported, but
