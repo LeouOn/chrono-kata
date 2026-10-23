@@ -1,5 +1,17 @@
 # Schema Changelog
 
+## 2026-10-23 — Planning settings: waking hours and anchors (roadmap W6 part 1)
+
+`settings.ts` gains optional `wakingHours` (`{ start, end }`, `HH:MM` 24-hour,
+default 07:00–22:00) and `anchors` (an optional array of recurring protected
+windows: `{ id, title, weekdays, start, end, domainId? }`, where `end` at or
+before `start` means the anchor crosses midnight). Both are optional and
+non-indexed, so Dexie stays on v7 and rows written before planning existed
+remain valid. They are **settings, not a table**: they are per-device
+configuration read on every capacity computation, never queried by index, and
+this avoids a Dexie version for data with at most a handful of rows.
+
+
 ## 2026-10-23 — Session outcome and breadcrumb (roadmap W9 part 1)
 
 `session.ts` gains optional `outcome` (`'done' | 'progress' | 'blocked'`,
