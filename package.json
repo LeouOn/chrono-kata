@@ -6,9 +6,7 @@
   "scripts": {
     "postinstall": "node scripts/ensure-athena-persona.mjs",
     "predev": "node scripts/ensure-athena-persona.mjs",
-    "predev:local": "node scripts/ensure-athena-persona.mjs",
     "prebuild": "node scripts/ensure-athena-persona.mjs",
-    "prebuild:android": "node scripts/ensure-athena-persona.mjs",
     "pretypecheck": "node scripts/ensure-athena-persona.mjs",
     "pretest": "node scripts/ensure-athena-persona.mjs",
     "dev": "next dev",
