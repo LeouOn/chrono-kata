@@ -63,7 +63,9 @@ describe('theme tokens', () => {
 });
 
 // Compiles the real stylesheet so the assertions above are backed by real output.
-const workDir = mkdtempSync(path.join(process.cwd(), 'node_modules/.cache/theme-token-'));
+const cacheRoot = path.join(process.cwd(), 'node_modules/.cache');
+mkdirSync(cacheRoot, { recursive: true });
+const workDir = mkdtempSync(path.join(cacheRoot, 'theme-token-'));
 afterAll(() => rmSync(workDir, { recursive: true, force: true }));
 
 describe('compiled output', () => {
