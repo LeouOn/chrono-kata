@@ -108,16 +108,31 @@ Directory: `src/lib/llm/`.
   (strips model preamble/markdown, filters streaming text).
 - **Presets:** `provider-defaults.ts` (names, default base URLs/models,
   `adapterFor`) and `provider-config.ts`.
-- **Prompts:** `prompt-builders.ts` builds coach, weekly-reflection, and daily
-  briefing user text. Personality system prompts live in `src/lib/coaches/`
-  (`zen`, `hype`, `analyst`, `buddy`, `athena`) behind
-  `getCoachSystemPrompt()` in `coaches/index.ts`.
+- **Prompts:** `prompt-builders.ts` builds coach and weekly-reflection user
+  text. Personality system prompts live in `src/lib/coaches/` (`zen`, `hype`,
+  `analyst`, `buddy`, `athena`) behind `getCoachSystemPrompt()`, which appends
+  the `PACING_CLAUSE` (never encourage pushing through fatigue; phrase the
+  given action, do not change it).
+- **Pacing payload (`pacing-context.ts`, added by T5):** `buildPacingContext()`
+  calls `recommend()` and assembles only what the coach may see — action, pct,
+  reasons, 7-day load and previous 7-day load, the recent check-ins, streak
+  days, rest-day flag and recent session lines (label/minutes/rating, no ids
+  and no notes). `buildDailyBriefingUserText()` serializes it;
+  `hashPacingContext()` keys the briefing cache.
 - **`athena-persona.ts` is gitignored**; `athena-persona.ts.example` is
-  committed and must be copied to the real filename or typecheck fails and
-  five test files cannot collect (see `docs/TOOLING.md`).
+  committed and `scripts/ensure-athena-persona.mjs` (wired to `postinstall`
+  and the `pre*` scripts) copies it into place on demand when the real file is
+  absent. See `docs/TOOLING.md`.
 - **Service layer:** `llm-service.ts` (`generateCoachComment`,
   `generateCoachCommentStream`, weekly reflection, daily briefing) applies a
   30 s timeout, combines abort signals, and maps errors to `LLMException`.
+- **Daily briefing guard (T5b):** `clean-response.ts` strips `<think>` blocks
+  (and partial ones while streaming) and quotes, then `parseCoachBriefing()`
+  parses a fenced-or-bare JSON object against a Zod schema (`summary`,
+  `suggestion`, `tone`), rejects suggestions that contradict a rest/reduce
+  decision, and otherwise returns a deterministic per-action fallback
+  (`fallbackBriefing`) so the UI always has text. The rules decision is never
+  the model's to make.
 - **Settings & secrets:** `llm-settings` rows hold one entry per provider
   (`baseUrl`, `model`, `apiKey`, optional `credentialSource`) plus a monthly
   token counter. Exports blank `apiKey`; imports keep locally stored keys when
@@ -205,6 +220,12 @@ Streak (`src/lib/streak/`):
 
 - `MorningCheckIn` (components/checkin) writes one `checkIn` row per local day:
   1–5 energy, fog, aches, sleep, optional note.
+- The pacing decision is made by rules and only phrased by the model:
+  `recommend()` returns the action, `pacing-context.ts` builds the payload, and
+  the LLM must phrase it (validated, with fallback — see §5). The Home
+  `DailyBriefingCard` shows the summary/suggestion, and the LLM settings page
+  has a "What gets sent" panel (`components/llm/WhatGetsSent.tsx`) that prints
+  the exact briefing payload.
 - `src/lib/pacing/` is pure logic: `days.ts` (local date keys, `addDays`),
   `load.ts` (session → weighted load-minutes: `minutes × intensity`, reps
   converted at `REP_MINUTES = 0.1`), `response.ts` (wellbeing score with
@@ -254,10 +275,11 @@ after sync). Reps-only sessions never sync. UI lives in
 - `npm run precommit` = typecheck + lint + unit tests. `npm run ci` adds the
   production build (see `docs/TOOLING.md`).
 - Unit tests: `tests/unit/**` with Vitest (jsdom, `fake-indexeddb`, Testing
-  Library). E2E: `tests/e2e/**` with Playwright against `next start` on port
-  3008. `npm run ci` is the local gate (typecheck + lint + unit tests + build);
-  there is no remote CI workflow. Details, gaps and measured timings are in
-  `docs/TOOLING.md`.
+  Library). E2E: `tests/e2e/**` with Playwright against `next start`, whose port
+  is `PLAYWRIGHT_PORT` (default 3008) so parallel runs on a shared host do not
+  collide. `npm run ci` is the local gate (typecheck + lint + unit tests +
+  production build + e2e); there is no remote CI workflow. Details, gaps and
+  measured timings are in `docs/TOOLING.md`.
 
 ## 13. Findings worth knowing before later waves
 
@@ -281,6 +303,8 @@ These contradict or extend the roadmap; they are reported, not fixed, in Wave 0.
    `settings.flags.*` namespace that roadmap principle 8 assumes. Lead decision
    Q4 plans it as an optional, non-indexed field on that row before W5/W8/W16/W18
    (`docs/ROADMAP_STATUS.md`), which needs no Dexie version bump.
-7. **Daily briefing is cached per date and personality**
-   (`hooks/useDailyBriefing.ts`), so Wave 14's coach-modes work must reuse that
-   cache key shape.
+7. **The daily briefing is cached in `localStorage`** under
+   `chrono-kata-briefing-<local date>-<personality>-<payload hash>`
+   (`hooks/useDailyBriefing.ts`), so a changed pacing payload invalidates it;
+   Wave 14's coach-modes work must extend that key shape rather than replace it
+   with a per-date-only cache.

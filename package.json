@@ -19,7 +19,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "precommit": "npm run typecheck && npm run lint && npm run test",
-    "ci": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "ci": "npm run typecheck && npm run lint && npm run test && npm run build && npm run test:e2e",
     "setup:worktree": "bash scripts/setup-worktree.sh"
   },
   "keywords": [],

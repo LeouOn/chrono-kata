@@ -34,25 +34,29 @@ Notes that cost agents time before:
 ## 2. `npm run ci` (the gate)
 
 ```json
-"ci": "npm run typecheck && npm run lint && npm run test && npm run build"
+"ci": "npm run typecheck && npm run lint && npm run test && npm run build && npm run test:e2e"
 ```
 
-- Runs sequentially; the first failure stops the gate.
-- Warm run on this machine: **~19 s** (typecheck ~5 s, lint ~1 s, Vitest ~7 s
-  for 78 files / 526 tests, production build ~5 s).
+- Runs sequentially; the first failure stops the gate. It covers the roadmap's
+  definition of done (typecheck, lint, unit tests, e2e, build).
+- Warm run on this machine: **~45 s** (typecheck ~5 s, lint ~1 s, Vitest ~7 s,
+  production build ~5 s, Playwright 18 specs ~25 s).
 - The build **works offline**: `rm -rf .next && unshare -rn npx next build`
   exits 0 in a network-less namespace. No font/telemetry fetch is needed.
+- E2E is the slow, machine-dependent part: it needs Chromium
+  (`npx playwright install chromium`) and a free port. Skip it while iterating
+  with `npm run precommit` (typecheck + lint + unit tests only).
 - It is the only CI: there is **no `.github/` workflow**, so nothing runs on
   push. Decision Q10 in `docs/ROADMAP_STATUS.md` keeps CI local until the human
   asks for hosted CI.
 
-**E2E is deliberately outside `npm run ci`.** Playwright needs a prior
-production build plus browser binaries, which makes the gate slow and
-machine-dependent. Run it as a separate step:
+**Parallel e2e runs:** `playwright.config.ts` reads `PLAYWRIGHT_PORT`
+(default `3008`) for both `baseURL` and the `next start` web server. Several
+agents share one host, so export a distinct port per seat:
 
 ```bash
-npm run build
-npm run test:e2e        # 18 specs, ~25 s
+PLAYWRIGHT_PORT=3018 npm run test:e2e
+PLAYWRIGHT_PORT=3018 npm run ci        # the whole gate on that port
 ```
 
 ## 3. Vitest (unit + component)
@@ -84,6 +88,9 @@ Traces are recorded on the first retry; `test-results/` and
 `playwright-report/` are gitignored.
 
 - Current baseline: **18/18** after the Athena spec repair (PR #8).
+- Port is overridable: `PLAYWRIGHT_PORT=3018 npm run test:e2e`. The default
+  stays 3008; the web server is never reused (`reuseExistingServer: false`), so
+  two suites on one port fail loudly instead of sharing a server.
 - Browser binaries are not installed by `npm install`; a fresh machine needs
   `npx playwright install chromium`.
 - Specs share state through `localStorage` (`onboarding-completed`) set via
@@ -145,4 +152,7 @@ info is written to `tsconfig.tsbuildinfo` (gitignored).
 4. `public/sw.js` churn after every build (see §7).
 5. Playwright is a single Chromium project — no Firefox/WebKit matrix, no
    mobile device profile, despite a mobile-first product.
-6. No coverage threshold and no bundle-size gate.
+6. The e2e port is only overridable by environment variable; nothing picks a
+   free port automatically, so `npm run ci` on a busy host fails at the web
+   server unless `PLAYWRIGHT_PORT` is set.
+7. No coverage threshold and no bundle-size gate.
