@@ -11,8 +11,10 @@ as it is and treats ICS as additive.
 
 - `src/lib/ics/ics-export.ts` — `blocksToIcs(blocks, { now, calendarName })`
 - `src/lib/ics/ics-import.ts` — `icsToBlocks(text, { now, defaultKind, windowDays, maxOccurrencesPerEvent })`, plus `stableUuidFromString` and `wallTimeInZoneToUtc`
-- `tests/unit/ics/` — 57 tests (export 15, import 27, round trip 7, TZ 8)
-- `tests/fixtures/ics/` — synthetic Google-, Apple- and Outlook-shaped exports
+- `tests/unit/ics/` — 64 tests (export 15, import 27, round trip 7, TZ 8,
+  review follow-ups 7)
+- `tests/fixtures/ics/` — synthetic Google-, Apple- and Outlook-shaped exports,
+  plus a broken-VTIMEZONE file and a RECURRENCE-ID override file
 
 ## Time encoding: UTC instants (`DTSTART:…Z`)
 
@@ -107,25 +109,31 @@ event). No real calendar data.
   `heatmap.test.ts` failure under `TZ=Pacific/Kiritimati`, fixed separately in
   PR #23.
 
-## Known follow-ups from the #26 review (none block the pure-module merge)
+## Follow-ups from the #26 review — fixed
 
-A. **Unknown TZID with a broken VTIMEZONE is not skipped.** A file whose
-   VTIMEZONE cannot be registered and whose TZID is not an IANA zone currently
-   falls through to the floating branch, so the wall time is taken as UTC and no
-   skip is reported. Fix: before resolving, require the TZID to be either a
-   registered VTIMEZONE or a name `Intl` accepts; otherwise skip with a reason.
-   (The same TZID *without* a VTIMEZONE is already refused correctly.) Fix this
-   before the importer is wired into the UI.
-B. **`RECURRENCE-ID` instances are imported twice.** A modified instance becomes
-   an extra block next to the series occurrence. Real calendars emit this; fix by
-   keying expanded occurrences on `(UID, RECURRENCE-ID)` and replacing the
-   matching occurrence.
-C. **A UTF-8 BOM loses the whole file** with a confusing parser error (Windows
-   exports carry one). Strip a leading BOM before parsing and report "file starts
-   with a BOM" if it is still unreadable.
-D. **Truncation reason is imprecise**: the 100 000-iteration cap reports
-   "truncated at 500 occurrences" even when fewer were produced. Report which
-   cap fired.
+All four review findings are fixed, each with a fixture and a test
+(`tests/unit/ics/ics-followups.test.ts`):
+
+A. **An unknown TZID with a broken VTIMEZONE is skipped, not guessed.** A
+   VTIMEZONE is only registered when every observance has a parseable DTSTART
+   and a `±HHMM` TZOFFSETTO; an event whose TZID is neither a usable VTIMEZONE
+   nor a known IANA zone is reported as `unsupported timezone "…"` and produces
+   no block. Fixture: `broken-timezone.ics` (TZID `Nowhere/Land`, garbage
+   offsets) → 0 blocks, 1 skip.
+B. **`RECURRENCE-ID` replaces the instance instead of duplicating the day.** The
+   overridden occurrence keeps its slot identity (and therefore its derived id)
+   but takes the override's start, end, title and metadata. An override whose
+   original occurrence is outside the import window is imported as its own
+   block rather than dropped. Fixture: `recurrence-override.ics` (daily series
+   with one moved instance) → 3 blocks, moved time present, no duplicate.
+C. **A leading UTF-8 BOM is stripped** before parsing, so Windows-produced files
+   import normally (`\uFEFF` + `google.ics` → same blocks as without).
+D. **The truncation reason says which cap fired**: `recurrence truncated at N
+   occurrences` vs `recurrence truncated at the 100000-iteration cap`.
+
+Also from the review: the dependency size is stated as installed (62 KB gzip for
+`dist/ical.js`) with ~23 KB gzip as the bundle estimate once minified, and the
+Windows-style VTIMEZONE caveat below is documented.
 
 ## Not tested / not in scope
 
@@ -143,6 +151,9 @@ D. **Truncation reason is imprecise**: the 100 000-iteration cap reports
   not the parser; prefer the IANA path when the name is known.
 - The exporter was re-read by ical.js (a different implementation), not by an
   independent third-party parser or a real calendar app.
+- An override's `RECURRENCE-ID` is matched to an expanded occurrence within one
+  second; a series whose occurrence grid changed by more than that (a re-based
+  `RRULE`) leaves the override to be imported as its own block.
 - `VTIMEZONE` with broken rules falls back to the IANA TZID when the name is an
   IANA zone, otherwise the event is reported as unsupported rather than guessed.
 - Multi-calendar imports (`VCALENDAR` with several `VEVENT`s is supported, but
