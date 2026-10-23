@@ -741,7 +741,7 @@ These apply to every wave and are not optional per-wave choices.
 5. **Feature flags — mechanism shipped (decision Q4).** Roadmap principle 8 assumes
    `settings.flags.*`; it now exists as an optional, non-indexed `flags` field on the singleton
    settings row, with the closed name union `privateMode | nativeCalendar | nudgeKinds | sync`
-   (`src/lib/schemas/settings.ts`, `src/lib/settings/flags.ts`, `src/hooks/useFlags.ts`, PR #13).
+   (`src/lib/schemas/settings.ts`, `src/lib/settings/flags.ts`, `src/hooks/useFlags.ts`, PR #15).
    A row written before flags existed stays valid, no Dexie version was needed, and every flag
    reads with an explicit default until the feature behind it is built (W5 local-only, W8 native
    calendar, W16 nudge kinds, W18 sync). No flagged feature is built yet.
