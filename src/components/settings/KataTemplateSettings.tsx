@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Plus, Trash2, Edit2, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -21,6 +21,15 @@ const INTENSITY_LABELS = {
 } as const;
 
 export function KataTemplateSettings() {
+  const formId = useId();
+  const iconLabelId = `${formId}-icon`;
+  const nameId = `${formId}-name`;
+  const durationId = `${formId}-duration`;
+  const softCapId = `${formId}-soft-cap`;
+  const repsId = `${formId}-reps`;
+  const intensityLabelId = `${formId}-intensity`;
+  const activityId = `${formId}-activity`;
+  const noteId = `${formId}-note`;
   const { templates, createTemplate, updateTemplate, deleteTemplate, reorderTemplates } = useKataTemplates();
   const { settings, updateSettings } = useSettings();
   const [modalOpen, setModalOpen] = useState(false);
@@ -220,8 +229,14 @@ export function KataTemplateSettings() {
         <form onSubmit={handleSave} className="space-y-4 text-xs">
           {/* Icon picker */}
           <div>
-            <label className="text-text-muted block mb-1">Icon</label>
-            <div className="max-h-44 overflow-y-auto pr-1">
+            <span id={iconLabelId} className="text-text-muted block mb-1">
+              Icon
+            </span>
+            <div
+              role="group"
+              aria-labelledby={iconLabelId}
+              className="max-h-44 overflow-y-auto pr-1"
+            >
               {KATA_ICON_CATEGORIES.map((category) => (
                 <div key={category.label} className="mb-2">
                   <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">
@@ -250,8 +265,11 @@ export function KataTemplateSettings() {
 
           {/* Routine Name */}
           <div>
-            <label className="text-text-muted block mb-1">Routine Name</label>
+            <label htmlFor={nameId} className="text-text-muted block mb-1">
+              Routine Name
+            </label>
             <input
+              id={nameId}
               type="text"
               required
               maxLength={50}
@@ -281,8 +299,11 @@ export function KataTemplateSettings() {
           {/* Target Value */}
           {mode === 'timed' ? (
             <div>
-              <label className="text-text-muted block mb-1">Default Duration (minutes)</label>
+              <label htmlFor={durationId} className="text-text-muted block mb-1">
+                Default Duration (minutes)
+              </label>
               <input
+                id={durationId}
                 type="number"
                 min="1"
                 max="1440"
@@ -291,8 +312,11 @@ export function KataTemplateSettings() {
                 placeholder="20"
                 className="w-full bg-surface-2 rounded-xl px-3 py-2 text-text text-sm border border-border focus:border-accent outline-none"
               />
-              <label className="text-text-muted block mt-3 mb-1">Soft cap (minutes, optional)</label>
+              <label htmlFor={softCapId} className="text-text-muted block mt-3 mb-1">
+                Soft cap (minutes, optional)
+              </label>
               <input
+                id={softCapId}
                 type="number"
                 min="1"
                 max="600"
@@ -304,8 +328,11 @@ export function KataTemplateSettings() {
             </div>
           ) : (
             <div>
-              <label className="text-text-muted block mb-1">Default Repetitions</label>
+              <label htmlFor={repsId} className="text-text-muted block mb-1">
+                Default Repetitions
+              </label>
               <input
+                id={repsId}
                 type="number"
                 min="1"
                 max="100000"
@@ -319,8 +346,14 @@ export function KataTemplateSettings() {
 
           {/* Intensity */}
           <div>
-            <label className="text-text-muted block mb-1">Intensity</label>
-            <div className="grid grid-cols-3 gap-2 p-1 bg-surface-2 rounded-xl">
+            <span id={intensityLabelId} className="text-text-muted block mb-1">
+              Intensity
+            </span>
+            <div
+              role="group"
+              aria-labelledby={intensityLabelId}
+              className="grid grid-cols-3 gap-2 p-1 bg-surface-2 rounded-xl"
+            >
               {([1, 2, 3] as const).map((level) => (
                 <button
                   key={level}
@@ -339,8 +372,11 @@ export function KataTemplateSettings() {
 
           {/* Activity label */}
           <div>
-            <label className="text-text-muted block mb-1">Activity Label (optional)</label>
+            <label htmlFor={activityId} className="text-text-muted block mb-1">
+              Activity Label (optional)
+            </label>
             <input
+              id={activityId}
               type="text"
               maxLength={50}
               placeholder="e.g. Meditation, Deep Work"
@@ -352,8 +388,11 @@ export function KataTemplateSettings() {
 
           {/* Default note */}
           <div>
-            <label className="text-text-muted block mb-1">Default Note (optional)</label>
+            <label htmlFor={noteId} className="text-text-muted block mb-1">
+              Default Note (optional)
+            </label>
             <textarea
+              id={noteId}
               maxLength={500}
               rows={2}
               placeholder="Prompt or focal points for this kata"
