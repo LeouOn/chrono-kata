@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { buildHeatmapData } from '@/lib/insights/heatmap';
 import type { Session } from '@/lib/schemas/session';
 
-const ses = (date: string, minutes = 30): Session => ({
+// Local-calendar instants so every timestamp keeps the same local date key in
+// any runner timezone (ground rules: local YYYY-MM-DD date keys). A UTC literal
+// like 10:00Z is the next local day in TZ=Pacific/Kiritimati (UTC+14).
+const ses = (startedAt: Date, minutes = 30): Session => ({
   id: crypto.randomUUID(),
-  startedAt: new Date(date),
+  startedAt,
   durationMinutes: minutes,
   reps: null,
   rating: 3,
@@ -26,9 +29,9 @@ describe('buildHeatmapData', () => {
 
   it('aggregates minutes per day across multiple sessions', () => {
     const sessions = [
-      ses('2026-03-15T10:00:00Z', 30),
-      ses('2026-03-15T14:00:00Z', 45),
-      ses('2026-03-16T10:00:00Z', 20),
+      ses(new Date(2026, 2, 15, 10), 30),
+      ses(new Date(2026, 2, 15, 14), 45),
+      ses(new Date(2026, 2, 16, 10), 20),
     ];
     const data = buildHeatmapData(sessions, 2026);
     const mar15 = data.cells.find((c) => c.date === '2026-03-15');
@@ -44,8 +47,8 @@ describe('buildHeatmapData', () => {
 
   it('computes intensity level (0-4) based on max minutes in year', () => {
     const sessions = [
-      ses('2026-03-15T10:00:00Z', 30),
-      ses('2026-03-16T10:00:00Z', 120),
+      ses(new Date(2026, 2, 15, 10), 30),
+      ses(new Date(2026, 2, 16, 10), 120),
     ];
     const data = buildHeatmapData(sessions, 2026);
     const mar15 = data.cells.find((c) => c.date === '2026-03-15')!;
@@ -58,9 +61,10 @@ describe('buildHeatmapData', () => {
   });
 
   it('cells use local YYYY-MM-DD', () => {
-    const sessions = [ses('2026-03-15T10:00:00Z')];
+    // 23:30 local is already the next day in UTC; the cell must use the local day.
+    const sessions = [ses(new Date(2026, 2, 15, 23, 30))];
     const data = buildHeatmapData(sessions, 2026);
-    // The local date string is what matters, not the UTC interpretation
-    expect(data.cells.some((c) => c.sessionCount === 1)).toBe(true);
+    expect(data.cells.find((c) => c.date === '2026-03-15')?.sessionCount).toBe(1);
+    expect(data.cells.find((c) => c.date === '2026-03-16')?.sessionCount).toBe(0);
   });
 });
