@@ -738,10 +738,13 @@ These apply to every wave and are not optional per-wave choices.
    device. See [Questions](#questions-for-the-human) Q2.
 4. **Schema changes are logged.** `src/lib/schemas/CHANGELOG.md` (exists — kept by the pacing
    work; see its entries for v5/v6).
-5. **Feature flags do not exist.** Roadmap principle 8 assumes `settings.flags.*`, but
-   `src/lib/schemas/settings.ts` has no `flags` key. Every flagged item (W5 local-only, W8 native
-   calendar, W16 nudge kinds, W18 sync) needs that mechanism first — either a `flags` field on the
-   singleton settings row or a small `flags` table. **This is a prerequisite, not a per-wave task.**
+5. **Feature flags — mechanism shipped (decision Q4).** Roadmap principle 8 assumes
+   `settings.flags.*`; it now exists as an optional, non-indexed `flags` field on the singleton
+   settings row, with the closed name union `privateMode | nativeCalendar | nudgeKinds | sync`
+   (`src/lib/schemas/settings.ts`, `src/lib/settings/flags.ts`, `src/hooks/useFlags.ts`, PR #15).
+   A row written before flags existed stays valid, no Dexie version was needed, and every flag
+   reads with an explicit default until the feature behind it is built (W5 local-only, W8 native
+   calendar, W16 nudge kinds, W18 sync). No flagged feature is built yet.
 6. **AI proposes, user disposes.** The app currently has **no** AI write path — every AI feature
    generates text for the user to read. The first tool call (W14) introduces writes, so the
    confirm/diff UI must land in the same wave.
