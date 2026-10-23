@@ -69,23 +69,32 @@ asking them to remember.
 
 ## Known issues and boundaries
 
-1. **The loopback AI proxy is outside the app's privacy guarantee.** `src/app/api/local-ai/route.ts`
+1. **Private mode is about LLM traffic, not about every byte leaving the device.** It refuses a
+   non-local *provider*; it does not touch Google Calendar sync (which sends sessions to Google),
+   exports (which write a file wherever you choose), or anything else the app does on purpose. The
+   LLM tab says so in the same words, next to the switch.
+2. **Private mode checks where a request is addressed, not where it ends up.** A local server that
+   answers `307` to a public URL would send the request there, because the redirect is followed by
+   the browser. Closing that means refusing redirects for local providers, which lives in
+   `src/lib/llm/provider-fetch.ts` — T9's file, so it is not touched here. It is listed in the wave
+   note for whoever picks T9 up.
+3. **The loopback AI proxy is outside the app's privacy guarantee.** `src/app/api/local-ai/route.ts`
    injects desktop environment keys and proxies the request server-side. The app refuses a
    non-local provider before it reaches that route, but a caller that talks to the route directly
    bypasses the app's check. The route is loopback-only and only exists in `npm run dev:local`.
    Making that boundary airtight belongs with T9's native HTTP work.
-2. **Browsers block plain HTTP from an HTTPS page.** A hosted build (HTTPS) cannot reach
+4. **Browsers block plain HTTP from an HTTPS page.** A hosted build (HTTPS) cannot reach
    `http://<lan-host>:1234` — the browser refuses mixed content. The app says so explicitly rather
    than showing a generic failure. The practical answers are a TLS reverse proxy in front of the
    local server, or running the app on `http://localhost` on the machine that hosts the model.
-3. **CORS is the host's business.** LM Studio and Ollama both allow browser calls today; a
+5. **CORS is the host's business.** LM Studio and Ollama both allow browser calls today; a
    self-hosted server that does not will fail with a CORS error, which surfaces as the generic
    "could not reach" message.
-4. **Private mode is about the provider, not the payload.** Nothing in this wave sends health data
+6. **Private mode is about the provider, not the payload.** Nothing in this wave sends health data
    — the coach payload is the minimized one built in T5 (aggregates only, no notes). Decision Q2
    still governs: any new AI surface that would send task or journal data must show what leaves
    the device and ask the human first.
-5. **The routing table names providers, it does not check them.** A route pointing at a provider
+7. **The routing table names providers, it does not check them.** A route pointing at a provider
    that was removed fails with a message that says which surface was routed where.
 
 ## Proposal: reaching a LAN model from Android (decision needed)
