@@ -16,10 +16,18 @@ export interface CoachBriefing {
 
 const CONTRADICTION = /\b(push|more than yesterday|challenge yourself)\b/i;
 
+/** Deterministic per-action phrasing so the fallback never repeats the summary. */
+const FALLBACK_SUGGESTIONS: Record<RecommendAction, string> = {
+  rest: 'Today is a rest day. Rest, or keep to gentle stretches only if they feel good.',
+  reduce: 'Do a little less than yesterday. Shorten today\'s practice and stop early if fatigue shows up.',
+  hold: 'Hold today at yesterday\'s level. Keep the practice as it is and see how you feel.',
+  build: 'There is room to build today. Add a little, not a lot, and keep it comfortable.',
+};
+
 export function fallbackBriefing(recommendation: Pick<Recommendation, 'action' | 'reasons'>): Omit<CoachBriefing, 'usedFallback'> {
   const summary = recommendation.reasons.join(' ') || `Today is a ${recommendation.action} day.`;
   const tone = recommendation.action === 'rest' || recommendation.action === 'reduce' ? 'gentle' : 'steady';
-  return { summary, suggestion: summary, tone };
+  return { summary, suggestion: FALLBACK_SUGGESTIONS[recommendation.action], tone };
 }
 
 function contradicts(action: RecommendAction, suggestion: string): boolean {

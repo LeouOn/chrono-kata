@@ -77,5 +77,3 @@ describe('buildWeeklyReflectionUserText', () => {
     expect(out).toMatch(/108 reps/);
   });
 });
-
-

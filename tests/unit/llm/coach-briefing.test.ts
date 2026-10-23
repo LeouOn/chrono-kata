@@ -32,4 +32,12 @@ describe('parseCoachBriefing', () => {
       summary: 'Low energy this morning.',
     });
   });
+
+  it('fallback suggestion is distinct, so the summary never renders twice', () => {
+    const fallback = parseCoachBriefing('', rest);
+    expect(fallback.usedFallback).toBe(true);
+    expect(fallback.suggestion).not.toBe(fallback.summary);
+    const rendered = `${fallback.summary} ${fallback.suggestion}`;
+    expect(rendered.indexOf('Low energy this morning.')).toBe(rendered.lastIndexOf('Low energy this morning.'));
+  });
 });
