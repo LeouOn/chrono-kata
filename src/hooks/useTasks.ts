@@ -20,6 +20,19 @@ function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
   void qc.invalidateQueries({ queryKey: PROJECTS_KEY });
 }
 
+/** Create a batch in order, one repository write per item. */
+export function useCaptureTasks() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (inputs: TaskInput[]) => {
+      const created: Task[] = [];
+      for (const input of inputs) created.push(await taskRepo.create(input));
+      return created;
+    },
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
 /** All tasks, newest touch first (repository order). */
 export function useTasks(options: { enabled?: boolean } = {}) {
   return useQuery({

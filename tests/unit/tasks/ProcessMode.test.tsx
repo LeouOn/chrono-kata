@@ -209,6 +209,36 @@ describe('ProcessMode', () => {
   });
 });
 
+describe('focus return', () => {
+  it('returns focus to the Process button when the sheet closes', async () => {
+    await seed('one');
+    renderWithProviders(<InboxScreen />);
+    const process = await screen.findByRole('button', { name: 'Process' });
+    await waitFor(() => expect(process).toBeEnabled());
+    fireEvent.click(process);
+    await screen.findByRole('dialog', { name: 'Process inbox' });
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(process));
+  });
+
+  it('returns focus to the outcome button when leaving the next-action step', async () => {
+    await seed('one');
+    renderWithProviders(<ProcessMode open onClose={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /2: Next action/i }));
+    const input = await screen.findByLabelText('The next small step');
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(document.getElementById('outcome-next-action')),
+    );
+  });
+});
+
 describe('InboxLink (Home header entry point)', () => {
   it('does not read the tasks store at all while the flag is off', async () => {
     const spy = vi.spyOn(taskRepo, 'getAll');

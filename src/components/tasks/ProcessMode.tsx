@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import { useInbox } from '@/hooks/useTasks';
 import { INBOX_OUTCOMES, outcomeForKey, type InboxOutcome } from '@/lib/tasks/outcomes';
+import { messageOf } from '@/lib/tasks/messages';
 import type { Task } from '@/lib/schemas/task';
 
 type Step = 'choose' | 'next-action' | 'schedule' | 'make-project';
@@ -13,16 +14,6 @@ type Step = 'choose' | 'next-action' | 'schedule' | 'make-project';
 interface Props {
   open: boolean;
   onClose: () => void;
-}
-
-/** Turn a validation error into one sentence instead of raw Zod JSON. */
-function messageOf(error: unknown): string {
-  if (error && typeof error === 'object' && 'issues' in error) {
-    const issues = (error as { issues?: Array<{ message?: string }> }).issues;
-    const first = issues?.find((issue) => typeof issue.message === 'string' && issue.message !== '');
-    if (first?.message) return first.message;
-  }
-  return error instanceof Error ? error.message : String(error);
 }
 
 function toDateInputValue(date: Date): string {
@@ -59,6 +50,9 @@ export function ProcessMode({ open, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const nextActionRef = useRef<HTMLInputElement>(null);
   const dayRef = useRef<HTMLInputElement>(null);
+  // Which outcome button opened the current step, so Back can re-focus it
+  // after the step's input unmounts (the node itself is not kept).
+  const stepBackOutcome = useRef<string | null>(null);
 
   useEffect(() => {
     if (open) return;
@@ -118,13 +112,26 @@ export function ProcessMode({ open, onClose }: Props) {
     }
   }
 
+  function backToChoose() {
+    setStep('choose');
+    setError(null);
+    // The focused input is about to unmount, so return focus to the outcome
+    // button the user came from instead of dropping it on <body>.
+    const id = stepBackOutcome.current;
+    window.setTimeout(() => {
+      if (id) (document.getElementById(`outcome-${id}`) as HTMLButtonElement | null)?.focus();
+    }, 0);
+  }
+
   function choose(outcome: InboxOutcome) {
     if (outcome === 'next-action') {
+      stepBackOutcome.current = 'next-action';
       setStep('next-action');
       setError(null);
       return;
     }
     if (outcome === 'schedule') {
+      stepBackOutcome.current = 'schedule';
       setStep('schedule');
       setError(null);
       return;
@@ -209,6 +216,7 @@ export function ProcessMode({ open, onClose }: Props) {
                 {INBOX_OUTCOMES.map((spec) => (
                   <Button
                     key={spec.outcome}
+                    id={`outcome-${spec.outcome}`}
                     variant={spec.outcome === 'drop' ? 'ghost' : 'primary'}
                     className="justify-start text-left min-h-11"
                     onClick={() => choose(spec.outcome)}
@@ -249,7 +257,7 @@ export function ProcessMode({ open, onClose }: Props) {
                   <Button type="submit" disabled={busy || nextAction.trim() === ''}>
                     Save next action
                   </Button>
-                  <Button type="button" variant="ghost" onClick={() => setStep('choose')}>
+                  <Button type="button" variant="ghost" onClick={backToChoose}>
                     Back
                   </Button>
                 </div>
@@ -280,7 +288,7 @@ export function ProcessMode({ open, onClose }: Props) {
                   <Button type="submit" disabled={busy || fromLocalDateInput(day) === null}>
                     Schedule
                   </Button>
-                  <Button type="button" variant="ghost" onClick={() => setStep('choose')}>
+                  <Button type="button" variant="ghost" onClick={backToChoose}>
                     Back
                   </Button>
                 </div>
@@ -296,7 +304,7 @@ export function ProcessMode({ open, onClose }: Props) {
                   <Button onClick={() => void apply('make-project')} disabled={busy}>
                     Make project
                   </Button>
-                  <Button variant="ghost" onClick={() => setStep('choose')}>
+                  <Button variant="ghost" onClick={backToChoose}>
                     Back
                   </Button>
                 </div>

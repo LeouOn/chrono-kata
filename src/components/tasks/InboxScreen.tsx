@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useInbox } from '@/hooks/useTasks';
 import { ProcessMode } from './ProcessMode';
+import { InlineCapture } from './InlineCapture';
 import { toLocalDateString } from '@/lib/utils/date';
 
 /**
@@ -14,6 +15,7 @@ import { toLocalDateString } from '@/lib/utils/date';
 export function InboxScreen() {
   const { inbox, count, isLoading } = useInbox();
   const [processing, setProcessing] = useState(false);
+  const processButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="space-y-4">
@@ -28,10 +30,16 @@ export function InboxScreen() {
                 : `${count} items to sort, whenever you want.`}
           </p>
         </div>
-        <Button onClick={() => setProcessing(true)} disabled={count === 0}>
+        <Button
+          ref={processButtonRef}
+          onClick={() => setProcessing(true)}
+          disabled={count === 0}
+        >
           Process
         </Button>
       </div>
+
+      <InlineCapture />
 
       {isLoading ? <p className="text-sm text-text-muted">Loading…</p> : null}
 
@@ -62,7 +70,15 @@ export function InboxScreen() {
         ))}
       </ul>
 
-      <ProcessMode open={processing} onClose={() => setProcessing(false)} />
+      <ProcessMode
+        open={processing}
+        onClose={() => {
+          setProcessing(false);
+          // The Modal's own focus restore can be defeated when the focused
+          // input unmounts, so put focus back on the opener explicitly.
+          window.setTimeout(() => processButtonRef.current?.focus(), 0);
+        }}
+      />
     </div>
   );
 }
