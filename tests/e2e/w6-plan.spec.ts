@@ -57,7 +57,7 @@ test('plan, confirm, reload, see it on Home and start a linked session', async (
   const swapLabels = (await swap.locator('option').allTextContents()).slice(1);
   expect(swapLabels).toHaveLength(1);
   await swap.selectOption({ label: swapLabels[0]! });
-  await page.getByRole('button', { name: /Confirm today/i }).click();
+  await page.getByRole('button', { name: /Confirm today|Update today/i }).click();
   await expect(page.getByText('Your picks')).toBeVisible();
 
   // Reopening shows the confirmed plan, not a fresh suggestion list.
@@ -92,7 +92,7 @@ test('an over-capacity plan says so calmly and still saves', async ({ page }) =>
   await expect(page.getByRole('status')).toContainText(/more than the \d+ you have today/);
   await expect(page.getByRole('status')).not.toContainText(/overdue|late|behind|missed/i);
 
-  await page.getByRole('button', { name: /Confirm today/i }).click();
+  await page.getByRole('button', { name: /Confirm today|Update today/i }).click();
   await expect(page.getByText('Your picks')).toBeVisible();
 });
 

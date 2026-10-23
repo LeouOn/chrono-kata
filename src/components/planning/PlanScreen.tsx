@@ -123,14 +123,18 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
   // action is a fresh confirmation.
   const listFromUserChoice = draftIds !== null ? draftIds.length > 0 : confirmedIds.length > 0;
   const allConfirmedDone = confirmed && !listFromUserChoice && confirmedIds.length === 0;
-  const picksHeading = listFromUserChoice
-    ? 'Your picks'
-    : confirmed
-      ? 'Suggested for the rest of today'
-      : 'Suggested for today';
-  const confirmLabel = listFromUserChoice
-    ? 'Update today’s plan'
-    : 'Confirm today’s picks';
+  const picksHeading =
+    confirmed && listFromUserChoice
+      ? 'Your picks'
+      : listFromUserChoice
+        ? 'Your choices so far'
+        : confirmed
+          ? 'Suggested for the rest of today'
+          : 'Suggested for today';
+  // "Update" only once a plan has actually been saved; a first confirmation is
+  // always a fresh confirmation, even after editing the suggestions.
+  const confirmLabel =
+    confirmed && listFromUserChoice ? 'Update today’s plan' : 'Confirm today’s picks';
 
   return (
     <div className="space-y-4 pb-24">
