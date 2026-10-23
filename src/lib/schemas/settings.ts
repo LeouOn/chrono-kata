@@ -84,6 +84,41 @@ export const LLMRoutingSchema = z.object({
 });
 export type LLMRouting = z.infer<typeof LLMRoutingSchema>;
 
+/** A wall-clock time, HH:MM in the device's timezone. */
+export const ClockTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM, 24-hour.');
+export type ClockTime = z.infer<typeof ClockTimeSchema>;
+
+/**
+ * The hours you are awake.
+ *
+ * The window belongs to the day it **starts** on: `22:00`–`07:00` means the
+ * window runs from 22:00 on that day until 07:00 the next morning, so the
+ * minutes after midnight count towards the day the window began.
+ */
+export const WakingHoursSchema = z.object({
+  start: ClockTimeSchema,
+  end: ClockTimeSchema,
+});
+export type WakingHours = z.infer<typeof WakingHoursSchema>;
+
+/**
+ * A recurring protected window (roadmap Wave 6 "anchors").
+ *
+ * The anchor belongs to the weekday it **starts** on, and `end` may be at or
+ * before `start`, which makes it cross midnight.
+ */
+export const AnchorSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1, 'Title is required').max(200),
+  /** 0 = Sunday … 6 = Saturday, matching Date#getDay(). */
+  weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+  start: ClockTimeSchema,
+  end: ClockTimeSchema,
+  /** The domain this window belongs to; other domains are kept out of it. */
+  domainId: z.string().uuid().nullable().optional(),
+});
+export type Anchor = z.infer<typeof AnchorSchema>;
+
 /** Check-in energy at or below this counts as a low-energy rest day. */
 export const LowEnergyRestThresholdSchema = z.union([
   z.literal(1),
@@ -124,6 +159,10 @@ export const SettingsSchema = z.object({
   flags: FlagsSchema.partial().optional(),
   /** Per-feature provider routing. Absent on rows written before routing existed. */
   llmRouting: LLMRoutingSchema.optional(),
+  /** The hours you are awake. Absent on rows written before planning existed. */
+  wakingHours: WakingHoursSchema.optional(),
+  /** Recurring protected windows. Absent on rows written before planning existed. */
+  anchors: z.array(AnchorSchema).optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -154,4 +193,6 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   recoveryMode: false,
   lowEnergyRestThreshold: DEFAULT_LOW_ENERGY_REST_THRESHOLD,
   flags: {},
+  wakingHours: { start: '07:00', end: '22:00' },
+  anchors: [],
 };
