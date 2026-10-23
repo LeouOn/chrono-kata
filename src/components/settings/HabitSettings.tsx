@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Archive, ArchiveRestore } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -29,6 +29,14 @@ const KINDS: Array<{ id: HabitKind; label: string }> = [
 ];
 
 export function HabitSettings() {
+  const formId = useId();
+  const iconId = `${formId}-icon`;
+  const nameId = `${formId}-name`;
+  const kindLabelId = `${formId}-kind`;
+  const targetId = `${formId}-target`;
+  const unitId = `${formId}-unit`;
+  const scheduleLabelId = `${formId}-schedule`;
+  const linkId = `${formId}-link`;
   const { habits, createHabit, updateHabit, deleteHabit, reorderHabits, setHabitArchived } = useHabits();
   const { templates } = useKataTemplates();
   const [modalOpen, setModalOpen] = useState(false);
@@ -238,8 +246,11 @@ export function HabitSettings() {
         <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-[auto_1fr] gap-3">
             <div>
-              <label className="text-text-muted block mb-1">Icon</label>
+              <label htmlFor={iconId} className="text-text-muted block mb-1">
+                Icon
+              </label>
               <input
+                id={iconId}
                 type="text"
                 value={icon}
                 onChange={(e) => setIcon(e.target.value)}
@@ -249,8 +260,11 @@ export function HabitSettings() {
               />
             </div>
             <div>
-              <label className="text-text-muted block mb-1">Name</label>
+              <label htmlFor={nameId} className="text-text-muted block mb-1">
+                Name
+              </label>
               <input
+                id={nameId}
                 type="text"
                 required
                 maxLength={50}
@@ -263,8 +277,14 @@ export function HabitSettings() {
           </div>
 
           <div>
-            <label className="text-text-muted block mb-1">Kind</label>
-            <div className="grid grid-cols-3 gap-2 p-1 bg-surface-2 rounded-xl">
+            <span id={kindLabelId} className="text-text-muted block mb-1">
+              Kind
+            </span>
+            <div
+              role="group"
+              aria-labelledby={kindLabelId}
+              className="grid grid-cols-3 gap-2 p-1 bg-surface-2 rounded-xl"
+            >
               {KINDS.map((k) => (
                 <button
                   key={k.id}
@@ -283,10 +303,11 @@ export function HabitSettings() {
           {kind !== 'boolean' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-text-muted block mb-1">
+                <label htmlFor={targetId} className="text-text-muted block mb-1">
                   Daily target {kind === 'timed' ? '(minutes)' : `(${unit.trim() || 'units'})`}
                 </label>
                 <input
+                  id={targetId}
                   type="number"
                   min={kind === 'timed' ? 'any' : '1'}
                   step={kind === 'timed' ? 'any' : '1'}
@@ -298,8 +319,11 @@ export function HabitSettings() {
               </div>
               {kind === 'count' && (
                 <div>
-                  <label className="text-text-muted block mb-1">Unit</label>
+                  <label htmlFor={unitId} className="text-text-muted block mb-1">
+                    Unit
+                  </label>
                   <input
+                    id={unitId}
                     type="text"
                     maxLength={20}
                     placeholder="e.g. pages"
@@ -313,8 +337,14 @@ export function HabitSettings() {
           )}
 
           <div>
-            <label className="text-text-muted block mb-1">Schedule</label>
-            <div className="grid grid-cols-2 gap-2 p-1 bg-surface-2 rounded-xl mb-2">
+            <span id={scheduleLabelId} className="text-text-muted block mb-1">
+              Schedule
+            </span>
+            <div
+              role="group"
+              aria-labelledby={scheduleLabelId}
+              className="grid grid-cols-2 gap-2 p-1 bg-surface-2 rounded-xl mb-2"
+            >
               {(['daily', 'weekdays'] as const).map((s) => (
                 <button
                   key={s}
@@ -352,8 +382,11 @@ export function HabitSettings() {
           </div>
 
           <div>
-            <label className="text-text-muted block mb-1">Link to sessions (optional)</label>
+            <label htmlFor={linkId} className="text-text-muted block mb-1">
+              Link to sessions (optional)
+            </label>
             <select
+              id={linkId}
               value={linkMode === 'template' ? linkedTemplateId : linkMode}
               onChange={(e) => {
                 const value = e.target.value;
@@ -378,6 +411,7 @@ export function HabitSettings() {
             {linkMode === 'custom' && (
               <input
                 type="text"
+                aria-label="Custom activity label"
                 maxLength={100}
                 placeholder="Activity label, e.g. Daily stretches"
                 value={linkedLabel}
