@@ -159,9 +159,14 @@ not assume an id is stable across a move.
 - Persisting `calendarRef` into Dexie (the mapping is pure; a repo write is part
   of the UI work).
 - Android native calendar (flagged, later).
-- Ambiguous wall times in the repeated DST hour resolve to the second
-  occurrence (ical.js/VTIMEZONE semantics); a block whose DTEND is written
-  inside the repeated hour is inherently ambiguous.
+- Ambiguous wall times in the repeated DST hour resolve to the **earlier**
+  (summer-time) occurrence — both through ical.js's VTIMEZONE evaluation and
+  through the tz database; a block whose DTEND is written inside the repeated
+  hour is inherently ambiguous. A wall time inside a spring-forward gap is
+  shifted backward to the pre-transition offset rather than dropped.
+- `Etc/GMT+N` means **UTC−N**, per the POSIX convention (`Etc/GMT+8` is UTC−8).
+  The importer follows what the name means; the trap is only for a human who
+  writes the name expecting the opposite sign.
 - A Windows-style VTIMEZONE can disagree with the real zone rule (Outlook's
   "W. Europe Standard Time" says +02:00 for EU summer time where the real rule
   is +03:00), so those files yield instants one hour off. That is in the file,
