@@ -793,30 +793,52 @@ Lanes: **A** data/domain · **B** UI · **C** AI/integration · **D** QA.
 1. **Practice vs work in one model.** Today practice (sessions, kata templates, habits, streaks,
    check-ins) is the app's whole model. Should practice become just another `Domain` with tasks, or
    stay first-class outside the task graph? The roadmap never says — this decides W1's schema.
+   → **Decision Q1**
 2. **Health-data boundary vs coach context.** W14 wants the coach to see today's plan, stalled
    projects and breadcrumbs. Is that "health data" (aggregates-only rule) or "task data" (fine to
-   send)? Which rule wins when they collide?
+   send)? Which rule wins when they collide? → **Decision Q2**
 3. **Calendar: keep Google, add ICS, or replace?** The only calendar that exists is Google Calendar
    (account + OAuth), which sits awkwardly with "local-first, no account". Does the Google
-   integration stay as an optional target while ICS becomes the primary path?
+   integration stay as an optional target while ICS becomes the primary path? → **Decision Q3**
 4. **Feature flags shape.** `settings.flags.*` on the singleton settings row, or a dedicated
-   `flags` table? (Both need a Dexie version if the table route is taken.)
+   `flags` table? (Both need a Dexie version if the table route is taken.) → **Decision Q4**
 5. **Estimates before multi-provider.** `Estimate.source` is `'user' | providerId`. Is a single active
-   provider enough until W4, or must the multi-provider slice land first?
+   provider enough until W4, or must the multi-provider slice land first? → **Decision Q5**
 6. **One session table or two?** The roadmap wants a session to be a timed work block on a task;
    the app's session is a practice session with rating/reps/cap. One table with optional `taskId`, or
-   a separate work-session table?
+   a separate work-session table? → **Decision Q6**
 7. **Waking hours and buffer.** Capacity = waking hours − fixed − anchors − buffer (default 25%).
    Is the buffer 25% of waking hours or of the free time? Where do waking hours come from (a new
-   settings field)?
+   settings field)? → **Decision Q7**
 8. **Breadcrumb storage.** Latest breadcrumb on `Session` (no index, no Dexie version) vs on
-   `Project` (indexed, needs v7+)? This changes W1's schema.
+   `Project` (indexed, needs v7+)? This changes W1's schema. → **Decision Q8**
 9. **Native maintenance appetite.** W17's widget and quick-settings tile need custom code in
    `android/` (Capacitor has no widget support). Is the repo willing to own a custom native plugin?
+   → **Decision Q9**
 10. **Who writes `docs/waves/wave-NN.md`?** Recommended: the builder of each wave, in the same PR, with
-    the CHANGELOG entry and the `docs/ROADMAP_STATUS.md` update.
+    the CHANGELOG entry and the `docs/ROADMAP_STATUS.md` update. → **Decision Q10**
 11. **Android signing.** W17/W20 want a signed APK/AAB. Is the keystore to live outside the repo
-    (CI secrets) and who owns the release runbook?
+    (CI secrets) and who owns the release runbook? → **Decision Q11**
+
+---
+
+## Decisions (lead, 2026-10-23)
+
+LEAD DECISIONS ON ROADMAP_STATUS "QUESTIONS FOR THE HUMAN" (2026-10-23)
+Made by dev.lead under the human's "implement and process the roadmap, go for it". Each follows the roadmap's own text or the existing architecture; the human can veto any of them before the wave that depends on it ships.
+
+Q1 Practice vs work: practice (sessions, kata templates, habits, streaks, check-ins, pacing) stays first-class and unchanged. It is NOT re-modelled as tasks. Domain is an optional link (Habit/KataTemplate get optional domainId; seed a "Practice" domain). The roadmap's W1 text already says this.
+Q2 Health-data boundary vs coach context: DEFERRED to W14. Until then health data (check-ins, pacing) stays aggregates-only, and any new AI surface that would send task/project/journal data must show exactly what leaves the device in a "What gets sent" panel (the T5c pattern). W14's builder asks the human before extending the coach payload.
+Q3 Calendar: ICS is ADDITIVE. Google Calendar stays as an optional target; nothing is removed without the human's OK. Re-confirm with the human when W8 starts.
+Q4 Feature flags: settings.flags.* on the singleton settings row (optional non-indexed field, so no Dexie version). Built as a small prerequisite task before W5/W8/W16/W18.
+Q5 Estimates before multi-provider: one active provider is enough until W4. Estimate.source = 'user' | providerId is stored from W3 on.
+Q6 Sessions: ONE session table. Session gains optional taskId/projectId/blockId (the roadmap's W1 text). A task is never a session; keep the vocabularies separate in tables, columns and prompts.
+Q7 Capacity: buffer = 25% of free time (waking hours minus fixed minus anchors). Waking hours become a new settings field. W6's builder confirms with a unit test.
+Q8 Breadcrumb: stored per Session as an optional non-indexed field (history), with the latest denormalized onto Project.breadcrumb / Task.nextAction exactly as the roadmap's W1 entities specify.
+Q9 Native widget / quick-settings tile appetite: DEFERRED to W17. Ask the human then.
+Q10 Wave notes: the builder of each wave writes docs/waves/wave-NN.md + CHANGELOG entry + the docs/ROADMAP_STATUS.md update, in the same PR as the wave.
+Q11 Android signing: DEFERRED to W17/W20. The keystore never goes in the repo. Ask the human then.
+Also: no GitHub Actions workflow yet. CI is the local one-command `npm run ci` (d1, Wave 0). If the human wants hosted CI, they will say so.
 
 ---
 
