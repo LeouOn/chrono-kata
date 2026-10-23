@@ -205,13 +205,16 @@ export function useSessions() {
     onError: (_e, _input, ctx) => {
       if (ctx) qc.setQueryData(KEY, ctx.previous);
     },
-    onSuccess: async (saved) => {
+    onSuccess: async (saved, input) => {
       await recomputeStreakSideEffect();
       invalidateBoth();
-      // Linked sessions changed a task's actualMin/nextAction or a project's
-      // breadcrumb, so the task/project lists must refresh too.
-      void qc.invalidateQueries({ queryKey: ['tasks'] });
-      void qc.invalidateQueries({ queryKey: ['projects'] });
+      // Only a linked session changed a task's actualMin/nextAction or a
+      // project's breadcrumb; a practice session must not cause task/project
+      // refetches (the same rule the repo-level recompute follows).
+      if (input.taskId || input.projectId) {
+        void qc.invalidateQueries({ queryKey: ['tasks'] });
+        void qc.invalidateQueries({ queryKey: ['projects'] });
+      }
       // Fire-and-forget coach comment (don't await; UI updates via liveQuery)
       void generateCoachCommentSideEffect(saved);
       // Fire-and-forget calendar sync (enqueues on failure)
