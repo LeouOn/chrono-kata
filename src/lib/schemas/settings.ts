@@ -34,6 +34,8 @@ export const FLAG_NAMES = [
   'nudgeKinds',
   /** Optional device sync between devices (roadmap W18). */
   'sync',
+  /** Task capture, inbox and triage (roadmap W2, preview). */
+  'taskInbox',
 ] as const;
 export type FlagName = (typeof FLAG_NAMES)[number];
 
@@ -42,6 +44,7 @@ export const FlagsSchema = z.object({
   nativeCalendar: z.boolean(),
   nudgeKinds: z.boolean(),
   sync: z.boolean(),
+  taskInbox: z.boolean(),
 });
 export type Flags = z.infer<typeof FlagsSchema>;
 /** The stored shape: any subset of the flags, each one a boolean. */

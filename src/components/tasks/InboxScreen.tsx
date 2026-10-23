@@ -1,0 +1,68 @@
+'use client';
+
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { useInbox } from '@/hooks/useTasks';
+import { ProcessMode } from './ProcessMode';
+import { toLocalDateString } from '@/lib/utils/date';
+
+/**
+ * The inbox: everything with status `inbox`, newest first, with a neutral
+ * count. No red, no overdue language - an unsorted item is simply resting.
+ */
+export function InboxScreen() {
+  const { inbox, count, isLoading } = useInbox();
+  const [processing, setProcessing] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-2xl text-text mb-1">Inbox</h1>
+          <p className="text-text-muted text-sm">
+            {count === 0
+              ? 'Nothing to sort.'
+              : count === 1
+                ? '1 item to sort, whenever you want.'
+                : `${count} items to sort, whenever you want.`}
+          </p>
+        </div>
+        <Button onClick={() => setProcessing(true)} disabled={count === 0}>
+          Process
+        </Button>
+      </div>
+
+      {isLoading ? <p className="text-sm text-text-muted">Loading…</p> : null}
+
+      {!isLoading && count === 0 ? (
+        <Card>
+          <p className="font-serif text-lg text-text">Inbox is clear.</p>
+          <p className="text-sm text-text-muted mt-1">
+            Captured items will wait here until you have a minute.
+          </p>
+        </Card>
+      ) : null}
+
+      <ul className="space-y-2">
+        {inbox.map((task) => (
+          <li key={task.id}>
+            <Card className="space-y-1">
+              <p className="text-text break-words">{task.title}</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-muted">
+                <span>added {toLocalDateString(task.createdAt)}</span>
+                {task.estimateMin ? <span>~{task.estimateMin}m</span> : null}
+                {task.energy ? <span>{task.energy} energy</span> : null}
+                {(task.context ?? []).map((context) => (
+                  <span key={context}>@{context}</span>
+                ))}
+              </div>
+            </Card>
+          </li>
+        ))}
+      </ul>
+
+      <ProcessMode open={processing} onClose={() => setProcessing(false)} />
+    </div>
+  );
+}

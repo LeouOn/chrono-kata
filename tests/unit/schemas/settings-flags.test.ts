@@ -53,13 +53,14 @@ describe('feature flags on the settings row', () => {
   });
 
   it('exposes the closed set of flag names the roadmap needs', () => {
-    expect(FLAG_NAMES).toEqual(['privateMode', 'nativeCalendar', 'nudgeKinds', 'sync']);
+    expect(FLAG_NAMES).toEqual(['privateMode', 'nativeCalendar', 'nudgeKinds', 'sync', 'taskInbox']);
     expect(
       FlagsSchema.safeParse({
         privateMode: true,
         nativeCalendar: false,
         nudgeKinds: false,
         sync: false,
+        taskInbox: false,
       }).success,
     ).toBe(true);
   });

@@ -17,6 +17,7 @@ import { TodayHabits } from '@/components/habits/TodayHabits';
 import { TODAY_HABITS_ENABLED } from '@/lib/habits/today';
 import { SessionForm } from '@/components/session/SessionForm';
 import { MorningCheckIn } from '@/components/checkin/MorningCheckIn';
+import { InboxLink } from '@/components/tasks/InboxLink';
 import { SessionCard } from '@/components/session/SessionCard';
 import { toLocalDateString } from '@/lib/utils/date';
 import type { SessionInput } from '@/lib/schemas/session';
@@ -72,13 +73,16 @@ export default function HomePage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4">
-      <div>
-        <h1 className="font-serif text-2xl text-text mb-1">{greeting}.</h1>
-        <p className="text-text-muted text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-2xl text-text mb-1">{greeting}.</h1>
+          <p className="text-text-muted text-sm">
           {sessions.length === 0
             ? 'No sessions yet. The first step is the whole path.'
-            : `${todaySessions.length} session${todaySessions.length === 1 ? '' : 's'} today.`}
-        </p>
+              : `${todaySessions.length} session${todaySessions.length === 1 ? '' : 's'} today.`}
+          </p>
+        </div>
+        <InboxLink />
       </div>
 
       <MorningCheckIn />
