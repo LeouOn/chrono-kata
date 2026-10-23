@@ -303,7 +303,10 @@ a first version can rank on due date + energy only, and say so.
 
 ## W7 — Time blocking and calendar view
 
-**Status:** missing · **Size:** L · **Lanes:** B · **Depends on:** W1 (Block), W6 (picks)
+**Status:** partial — part 1 (pure layout core: snap/move/resize, deterministic proposal,
+replan-from-now, conflict detection, invariants over 7 zones) ships; the day timeline, fixed-commitment
+CRUD, drag/resize, conflict UI and replan UI remain · **Size:** L · **Lanes:** B · **Depends on:**
+W1 (Block), W6 (picks)
 
 **Evidence**
 - Missing: no block entity, no timeline component, no drag/resize library —
