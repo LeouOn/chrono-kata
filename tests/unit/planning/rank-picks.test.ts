@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { rankPicks, cadenceDebt, DEFAULT_TASK_MINUTES, MAX_PICKS, MAX_PICKS_PER_PROJECT } from '@/lib/planning/rank-picks';
 import type { AnchorInterval } from '@/lib/planning/anchors';
 import { TaskSchema, type Task } from '@/lib/schemas/task';
@@ -7,6 +7,17 @@ import { SessionSchema, type Session } from '@/lib/schemas/session';
 import { localWallClockToEpoch } from '@/lib/planning/time';
 
 const NOW = new Date(2026, 5, 15, 9, 0);
+
+const previousTz = process.env.TZ;
+afterEach(() => {
+  if (previousTz === undefined) delete process.env.TZ;
+  else process.env.TZ = previousTz;
+});
+
+function inZone(tz: string, run: () => void) {
+  process.env.TZ = tz;
+  run();
+}
 const GUILT = /overdue|late\b|behind|missed|failed|should have/i;
 
 let seq = 0;
@@ -258,6 +269,34 @@ describe('rankPicks uses local calendar days, not 24-hour elapsed time', () => {
     const byTitle = new Map(picks.map((pick) => [pick.task.title, pick.score]));
     expect(byTitle.get('in three')).toBe(40); // 30 due + 10 energy
     expect(byTitle.get('in fifteen')).toBe(10); // no due points + 10 energy
+  });
+
+  it('counts the calendar boundary, not a rolling 7*24h window', () => {
+    // 09:00 on the 15th. A session at 23:00 on the 8th is seven local days back
+    // but LATER in the day than now, so a rolling now-7d window would wrongly
+    // include it. The calendar window must not.
+    const now = new Date(2026, 5, 15, 9, 0);
+    const projectWithDebt = project({ title: 'Cadence', cadencePerWeek: 3 });
+    const seventhDayLater = session({ projectId: projectWithDebt.id, startedAt: new Date(2026, 5, 8, 23, 0) });
+    const sixthDayEarly = session({ projectId: projectWithDebt.id, startedAt: new Date(2026, 5, 9, 0, 10) });
+
+    expect(cadenceDebt(projectWithDebt, [seventhDayLater], now)).toBe(3);
+    expect(cadenceDebt(projectWithDebt, [sixthDayEarly], now)).toBe(2);
+    expect(cadenceDebt(projectWithDebt, [seventhDayLater, sixthDayEarly], now)).toBe(2);
+  });
+
+  it('uses the same calendar boundary across a DST week', () => {
+    inZone('America/Los_Angeles', () => {
+      // Fall-back week (2026-11-01). A 7*24h rolling window lands on the wrong
+      // side of the repeated hour; the local-day window does not.
+      const now = new Date(2026, 10, 2, 9, 0);
+      const projectWithDebt = project({ title: 'Cadence', cadencePerWeek: 3 });
+      const seventhDayLater = session({ projectId: projectWithDebt.id, startedAt: new Date(2026, 9, 26, 23, 0) });
+      const sixthDayEarly = session({ projectId: projectWithDebt.id, startedAt: new Date(2026, 9, 27, 0, 10) });
+
+      expect(cadenceDebt(projectWithDebt, [seventhDayLater], now)).toBe(3);
+      expect(cadenceDebt(projectWithDebt, [sixthDayEarly], now)).toBe(2);
+    });
   });
 
   it('counts a session 6 local days ago and not one 7 days ago', () => {
