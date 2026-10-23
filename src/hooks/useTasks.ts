@@ -141,7 +141,7 @@ export function useInbox(options: { enabled?: boolean } = {}) {
   };
 }
 
-/** Active projects, newest touch first, for the 'Working on' picker. */
+/** All projects, newest touch first; the 'Working on' picker filters to active ones. */
 export function useProjects(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: PROJECTS_KEY,

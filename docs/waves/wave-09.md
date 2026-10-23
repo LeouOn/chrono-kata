@@ -55,6 +55,13 @@ are absent).
 - Single-step undo remains a deliberate choice in process mode.
 - A manual `actualMin` override (there is no flag for one yet) would be
   overwritten by any minute-affecting edit; documented in the recompute helper.
+- **Editing a linked session in the detail page edits only the session row.**
+  Its outcome/breadcrumb changes do not re-derive the task's `nextAction` or
+  status — deliberate, because editing history must not rewrite current task
+  state — even though the edit form shows those fields.
+- **Start from an inbox row while a timer is already running** opens the running
+  timer's form; the new link is ignored silently. Reasonable (the running draft
+  wins) but a calm "A timer is already running" line is a follow-up.
 
 ## Shipped
 

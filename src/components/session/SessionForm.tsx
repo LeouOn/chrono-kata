@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useId, useMemo } from 'react';
+import React, { useState, useEffect, useId, useMemo, useRef } from 'react';
 import { Sparkles } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -92,6 +92,11 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel, 
   const [capPromptShown, setCapPromptShown] = useState(false);
   const [keepGoing, setKeepGoing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Double-submit guard: a second click while the first save is in flight must
+  // not write a second session (pre-existing on main; matters more now that a
+  // linked save also feeds Task.actualMin).
+  const savingRef = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
   // Explicit label associations: sibling labels name nothing on their own.
   const formId = useId();
   const repsId = `${formId}-reps`;
@@ -304,7 +309,11 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel, 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setIsSaving(true);
     setError(null);
+    try {
 
     if (rating == null) {
       setError('Pick a rating.');
@@ -356,12 +365,19 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel, 
         promptShown: capPromptShown,
       }) || undefined,
     };
-    writeSessionTimer(null);
-    void cancelCapNotification();
     try {
       await onSave(input);
     } catch (saveError) {
+      // Keep the running timer's draft so a reload can still restore it.
       setError(messageOf(saveError));
+      return;
+    }
+    // Only after the save succeeded: the draft is no longer needed.
+    writeSessionTimer(null);
+    void cancelCapNotification();
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
     }
   }
 
@@ -680,8 +696,14 @@ export function SessionForm({ open, initial, initialTemplate, onSave, onCancel, 
           <Button type="button" variant="ghost" onClick={requestClose} className="flex-1">
             Cancel
           </Button>
-          <Button type="submit" variant="primary" className="flex-1">
-            Save session
+          <Button
+            type="submit"
+            variant="primary"
+            className="flex-1"
+            disabled={isSaving}
+            aria-busy={isSaving || undefined}
+          >
+            {isSaving ? 'Saving…' : 'Save session'}
           </Button>
         </div>
       </form>

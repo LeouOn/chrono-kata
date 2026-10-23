@@ -170,6 +170,15 @@ export function useSessions() {
     qc.invalidateQueries({ queryKey: ['streak'] });
   };
 
+  // Task.actualMin / Project.breadcrumb are derived from sessions, so any edit
+  // or delete can move them. Unconditional is safe: invalidateQueries only
+  // refetches ACTIVE queries, so a practice-only or flag-off user does no
+  // task-store work.
+  const invalidateDerivedSurfaces = () => {
+    void qc.invalidateQueries({ queryKey: ['tasks'] });
+    void qc.invalidateQueries({ queryKey: ['projects'] });
+  };
+
   const createMutation = useMutation({
     mutationFn: async (input: SessionInput) => {
       // A session linked to a task/project must write its outcome atomically;
@@ -230,6 +239,7 @@ export function useSessions() {
     onSettled: async (_data, _error, variables) => {
       await recomputeStreakSideEffect();
       invalidateBoth();
+      invalidateDerivedSurfaces();
       // Fire-and-forget: re-fetch the updated session and push to calendar
       void (async () => {
         const updated = await sessionRepo.getById(variables.id);
@@ -251,6 +261,7 @@ export function useSessions() {
     onSettled: async () => {
       await recomputeStreakSideEffect();
       invalidateBoth();
+      invalidateDerivedSurfaces();
     },
   });
 

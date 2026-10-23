@@ -115,4 +115,39 @@ describe('createSession side effects (linked vs practice)', () => {
     expect(keys).not.toContain(JSON.stringify(['tasks']));
     expect(keys).not.toContain(JSON.stringify(['projects']));
   });
+
+  it('invalidates tasks/projects after updating or deleting a session', async () => {
+    const task = await taskRepo.create({ title: 'report', status: 'next', source: 'manual' });
+    const { invalidate, wrapper } = setup();
+    const { result } = renderHook(() => useSessions(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let sessionId = '';
+    await act(async () => {
+      const saved = await result.current.createSession(
+        session({ taskId: task.id, outcome: 'progress', breadcrumb: 'pick up' }),
+      );
+      sessionId = saved.id;
+    });
+    invalidate.mockClear();
+
+    await act(async () => {
+      await result.current.updateSession({ id: sessionId, patch: { durationMinutes: 30 } });
+    });
+    await waitFor(() => {
+      const keys = invalidatedKeys(invalidate);
+      expect(keys).toContain(JSON.stringify(['tasks']));
+      expect(keys).toContain(JSON.stringify(['projects']));
+    });
+
+    invalidate.mockClear();
+    await act(async () => {
+      await result.current.deleteSession(sessionId);
+    });
+    await waitFor(() => {
+      const keys = invalidatedKeys(invalidate);
+      expect(keys).toContain(JSON.stringify(['tasks']));
+      expect(keys).toContain(JSON.stringify(['projects']));
+    });
+  });
 });
