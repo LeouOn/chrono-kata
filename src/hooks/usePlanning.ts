@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSettings } from '@/hooks/useSettings';
 import { useFlag } from '@/hooks/useFlags';
 import { useTasks, useProjects } from '@/hooks/useTasks';
@@ -17,7 +17,7 @@ import { wakingWindow } from '@/lib/planning/time';
 import { addDays } from '@/lib/pacing/days';
 import { toLocalDateString } from '@/lib/utils/date';
 import type { Anchor, WakingHours } from '@/lib/schemas/settings';
-import type { DayPlan } from '@/lib/schemas/day-plan';
+import type { DayPlan, DayPlanInput } from '@/lib/schemas/day-plan';
 
 export interface DayPlanView {
   capacity: CapacityResult;
@@ -27,6 +27,8 @@ export interface DayPlanView {
   anchors: Anchor[];
   dayKey: string;
   enabled: boolean;
+  /** False while the task or plan query is still resolving (used to defer drafts). */
+  isLoading: boolean;
 }
 
 const DAYS_IN_CADENCE_WINDOW = 7;
@@ -41,7 +43,7 @@ const DAYS_IN_CADENCE_WINDOW = 7;
 export function usePlanToday(dayKey?: string): DayPlanView {
   const enabled = useFlag('taskInbox');
   const today = dayKey ?? toLocalDateString(new Date());
-  const { settings } = useSettings();
+  const { settings, isLoading: settingsLoading } = useSettings();
   // Memoise on the settings object: resolve* build new objects, but
   // react-query keeps `settings` stable while the data is unchanged, so these
   // identities hold until an input really changes (no per-render churn).
@@ -130,5 +132,49 @@ export function usePlanToday(dayKey?: string): DayPlanView {
     anchors,
     dayKey: today,
     enabled,
+    // While the flag itself is still resolving, planning data is not ready
+    // either: initialising a draft then would freeze an empty suggestion list.
+    isLoading: settingsLoading || (enabled && (tasksQuery.isLoading || dayPlanQuery.isLoading)),
   };
+}
+
+/**
+ * The local day key, refreshed when the day rolls over while the app is open
+ * (visibility/focus, plus a minute tick like the layout's streak refresh).
+ */
+export function useTodayKey(): string {
+  const [dayKey, setDayKey] = useState(() => toLocalDateString(new Date()));
+
+  useEffect(() => {
+    const check = () => {
+      const next = toLocalDateString(new Date());
+      setDayKey((current) => (current === next ? current : next));
+    };
+    const interval = window.setInterval(check, 60_000);
+    const onWake = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener('focus', onWake);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onWake);
+      window.removeEventListener('focus', onWake);
+    };
+  }, []);
+
+  return dayKey;
+}
+
+/** Persist the confirmed plan for a day and refresh the plan-dependent views. */
+export function useConfirmDayPlan(dayKey: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DayPlanInput) => dayPlanRepo.upsert(dayKey, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['dayPlan', dayKey] });
+      // A confirmed plan changes the Today card, not task data; tasks/projects
+      // stay untouched.
+    },
+  });
 }
