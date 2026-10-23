@@ -12,6 +12,13 @@ import type { KataTemplate } from '@/lib/schemas/kata-template';
 import type { Habit, HabitLog } from '@/lib/schemas/habit';
 import type { CheckIn } from '@/lib/schemas/check-in';
 import { normalizeActivityName } from '@/lib/habits/schedule';
+import type { Domain } from '@/lib/schemas/domain';
+import type { Project } from '@/lib/schemas/project';
+import type { Task } from '@/lib/schemas/task';
+import type { Block } from '@/lib/schemas/block';
+import type { DayPlan } from '@/lib/schemas/day-plan';
+import type { Estimate } from '@/lib/schemas/estimate';
+import { seedDefaultDomains } from './seed-domains';
 
 export class ChronoKataDB extends Dexie {
   sessions!: Table<Session, string>;
@@ -27,6 +34,12 @@ export class ChronoKataDB extends Dexie {
   habits!: Table<Habit, string>;
   habitLogs!: Table<HabitLog, string>;
   checkIns!: Table<CheckIn, string>;
+  domains!: Table<Domain, string>;
+  projects!: Table<Project, string>;
+  tasks!: Table<Task, string>;
+  blocks!: Table<Block, string>;
+  dayPlans!: Table<DayPlan, string>;
+  estimates!: Table<Estimate, string>;
 
   constructor() {
     super('chrono-kata');
@@ -134,6 +147,29 @@ export class ChronoKataDB extends Dexie {
           if (id) habit.linkedKataTemplateId = id;
         });
       });
+    // Roadmap Wave 1: unified data model for tasks, projects and domains.
+    // New tables (Domain/Project/Task/Block/DayPlan/Estimate) plus indexes to
+    // query sessions by task/project (time invested). Habit/KataTemplate gain
+    // an optional non-indexed domainId in a later change of this wave.
+    this.version(7)
+      .stores({
+        sessions: 'id, startedAt, calendarEventId, conversationId, kataTemplateId, taskId, projectId',
+        domains: 'id, order',
+        projects: 'id, domainId, status, lastTouchedAt',
+        tasks: 'id, status, domainId, projectId, parentId, touchedAt',
+        blocks: 'id, start, kind, taskId, projectId',
+        dayPlans: 'date',
+        estimates: 'id, taskId, createdAt',
+      })
+      .upgrade(async (tx) => {
+        // `on('populate')` only fires for brand-new databases, so upgrades
+        // seed the default domains here too.
+        await seedDefaultDomains(tx.table('domains'));
+      });
+    // Fresh installs: seed the four default domains once, at creation.
+    this.on('populate', (tx) => {
+      void seedDefaultDomains(tx.table('domains'));
+    });
   }
 }
 
