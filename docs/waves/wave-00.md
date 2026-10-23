@@ -21,13 +21,19 @@ Wave 0 is an audit wave: no product behaviour changes.
 - `docs/TOOLING.md` — what Vitest, Playwright, ESLint and TypeScript actually
   enforce, what they miss, measured timings, and the build artifacts that touch
   the working tree.
-- `npm run ci` — typecheck + lint + unit tests + production build in one
-  command (~19 s warm; verified to build with no network). E2E stays a separate
-  `npm run test:e2e` because it needs a prior build and browser binaries.
+- `npm run ci` — typecheck + lint + unit tests + production build + e2e in one
+  command, covering the roadmap's definition of done (~45 s warm; the build is
+  verified to work with no network). `npm run precommit` stays the fast
+  typecheck + lint + unit-test loop.
+- Playwright's port is overridable with `PLAYWRIGHT_PORT` (default unchanged at
+  3008) for both the web server and `baseURL`, so seats sharing one host no
+  longer collide; `npm run ci` inherits it. The one spec that asserted the old
+  port now asserts the redirected path instead.
 - `npm run setup:worktree` (`scripts/setup-worktree.sh`) — make a fresh
   `git worktree add` or clean checkout usable: install dependencies when
   missing, then typecheck. The gitignored Athena persona is materialized by the
-  `postinstall` hook, not by this script.
+  `postinstall` hook, not by this script. Proven on a brand-new worktree with
+  no `node_modules` (7 s, exit 0).
 - `tests/fixtures/` — synthetic data for future migration tests: a complete
   backup envelope v2 JSON and a raw Dexie v6 dump (typed module with real
   `Date`s), plus tests that keep both valid:
