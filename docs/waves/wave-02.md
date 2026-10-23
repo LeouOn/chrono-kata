@@ -80,13 +80,17 @@ word was a token, it falls back to the raw line.
 - A weekday word is always treated as a date, so a title that *starts* with
   "Monday standup" loses "Monday" into `deferUntil`. Documented limitation.
 
-## Pre-existing blockers observed while gating (not fixed here)
+## Pre-existing blockers observed while gating
+
+Both were found on `main` while measuring this PR's gates, and both are fixed
+outside it:
 
 1. **Unhandled rejection flake** in the full suite: `AbortError` from
-   fake-indexeddb when a test ends with a React Query refetch still in flight and
-   `resetDbForTesting()` closes the database. Every test passes; the run exits 1.
-   Reproduced on untouched `main`: 2 of 3 baseline full-suite runs failed the same
-   way (attributed to `SessionForm.test.tsx` / `HabitCheckIn.test.tsx`).
-2. **`tests/unit/insights/heatmap.test.ts` fails 2 cases under
-   `TZ=Pacific/Kiritimati`** (UTC+14), reproduced on untouched `main` — the same
-   class of timezone-sensitive fixture as PR #11, not covered for +14.
+   fake-indexeddb when a test ended with a React Query refetch still in flight
+   and `resetDbForTesting()` closed the database. Every test passed; the run
+   exited 1 (2 of 3 baseline runs). Fixed by #18; 3 of 3 clean full-suite runs
+   after merging it.
+2. **`tests/unit/insights/heatmap.test.ts` failed 2 cases under
+   `TZ=Pacific/Kiritimati`** (UTC+14) because its fixtures used `10:00Z`
+   instants, which are the next local day in UTC+14. Fixed in PR #23 (same
+   local-calendar-instant pattern as #11).
