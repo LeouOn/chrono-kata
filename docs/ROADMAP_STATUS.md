@@ -132,7 +132,9 @@ actually exists.
 
 ## W2 — Capture (the inbox)
 
-**Status:** missing · **Size:** L · **Lanes:** B (UI) + C · **Depends on:** W1
+**Status:** partial — part 1 (rule-based parser + bulk splitter, pure logic) shipped in
+`src/lib/capture/`; quick-capture UI, inbox screen, process mode, voice and the Android share
+target are still missing · **Size:** L · **Lanes:** B (UI) + C · **Depends on:** W1
 
 **Evidence**
 - Exists (adjacent): a global FAB — `src/components/ui/FAB.tsx`, mounted at
