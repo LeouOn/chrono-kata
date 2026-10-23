@@ -61,7 +61,7 @@ describe('TodayPlanCard', () => {
     const { openForLink } = renderCard();
 
     expect(await screen.findByText('write the report')).toBeInTheDocument();
-    expect(screen.getByText(/200 minutes planned for today/)).toBeInTheDocument();
+    expect(screen.getByText(/Room for 200 minutes today; these picks come to about 20\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Start a session for write the report' }));
     expect(openForLink).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: task.id, label: 'open the outline', estimateMin: 20 }),
@@ -77,7 +77,7 @@ describe('TodayPlanCard', () => {
     const { container } = renderCard();
     // Wait until the plan AND tasks queries have resolved, otherwise the
     // loading-state empty card would satisfy the assertion.
-    expect(await screen.findByText(/200 minutes planned for today/)).toBeInTheDocument();
+    expect(await screen.findByText(/Room for 200 minutes today\./)).toBeInTheDocument();
     expect(await screen.findByText(/Nothing picked yet/)).toBeInTheDocument();
     expect(container.textContent ?? '').not.toMatch(/overdue|late\b|behind|missed|failed|should have/i);
     expect(screen.queryByRole('button', { name: /Start a session for done task/ })).toBeNull();

@@ -16,8 +16,10 @@ interface Props {
   dayKey?: string;
 }
 
-function capacitySentence(capacity: { wakingMin: number; fixedMin: number; anchorMin: number; bufferMin: number; capacityMin: number }): string {
-  const occupied = capacity.fixedMin + capacity.anchorMin;
+function capacitySentence(capacity: { wakingMin: number; fixedMin: number; anchorMin: number; bufferMin: number; capacityMin: number; freeMin: number }): string {
+  // The union of fixed + protected time is what capacity actually subtracts;
+  // summing fixed and anchors double-counts their overlap.
+  const occupied = capacity.wakingMin - capacity.freeMin;
   if (capacity.capacityMin === 0) {
     return 'There is no room left for picks today. That is a normal kind of day.';
   }
@@ -45,7 +47,12 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
   // The confirmed plan wins when there is one; otherwise the suggestions. This
   // is DERIVED until the user edits, so arriving data cannot freeze a
   // half-loaded list into the draft (a real race found while testing).
-  const confirmedIds = (dayPlan?.picks ?? []).filter((id) => taskById.has(id));
+  const confirmedIds = (dayPlan?.picks ?? []).filter((id) => {
+    const task = taskById.get(id);
+    // A pick finished elsewhere is no longer part of the rest of today: the
+    // Today card drops it, and this screen must agree.
+    return task !== undefined && task.status !== 'done' && task.status !== 'dropped';
+  });
   const suggestedIds = picks.map((pick) => pick.task.id);
   const effectiveIds =
     draftIds ?? (isLoading ? [] : confirmedIds.length > 0 ? confirmedIds : suggestedIds);
@@ -59,6 +66,8 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
     setDraftIds(null);
   }, [dayKey]);
 
+  // One filter, at the source: confirmedIds already excludes finished picks and
+  // suggestion ids only ever come from `next` tasks, so mapping is enough.
   const draftTasks = effectiveIds
     .map((id) => taskById.get(id))
     .filter((task): task is Task => task !== undefined);
@@ -133,6 +142,13 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
         ) : null}
       </Card>
 
+      {isLoading ? (
+        <Card>
+          <p className="text-sm text-text-muted">Loading today&apos;s plan…</p>
+        </Card>
+      ) : null}
+
+      {!isLoading ? (
       <section className="space-y-2" aria-labelledby="picks-heading">
         <h2 id="picks-heading" className="text-xs uppercase tracking-wide text-text-muted">
           {confirmed ? 'Your picks' : 'Suggested for today'}
@@ -240,6 +256,7 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
           {saving ? 'Saving…' : confirmed ? 'Update today’s plan' : 'Confirm today’s picks'}
         </Button>
       </section>
+      ) : null}
     </div>
   );
 }

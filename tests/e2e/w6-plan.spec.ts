@@ -80,7 +80,7 @@ test('plan, confirm, reload, see it on Home and start a linked session', async (
   await page.getByLabel(/Pick up here next time/).fill('carry on with the intro');
   await page.getByRole('button', { name: /Save session/i }).click();
   await expect(form).toBeHidden();
-  await expect(page.getByText(/minutes planned for today/)).toBeVisible();
+  await expect(page.getByText(/Room for \d+ minutes today/)).toBeVisible();
 });
 
 test('an over-capacity plan says so calmly and still saves', async ({ page }) => {

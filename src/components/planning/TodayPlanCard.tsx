@@ -72,7 +72,14 @@ export function TodayPlanCard() {
       )}
 
       <p className="text-[11px] text-text-muted">
-        {dayPlan ? `${dayPlan.capacityMin} minutes planned for today.` : 'Confirm your picks to see them here all day.'}
+        {dayPlan
+          ? picks.length > 0
+            ? `Room for ${dayPlan.capacityMin} minutes today; these picks come to about ${picks.reduce(
+                (sum, task) => sum + (task.estimateMin ?? 25),
+                0,
+              )}.`
+            : `Room for ${dayPlan.capacityMin} minutes today.`
+          : 'Confirm your picks to see them here all day.'}
       </p>
     </Card>
   );

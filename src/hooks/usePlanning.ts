@@ -68,7 +68,10 @@ export function usePlanToday(dayKey?: string): DayPlanView {
 
   const dayPlanQuery = useQuery({
     queryKey: ['dayPlan', today],
-    queryFn: () => dayPlanRepo.getByDate(today),
+    // react-query v5 treats `undefined` query data as an error ("Query data
+    // cannot be undefined"), which put the query in an error state and made a
+    // refetch reset it to pending - the empty-list flash after Confirm.
+    queryFn: async () => (await dayPlanRepo.getByDate(today)) ?? null,
     enabled,
   });
 
@@ -171,7 +174,10 @@ export function useConfirmDayPlan(dayKey: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: DayPlanInput) => dayPlanRepo.upsert(dayKey, input),
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Put the saved plan straight into the cache: no pending gap, so the
+      // screen never flashes an empty list between Confirm and the refetch.
+      qc.setQueryData(['dayPlan', dayKey], saved);
       void qc.invalidateQueries({ queryKey: ['dayPlan', dayKey] });
       // A confirmed plan changes the Today card, not task data; tasks/projects
       // stay untouched.

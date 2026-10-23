@@ -164,6 +164,11 @@ removal. Mutations for each of these turn a test red.
   repository would close the invalid-row class for every caller (follow-up).
 - Calendar events do not feed `fixedBlocks` yet (W8 part 2); for now fixed
   blocks come only from the `Block` table.
+- With nothing picked and zero capacity, the overcommit line reads "These add
+  up to 0 minutes… they would have to wait"; "they" has no referent. Copy only.
+- The swap/add selects list every `next` task; fine at personal scale, would
+  need search/virtualisation with hundreds of tasks.
+- Day plans already round-trip through export/import (checked; nothing to do).
 
 ## Known gaps
 

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { resetDbForTesting, getDb } from '@/lib/db/db';
 import { taskRepo } from '@/lib/db/task.repo';
 import { dayPlanRepo } from '@/lib/db/day-plan.repo';
+import { blockRepo } from '@/lib/db/block.repo';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { PlanScreen } from '@/components/planning/PlanScreen';
 import { ToastProvider } from '@/components/ui/Toast';
@@ -127,6 +128,146 @@ describe('PlanScreen', () => {
     expect(second).toBeTruthy();
   });
 
+  it('shows the saved plan immediately, without waiting for the refetch', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const [task] = await seedNextTasks(['one pick']);
+    let call = 0;
+    const realGet = dayPlanRepo.getByDate.bind(dayPlanRepo);
+    vi.spyOn(dayPlanRepo, 'getByDate').mockImplementation((day: string) => {
+      call += 1;
+      // The first read (initial load) is real; every later refetch hangs, so a
+      // cache-seeded Confirm is the only way "Your picks" can appear.
+      return call === 1 ? realGet(day) : new Promise(() => {});
+    });
+
+    renderWithProviders(<PlanScreen dayKey={TODAY} />);
+    await screen.findByRole('button', { name: /Remove one pick from today's picks/i });
+    fireEvent.click(screen.getByRole('button', { name: /Confirm today/i }));
+
+    expect(await screen.findByText('Your picks')).toBeInTheDocument();
+    expect(screen.getByText('one pick')).toBeInTheDocument();
+    expect(task).toBeTruthy();
+  });
+
+  it('never shows the empty-picks flash while confirming', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await seedNextTasks(['one', 'two', 'three']);
+    renderWithProviders(<PlanScreen dayKey={TODAY} />);
+    await screen.findAllByRole('button', { name: /Remove .* from today's picks/i });
+
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => seen.push(document.body.textContent ?? ''));
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+    fireEvent.click(screen.getByRole('button', { name: /Confirm today/i }));
+    await screen.findByText('Your picks');
+    observer.disconnect();
+
+    expect(seen.some((text) => text.includes('No picks yet'))).toBe(false);
+  });
+
+  it('excludes a pick that was finished elsewhere and does not count it', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const done = await taskRepo.create({ title: 'finished task', status: 'next', source: 'manual', estimateMin: 40 });
+    const active = await taskRepo.create({ title: 'remaining task', status: 'next', source: 'manual', estimateMin: 20 });
+    await taskRepo.setStatus(done.id, 'done');
+    await dayPlanRepo.upsert(TODAY, { picks: [done.id, active.id], capacityMin: 200 });
+
+    renderWithProviders(<PlanScreen dayKey={TODAY} />);
+    await screen.findByText('remaining task');
+    expect(screen.queryByText('finished task')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Remove finished task/ })).toBeNull();
+    // The overcommit total counts only the remaining pick (20 minutes).
+    expect(screen.getByRole('status')).toHaveTextContent(/These add up to 20 minutes/);
+  });
+
+  it('lets the user swap a pick for another task', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await seedNextTasks(['first', 'second', 'third', 'fourth']);
+    renderWithProviders(<PlanScreen dayKey={TODAY} />);
+    await screen.findAllByRole('button', { name: /Remove .* from today's picks/i });
+
+    const swap = screen.getAllByLabelText('Swap for another task')[0]!;
+    const candidate = Array.from(swap.querySelectorAll('option'))
+      .slice(1)
+      .find((option) => option.value !== '');
+    expect(candidate).toBeDefined();
+    fireEvent.change(swap, { target: { value: candidate!.value } });
+
+    expect(
+      await screen.findByRole('button', { name: `Remove ${candidate!.textContent} from today's picks` }),
+    ).toBeInTheDocument();
+  });
+
+  it('resets the draft when the day rolls over', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await seedNextTasks(['one', 'two', 'three']);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <PlanScreen dayKey="2026-06-15" />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findAllByRole('button', { name: /Remove .* from today's picks/i });
+    fireEvent.click(screen.getAllByRole('button', { name: /Remove .* from today's picks/i })[0]!);
+    await screen.findByLabelText('Add a task by hand');
+
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <PlanScreen dayKey="2026-06-16" />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    // Fresh suggestions for the new day, not the edited draft.
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /Remove .* from today's picks/i })).toHaveLength(3),
+    );
+    expect(screen.queryByLabelText('Add a task by hand')).toBeNull();
+  });
+
+  it('shows a loading state first when tasks arrive late', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await seedNextTasks(['late task']);
+    let resolveTasks!: (tasks: Awaited<ReturnType<typeof taskRepo.getAll>>) => void;
+    const realGetAll = taskRepo.getAll.bind(taskRepo);
+    const pending = new Promise<Awaited<ReturnType<typeof taskRepo.getAll>>>((resolve) => {
+      resolveTasks = resolve;
+    });
+    let first = true;
+    vi.spyOn(taskRepo, 'getAll').mockImplementation(() => {
+      if (first) {
+        first = false;
+        return pending;
+      }
+      return realGetAll();
+    });
+
+    renderWithProviders(<PlanScreen dayKey={TODAY} />);
+    expect(await screen.findByText(/Loading today's plan/)).toBeInTheDocument();
+    expect(screen.queryByText('No picks yet.')).toBeNull();
+
+    resolveTasks(await realGetAll());
+    expect(await screen.findByText('late task')).toBeInTheDocument();
+  });
+
+  it('saves the computed capacity with the picks', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await settingsRepo.patch({ wakingHours: { start: '09:00', end: '17:00' } });
+    await seedNextTasks(['one pick']);
+    renderWithProviders(<PlanScreen dayKey={TODAY} />);
+    await screen.findByRole('button', { name: /Remove one pick from today's picks/i });
+    fireEvent.click(screen.getByRole('button', { name: /Confirm today/i }));
+
+    await waitFor(async () => {
+      const plan = await dayPlanRepo.getByDate(TODAY);
+      expect(plan?.capacityMin).toBe(360);
+      expect(plan?.picks).toHaveLength(1);
+    });
+  });
+
   it('writes only once when Confirm is triggered twice', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     await seedNextTasks(['one pick']);
@@ -143,6 +284,44 @@ describe('PlanScreen', () => {
     });
 
     await waitFor(() => expect(upsert).toHaveBeenCalledTimes(1));
+  });
+
+  it('states capacity arithmetic that adds up when fixed and anchor overlap', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await settingsRepo.patch({
+      wakingHours: { start: '09:00', end: '17:00' },
+      anchors: [
+        {
+          id: '77777777-7777-4777-8777-777777777777',
+          title: 'Lunch',
+          weekdays: [0, 1, 2, 3, 4, 5, 6],
+          start: '12:00',
+          end: '13:00',
+          domainId: null,
+        },
+      ],
+    });
+    await blockRepo.create({
+      start: new Date(new Date().setHours(12, 30, 0, 0)),
+      end: new Date(new Date().setHours(13, 30, 0, 0)),
+      kind: 'fixed',
+      title: 'Overlapping meeting',
+    });
+
+    renderWithProviders(<PlanScreen dayKey={TODAY} />);
+    await screen.findByText(/You have \d+ minutes for picks today/);
+    // Wait for the fixed-block query to land before reading the arithmetic.
+    await waitFor(() =>
+      expect(screen.getByText(/You have \d+ minutes for picks today/).textContent).toMatch(
+        /minus 90 for fixed or protected time/,
+      ),
+    );
+    const sentence = screen.getByText(/You have \d+ minutes for picks today/);
+    const numbers = (sentence.textContent ?? '').match(/\d+/g)!.map(Number);
+    const [capacity, awake, occupied, buffer] = numbers;
+    expect(awake! - occupied! - buffer!).toBe(capacity!);
+    // Union: 60 anchor + 60 fixed overlapping by 30 = 90 occupied.
+    expect(occupied).toBe(90);
   });
 
   it('renders no guilt wording anywhere on the screen', async () => {
