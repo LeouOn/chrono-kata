@@ -13,6 +13,39 @@ export type RatingStyle = z.infer<typeof RatingStyleSchema>;
 export const DayOfWeekSchema = z.enum(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
 export type DayOfWeek = z.infer<typeof DayOfWeekSchema>;
 
+/**
+ * Feature flags for roadmap work that is experimental until it is proven.
+ *
+ * Flags live on the singleton settings row as one optional, non-indexed field,
+ * so no Dexie version is needed and a row written before flags existed stays
+ * valid (it simply has no flags).
+ *
+ * The flag names are a closed union: `FLAG_NAMES` is the only source of truth
+ * and `FlagName` is derived from it, so a typo fails the typecheck instead of
+ * silently shipping a flag nobody reads.
+ */
+export const FLAG_NAMES = [
+  /** Private mode: every AI call stays on a local provider (roadmap W5). */
+  'privateMode',
+  /** Native Android calendar integration; ICS stays the local-first path (roadmap W8). */
+  'nativeCalendar',
+  /** The opt-in nudge kinds beyond today's single daily reminder (roadmap W16). */
+  'nudgeKinds',
+  /** Optional device sync between devices (roadmap W18). */
+  'sync',
+] as const;
+export type FlagName = (typeof FLAG_NAMES)[number];
+
+export const FlagsSchema = z.object({
+  privateMode: z.boolean(),
+  nativeCalendar: z.boolean(),
+  nudgeKinds: z.boolean(),
+  sync: z.boolean(),
+});
+export type Flags = z.infer<typeof FlagsSchema>;
+/** The stored shape: any subset of the flags, each one a boolean. */
+export type FlagValues = Partial<Flags>;
+
 /** Check-in energy at or below this counts as a low-energy rest day. */
 export const LowEnergyRestThresholdSchema = z.union([
   z.literal(1),
@@ -49,6 +82,8 @@ export const SettingsSchema = z.object({
   lastStreakFreezeUsedAt: z.date().nullable().optional(),
   recoveryMode: z.boolean().optional(),
   lowEnergyRestThreshold: LowEnergyRestThresholdSchema.optional(),
+  /** Feature flags for experimental roadmap work. Absent on rows written before flags existed. */
+  flags: FlagsSchema.partial().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -78,4 +113,5 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   lastStreakFreezeUsedAt: null,
   recoveryMode: false,
   lowEnergyRestThreshold: DEFAULT_LOW_ENERGY_REST_THRESHOLD,
+  flags: {},
 };
