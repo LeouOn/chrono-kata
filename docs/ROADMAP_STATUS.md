@@ -311,7 +311,9 @@ no pointer/touch DnD library is. Budget for a dependency or a hand-rolled pointe
 
 ## W8 — Calendar interop (local-first)
 
-**Status:** partial — the Google direction exists, the local-first direction does not · **Size:** M ·
+**Status:** partial — the Google direction exists, and the local-first ICS core (export/import of
+Blocks, `src/lib/ics/`) now ships as a pure module; file picker/share/screens, persisted
+`calendarRef` and the flagged Android native calendar remain · **Size:** M ·
 **Lanes:** C · **Depends on:** W1 (Block)
 
 **Evidence**
