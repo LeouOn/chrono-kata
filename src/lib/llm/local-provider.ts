@@ -97,11 +97,17 @@ export function isLocalBaseUrl(baseUrl: string): boolean {
 }
 
 /**
- * The one predicate: a provider is local when its preset is local or its base
- * URL is a local address.
+ * The one predicate: is this request going to stay on the user's machine or
+ * network?
+ *
+ * **The address decides, not the preset name.** A provider named `lmstudio`
+ * whose base URL points at a cloud host is not local — the name is only a
+ * label, and trusting it would let a request to a public address through
+ * private mode. (The preset name is still what decides the *UI*: a local
+ * preset gets a host field and a "Check host" button.)
  */
 export function isLocalProvider(provider: { providerName: string; baseUrl: string }): boolean {
-  return isLocalProviderName(provider.providerName) || isLocalBaseUrl(provider.baseUrl);
+  return isLocalBaseUrl(provider.baseUrl);
 }
 
 /**

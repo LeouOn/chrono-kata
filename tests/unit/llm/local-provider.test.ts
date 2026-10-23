@@ -48,13 +48,21 @@ describe('isLocalBaseUrl', () => {
 });
 
 describe('isLocalProvider', () => {
-  it('is local when the preset is local', () => {
-    expect(isLocalProvider({ providerName: 'lmstudio', baseUrl: 'https://example.invalid/v1' })).toBe(true);
-    expect(isLocalProvider({ providerName: 'ollama', baseUrl: 'https://example.invalid/v1' })).toBe(true);
+  it('is local when the base URL is a local address', () => {
+    expect(isLocalProvider({ providerName: 'lmstudio', baseUrl: 'http://localhost:1234/v1' })).toBe(true);
+    expect(isLocalProvider({ providerName: 'ollama', baseUrl: 'http://127.0.0.1:11434/v1' })).toBe(true);
   });
 
   it('is local when the user pointed a cloud preset at a local address', () => {
     expect(isLocalProvider({ providerName: 'openai', baseUrl: 'http://192.168.1.5:1234/v1' })).toBe(true);
+  });
+
+  it('is NOT local when a local preset points at a cloud address', () => {
+    // The preset name is a label, not a promise: trusting it would let a
+    // request to a public address through private mode.
+    expect(isLocalProvider({ providerName: 'lmstudio', baseUrl: 'https://api.openai.com/v1' })).toBe(false);
+    expect(isLocalProvider({ providerName: 'ollama', baseUrl: 'http://evil.com/v1' })).toBe(false);
+    expect(isLocalProvider({ providerName: 'lmstudio', baseUrl: 'http://localhost.evil.com/v1' })).toBe(false);
   });
 
   it('is not local for a cloud preset on a cloud address', () => {

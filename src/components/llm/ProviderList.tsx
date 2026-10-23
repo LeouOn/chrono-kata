@@ -2,7 +2,7 @@
 
 import { Card } from '@/components/ui/Card';
 import { PROVIDER_NAMES, PROVIDER_DEFAULTS, type ProviderName } from '@/lib/llm/provider-defaults';
-import { isLocalProvider } from '@/lib/llm/local-provider';
+import { isLocalProvider, isLocalProviderName } from '@/lib/llm/local-provider';
 import type { ProviderEntry } from '@/lib/schemas/llm-settings';
 
 interface Props {
@@ -57,7 +57,7 @@ export function ProviderList({
                 <div className="flex flex-wrap gap-3 mt-2">
                   {environmentProviders[name] && configuredProviders[name]?.credentialSource !== 'environment' && <button type="button" className="text-xs text-accent" onClick={() => onUseEnvironment?.(name)}>Use desktop key</button>}
                   {isConfigured && <button type="button" className="text-xs text-accent disabled:opacity-40" disabled={!!testing} onClick={() => onTest?.(name)}>{testing === name ? 'Testing…' : 'Test connection'}</button>}
-                  {isConfigured && isLocalProvider({ providerName: name, baseUrl: configuredProviders[name]?.baseUrl ?? defaults.baseUrl }) && (
+                  {isConfigured && (isLocalProviderName(name) || isLocalProvider({ providerName: name, baseUrl: configuredProviders[name]?.baseUrl ?? defaults.baseUrl })) && (
                     <button type="button" className="text-xs text-accent disabled:opacity-40" disabled={!!checking} onClick={() => onCheckHost?.(name)}>
                       {checking === name ? 'Checking…' : 'Check host'}
                     </button>
