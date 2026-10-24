@@ -79,3 +79,104 @@ committing. Set `PLAYWRIGHT_PORT` to a free port if 3008 is taken.
 - The corrupt-row path is exercised through the inbox; a throw in the root
   layout (the `global-error.tsx` case) has unit tests but no end-to-end path
   without a test-only route.
+
+---
+
+# Wave 20 — part 2: the pure integrity detector
+
+**Status:** part 2 · **Head:** this PR
+
+`src/lib/integrity/detect.ts` is a PURE, read-only detector: it takes a plain
+snapshot (sessions, tasks, projects, domains, blocks, dayPlans, habits,
+settings) and reports every issue — nothing else. `collectIntegritySnapshot`
+is the thin IO shell that reads the live Dexie tables. No UI, no repair here
+(part 3 adds the checker screen and the one-transaction tidy-up).
+
+## Severities
+
+- `corruption` — a broken invariant: dangling session/block/task/habit links,
+  session `endedAt ≤ startedAt`, block `end ≤ start`, duplicate `calendarRef`,
+  `doneAt` XOR `status done` (the invariant a bad write once broke), a
+  settings row that fails `SettingsSchema` (the importer drops it whole), and
+  far-future dates (> 24h ahead of now).
+- `info` — KNOWN, documented properties, not faults: a DayPlan shutdown pick
+  (`picksDone`/`picksBack`) whose task was deleted later, and a `domainChecks`
+  tick keyed by a since-deleted domain (it is history the user recorded).
+  Part 3's tidy-up offers dropping the dead id; detection never calls it
+  corruption.
+
+## Choices where the brief was silent
+
+- **Timestamp rules agree with `DATE_SPECS`** (`src/lib/data-transfer/dates.ts`):
+  the future-check covers each table's core/optional/stamp date fields exactly
+  as that table lists them (`projects.breadcrumbAt` and `dayPlans.shutdownAt`
+  included). Ordering checks exist only where a range exists (sessions, blocks).
+  A zero-elapsed session (`endedAt === startedAt`) counts as a bad range.
+- **`domainChecks` dead keys are informational** (suggested by the lead for
+  picks; applied consistently to the domain ticks, which are the same class of
+  historical record). Documented here; part 3 decides the tidy-up.
+- **No kata-template domain rule**: `KataTemplate` has no `domainId` on main.
+- `checkIns` are in no rule (date-keyed, standalone); they stay out of the
+  snapshot rather than pretending to be checked.
+
+## Tests
+
+- Oracle (`detect-oracle.test.ts`, the planning-oracle style): seeded random
+  databases (mulberry32, seeds 1–60), every corruption and info kind injected
+  alone (exactly one issue, correct severity) and in random combinations —
+  the detector reports EXACTLY the injected set, no more, no fewer,
+  deterministic under row shuffling; both directions of the done/status
+  coupling; the exact 24h far-future boundary (23h clean, 25h flagged,
+  optional fields included); live picks are NOT dead picks.
+- IO shell (`collect-snapshot.test.ts`): rows written through the REAL
+  repositories collect cleanly; a raw behind-the-repo write is seen.
+- Zones: the two files pass in default, Europe/Helsinki, America/Los_Angeles,
+  Pacific/Kiritimati, Pacific/Auckland, Asia/Kolkata (exit 0 each).
+- Mutants: 15 attempted, 14 killed, 1 resolved as equivalent-and-removed (the
+  unreadable-endpoint guards in the range checks were dead code — `validDate`
+  already nulls unreadable values; removed the code rather than claim a kill).
+  The lead's real-repository probe (P1–P6) is committed as
+  `tests/unit/integrity/lead-probe.test.ts` and passes.
+
+## Round 2 (lead review): five probe findings, all fixed
+
+1. **Planned dates are not events** — the far-future check applies only to
+   fields that record what HAPPENED; `tasks.dueAt`/`deferUntil` and
+   `blocks.start`/`end` are excluded BY NAME (`PLANNED_DATE_FIELDS`). A task
+   due in 30 days, deferred a week, with a block next Tuesday, is clean.
+2. **Recurring calendar events share one calendarRef by design** — a duplicate
+   is the same ref AND the same start instant (the issue carries `startIso`);
+   a three-occurrence series with different starts is clean.
+3. **A zero-length session is legal** (SessionSchema has no end>start refine) —
+   sessions use `<`, blocks keep `<=` (their schema forbids equality).
+4. **The detector is TOTAL** — every field access goes through safe readers
+   (`rowOf`/`validDate`/`linkOf`); a fully garbled row is reported, never thrown on.
+5. **`row-date-unreadable`** — any DATE_SPECS field present but not a valid
+   Date (wrong type or NaN) is corruption; range rules stand down for
+   unreadable endpoints (one issue, not two).
+6. **One source of truth** — the field lists are DERIVED from DATE_SPECS; a
+   set-algebra completeness test plus a BEHAVIORAL completeness test (every
+   future-checked field flagged far-future, every planned field clean
+   end-to-end) fail if DATE_SPECS and the detector ever drift.
+
+Part-3 copy note (from the review): orphan links must read as "links to
+something that is gone" in the UI — never "corruption", never red — and the
+info severity stays for the documented DayPlan properties.
+
+## Round 3 (lead review): two probe findings + housekeeping
+
+1. **A `|` inside a calendarRef crashed the duplicate rule** — the occurrence
+   key is now opaque (`JSON.stringify([ref, ms])`) and the parts are read
+   from the stored VALUE, never parsed back out of the key. An ICS UID with a
+   pipe (or any character) can no longer break the check (oracle case).
+2. **`project-orphan-domain`** — projects carry a `domainId` that analytics
+   follows; a dangling one is now reported like the task/habit equivalents
+   (oracle injection + mutant).
+3. Housekeeping: the lead's round-1 probe is committed as
+   `ordinary-use.test.ts` (renamed, console.logs removed, assertions kept);
+   the round-2 scenario + 300-round garbage fuzz is
+   `totality-and-ordinary-use.test.ts` (never throws, deterministic,
+   identical on reversed input).
+
+Mutant ledger now: 17 attempted, 16 killed, 1 equivalent-and-removed
+(new: project-orphan-domain dropped; occurrence-parts-re-parsed-from-key).
