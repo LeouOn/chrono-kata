@@ -71,6 +71,26 @@ describe('timeline pointer editing', () => {
     vi.useRealTimers();
   });
 
+  it('renders a 15-minute block at the shared 24px height', () => {
+    const block = { ...entry('a', 9, 9), end: new Date(2026, 5, 15, 9).getTime() + 15 * 60_000 };
+    render(<Timeline window={dayWindow} blocks={[block]} now={dayWindow.start} onSelect={() => {}} onCommit={() => {}} />);
+    const button = screen.getByRole('button', { name: /fixed block a 09:00 to 09:15/i });
+    expect(button.style.height).toBe('24px');
+  });
+
+  it('cancels on pointercancel, ignores later moves and release', () => {
+    const onCommit = vi.fn();
+    render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={15} />);
+    const block = screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i });
+    fireEvent.pointerDown(block, { clientY: 100 });
+    fireEvent.pointerMove(block, { clientY: 166 });
+    fireEvent.pointerCancel(block);
+    fireEvent.pointerMove(block, { clientY: 200 });
+    fireEvent.pointerUp(block);
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i })).toBeTruthy();
+  });
+
   it('cancels on pointercancel and never commits later', () => {
     const onCommit = vi.fn();
     render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={15} />);

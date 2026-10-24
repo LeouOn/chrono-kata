@@ -33,6 +33,13 @@ describe('handleGeometry', () => {
     expect(gb.start.height).toBe(11);
   });
 
+  it('does not grow outward on an isolated edge of a shared-lane block', () => {
+    const block = { start: at(10), end: at(11), lane: 0 };
+    const geometry = handleGeometry(block, { ...laneNeighbours(block, [block]), fullWidth: false });
+    expect(Math.abs(geometry.start.top)).toBe(0);
+    expect(geometry.end.top + geometry.end.height).toBe(geometry.blockHeight);
+  });
+
   it('never overlaps the next block’s start handle when blocks are 5 minutes apart', () => {
     const a = { start: at(13), end: at(14), lane: 0 };
     const b = { start: at(14) + 5 * 60_000, end: at(15) + 5 * 60_000, lane: 0 };

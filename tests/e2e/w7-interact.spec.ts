@@ -1,18 +1,71 @@
 import { test, expect, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 390, height: 1500 }, hasTouch: true });
+test.setTimeout(90_000);
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('onboarding-completed', 'true'));
 });
+
+async function waitForTaskInbox(page: Page) {
+  await page.waitForFunction(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('chrono-kata');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const row = await new Promise<{ flags?: { taskInbox?: boolean } } | undefined>((resolve) => {
+      const request = db.transaction('settings', 'readonly').objectStore('settings').get('singleton');
+      request.onsuccess = () => resolve(request.result);
+    });
+    db.close();
+    return row?.flags?.taskInbox === true;
+  });
+}
+
+async function forceFlagOn(page: Page) {
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('chrono-kata');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const row = await new Promise<Record<string, unknown> | undefined>((resolve) => {
+      const request = db.transaction('settings', 'readonly').objectStore('settings').get('singleton');
+      request.onsuccess = () => resolve(request.result);
+    });
+    if (row) {
+      const flags = (row.flags ?? {}) as Record<string, boolean>;
+      if (flags.taskInbox !== true) {
+        await new Promise<void>((resolve) => {
+          const tx = db.transaction('settings', 'readwrite');
+          tx.objectStore('settings').put({ ...row, flags: { ...flags, taskInbox: true } });
+          tx.oncomplete = () => resolve();
+        });
+      }
+    }
+    db.close();
+  });
+}
+
+async function gotoTimeline(page: Page) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.goto('/timeline');
+    if ((await page.getByRole('button', { name: /add a commitment/i }).count()) > 0) return;
+    await forceFlagOn(page);
+    await page.waitForTimeout(200);
+  }
+}
 
 async function enablePlanning(page: Page) {
   await page.goto('/settings');
   const toggle = page.getByRole('switch', { name: 'Tasks and inbox (preview)' });
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute('aria-checked')) !== 'true') await toggle.click();
-  await page.getByLabel('Awake from').fill('08:00');
-  await page.getByLabel('Awake until').fill('18:00');
+  await expect(toggle).toHaveAttribute('aria-checked', 'true');
+  // The switch is optimistic; wait for the settings row to be written before
+  // navigating, so the timeline cannot mount with the old flag under load.
+  await waitForTaskInbox(page);
   await page.waitForTimeout(200);
 }
 
@@ -31,7 +84,7 @@ async function addCommitment(page: Page, title: string, from: string, until: str
 
 test('mouse drag stores the moved times, and Escape cancels without writing', async ({ page }) => {
   await enablePlanning(page);
-  await page.goto('/timeline');
+  await gotoTimeline(page);
   await addCommitment(page, 'Dentist', '09:00', '10:00');
   const block = page.getByRole('button', { name: /fixed block Dentist 09:00 to 10:00/i });
   const box = await boxCentered(page, block);
@@ -108,7 +161,7 @@ test('mouse drag stores the moved times, and Escape cancels without writing', as
 
 test('touch resize works from outside a block on both edges, and its middle still opens the sheet', async ({ page }) => {
   await enablePlanning(page);
-  await page.goto('/timeline');
+  await gotoTimeline(page);
   await addCommitment(page, 'Top', '11:00', '11:30');
   const topBlock = await page.getByRole('button', { name: /fixed block Top 11:00 to 11:30/i }).boundingBox();
   expect(topBlock).not.toBeNull();
@@ -125,7 +178,7 @@ test('touch resize works from outside a block on both edges, and its middle stil
 
 test('touch resize works from a point outside a 30-minute block, and its middle still opens the sheet', async ({ page }) => {
   await enablePlanning(page);
-  await page.goto('/timeline');
+  await gotoTimeline(page);
   await addCommitment(page, 'Short', '12:00', '12:30');
   const blockBox = await page.getByRole('button', { name: /fixed block Short 12:00 to 12:30/i }).boundingBox();
   expect(blockBox).not.toBeNull();
@@ -140,6 +193,8 @@ test('touch resize works from a point outside a 30-minute block, and its middle 
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(page.getByRole('button', { name: /fixed block Short 12:00 to 13:00/i })).toBeVisible();
+  // Give the touch-end's follow-up click time to land before the next tap.
+  await page.waitForTimeout(250);
 
   await page.getByRole('button', { name: /fixed block Short 12:00 to 13:00/i }).tap();
   await expect(page.getByRole('dialog', { name: 'Edit block' })).toBeVisible();

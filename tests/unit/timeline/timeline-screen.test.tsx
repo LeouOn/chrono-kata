@@ -118,6 +118,7 @@ describe('timeline screen', () => {
     const openSchool = await screen.findByRole('button', { name: /fixed block School run/i });
     fireEvent.pointerDown(openSchool);
     fireEvent.pointerUp(openSchool);
+    fireEvent.click(openSchool);
     const title = await screen.findByLabelText('Title');
     expect((title as HTMLInputElement).value).toBe('School run');
     fireEvent.change(title, { target: { value: 'School pickup' } });
@@ -130,6 +131,7 @@ describe('timeline screen', () => {
     const reopen = await screen.findByRole('button', { name: /fixed block School pickup/i });
     fireEvent.pointerDown(reopen);
     fireEvent.pointerUp(reopen);
+    fireEvent.click(reopen);
     fireEvent.click(await screen.findByRole('button', { name: /remove this block/i }));
     fireEvent.click(await screen.findByRole('button', { name: /^remove$/i }));
     await waitFor(async () => {

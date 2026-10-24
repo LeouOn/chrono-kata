@@ -140,25 +140,17 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
       // The drag was cancelled, but this release still synthesises a click.
       cancelledRef.current = false;
       suppressClickRef.current = true;
-      globalThis.setTimeout(() => {
-        suppressClickRef.current = false;
-      }, 0);
       return;
     }
     (event.currentTarget as Element).releasePointerCapture?.(event.pointerId);
     dragRef.current = null;
     setDrag(null);
-    suppressClickRef.current = true;
     const changed =
       current.preview.start !== current.entry.start || current.preview.end !== current.entry.end;
+    // A committed drag arms suppression for the click that follows this
+    // pointerup. A plain tap leaves it unarmed, so that click opens the sheet.
+    suppressClickRef.current = changed;
     if (changed) void onCommit?.(current.entry, current.preview);
-    // Let the compatibility click pass through (and be swallowed above) before
-    // the sheet opens; otherwise that click lands on the new backdrop and
-    // closes it again. Clear the flag anyway, so keyboard use is never masked.
-    else globalThis.setTimeout(() => onSelect(current.entry), 0);
-    globalThis.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 0);
   }
 
   function cancel() {
@@ -272,6 +264,13 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
                 <button
                   type="button"
                   aria-label={`Resize start of ${entry.title}`}
+                  onClick={() => {
+                    if (suppressClickRef.current) {
+                      suppressClickRef.current = false;
+                      return;
+                    }
+                    onSelect(entry);
+                  }}
                   onPointerDown={(event) => begin(event, entry, 'start')}
                   onPointerMove={move}
                   onPointerUp={finish}
@@ -295,6 +294,13 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
                 <button
                   type="button"
                   aria-label={`Resize end of ${entry.title}`}
+                  onClick={() => {
+                    if (suppressClickRef.current) {
+                      suppressClickRef.current = false;
+                      return;
+                    }
+                    onSelect(entry);
+                  }}
                   onPointerDown={(event) => begin(event, entry, 'end')}
                   onPointerMove={move}
                   onPointerUp={finish}

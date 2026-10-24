@@ -82,6 +82,7 @@ describe('layout picks and the replan decision', () => {
       expect(plan?.picks).toEqual([t2.id]);
       expect(plan?.capacityMin).toBe(120);
     });
+    expect(await screen.findByText(/Applied\. Your day is updated\./i)).toBeTruthy();
   });
 
   it('restores the plain "does not fit" line on the propose path', async () => {
@@ -94,6 +95,30 @@ describe('layout picks and the replan decision', () => {
     renderScreen();
     fireEvent.click(await screen.findByRole('button', { name: /propose a layout/i }));
     expect(await screen.findByText(/1 pick does not fit and will stay on your list/i)).toBeTruthy();
+  });
+
+  it('says "did not fit today" with no plan, before and after Apply, and clears the notice on a move', async () => {
+    const task = await taskRepo.create({ title: 'Squeeze', status: 'next', source: 'manual', estimateMin: 30 });
+    await taskRepo.create({ title: 'Squeeze two', status: 'next', source: 'manual', estimateMin: 30 });
+    const now = FIXED_NOW.getTime();
+    await blockRepo.create({
+      start: new Date(now - minutes(60)),
+      end: new Date(now - minutes(30)),
+      kind: 'focus',
+      title: 'Focus',
+      taskId: task.id,
+    });
+    const end = new Date(now);
+    end.setHours(23, 59, 0, 0);
+    await blockRepo.create({ start: new Date(now), end, kind: 'fixed', title: 'All day' });
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: /replan from now/i }));
+    expect(await screen.findByText(/1 pick did not fit today\./i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /apply replan/i }));
+    expect(await screen.findByText(/Applied\. 1 pick did not fit today\./i)).toBeTruthy();
+    const kept = await screen.findByRole('button', { name: /focus block Squeeze/i });
+    fireEvent.keyDown(kept, { key: 'ArrowDown', altKey: true });
+    await waitFor(() => expect(screen.queryByText(/Applied\./i)).toBeNull());
   });
 
   it('does not call a tomorrow-only focus block "Replan from now"', async () => {
