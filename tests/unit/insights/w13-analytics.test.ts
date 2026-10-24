@@ -62,13 +62,18 @@ describe('W13 oracle: the analytics recover the ground truth', () => {
     );
     const polluted = estimateAccuracy({ ...input, sessions });
     expect(closeTo(polluted.bySource['user']!.median, 1 / BIAS.user, 0.02)).toBe(true);
-    expect(polluted.overall.max).toBeLessThanOrEqual(RATIO_MAX);
+    expect(polluted.overall!.max).toBeLessThanOrEqual(RATIO_MAX);
   });
 
-  it('per-domain minutes add up to the attributed total', () => {
+  it('per-domain minutes add up to the attributed total (tasks AND project-only sessions)', () => {
     const domains = timePerDomain(input);
+    const projectIds = new Set(history.projects.map((p) => p.id));
     const attributed = history.sessions.reduce(
-      (sum, s) => sum + (s.taskId != null && s.durationMinutes != null ? s.durationMinutes : 0),
+      (sum, s) =>
+        sum +
+        (s.durationMinutes != null && (s.taskId != null || (s.projectId != null && projectIds.has(s.projectId)))
+          ? s.durationMinutes
+          : 0),
       0,
     );
     const total = domains.reduce((sum, d) => sum + d.minutes, 0);
@@ -76,10 +81,14 @@ describe('W13 oracle: the analytics recover the ground truth', () => {
     for (const domain of DOMAINS) {
       expect(domains.some((d) => d.domainId === domain)).toBe(true);
     }
-    // Every task resolves a domain directly or through its project, so no
-    // null-domain bucket may exist in this fixture (kills a dropped
-    // project-domain fallback).
+    // Every task resolves a domain directly or through its project, and the
+    // project-only touches resolve their project's domain, so no null-domain
+    // bucket may exist in this fixture (kills a dropped project-domain
+    // fallback on either side).
     expect(domains.every((d) => d.domainId != null)).toBe(true);
+    // The weekly minimum-viable touches are visible per domain.
+    const trading = domains.find((d) => d.domainId === DOMAINS[0])!;
+    expect(trading.minutes).toBeGreaterThanOrEqual(13 * 10);
   });
 
   it('results are identical over shuffled input', () => {
@@ -136,9 +145,12 @@ describe('W13 oracle: the analytics recover the ground truth', () => {
     const adherence = cadenceAdherence(input);
     expect(adherence.length).toBe(2);
     for (const project of adherence) {
+      // The shared rule: session.projectId wins, else the task's project —
+      // so the project-only touches count too.
+      const taskProject = new Map(history.tasks.map((t) => [t.id, t.projectId] as const));
       const attributed = history.sessions.filter((s) => {
-        const task = history.tasks.find((t) => t.id === s.taskId);
-        return task?.projectId === project.projectId;
+        const pid = s.projectId ?? (s.taskId != null ? taskProject.get(s.taskId) ?? null : null);
+        return pid === project.projectId;
       }).length;
       expect(project.weeks.reduce((sum, w) => sum + w.sessions, 0)).toBe(attributed);
     }
@@ -169,8 +181,7 @@ describe('W13 unit edges', () => {
       projects: [],
       estimates: [],
     });
-    expect(tiny.overall.n).toBe(0);
-    expect(Number.isNaN(tiny.overall.median)).toBe(true);
+    expect(tiny.overall).toBeNull();
     expect(RATIO_MIN).toBe(0.1);
     expect(RATIO_MAX).toBe(10);
   });
@@ -196,6 +207,6 @@ describe('W13 unit edges', () => {
   it('a task with no attributed sessions is not part of the accuracy set', () => {
     // All sessions stripped -> no ratios at all.
     const accuracy = estimateAccuracy({ ...input, sessions: [] });
-    expect(accuracy.overall.n).toBe(0);
+    expect(accuracy.overall).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import { addDays } from '@/lib/pacing/days';
+import { toLocalDateString } from '@/lib/utils/date';
 import { sessionProjectId, projectOfTaskIndex } from '@/lib/planning/cadence';
 import { mondayOf, weekKeyFor } from '@/lib/review/week';
 import type { Estimate } from '@/lib/schemas/estimate';
@@ -37,6 +38,10 @@ export interface AnalyticsInput {
   estimates: readonly Estimate[];
 }
 
+/**
+ * Ratio spread. `null` (never NaN fields) when there is no data, so charts
+ * and CSV cannot render or export a NaN.
+ */
 export interface RatioStats {
   n: number;
   median: number;
@@ -49,9 +54,11 @@ export interface RatioStats {
 export type Energy = 'low' | 'med' | 'high';
 
 export interface EstimateAccuracy {
-  overall: RatioStats;
+  /** Null when no completed task has an estimate. */
+  overall: RatioStats | null;
   byDomain: Record<string, RatioStats>;
-  byEnergy: Record<Energy, RatioStats>;
+  /** ALL THREE keys are always present; null where that level has no data. */
+  byEnergy: Record<Energy, RatioStats | null>;
   bySource: Record<string, RatioStats>;
 }
 
@@ -78,25 +85,30 @@ function quantile(sorted: readonly number[], q: number): number {
   return sorted[index]!;
 }
 
-function stats(ratios: readonly number[]): RatioStats {
+function stats(ratios: readonly number[]): RatioStats | null {
   const sorted = [...ratios].sort((a, b) => a - b);
   const n = sorted.length;
-  const median =
-    n === 0 ? Number.NaN : n % 2 === 1 ? sorted[(n - 1) / 2]! : (sorted[n / 2 - 1]! + sorted[n / 2]!) / 2;
+  if (n === 0) return null;
+  const median = n % 2 === 1 ? sorted[(n - 1) / 2]! : (sorted[n / 2 - 1]! + sorted[n / 2]!) / 2;
   return {
     n,
     median,
     p25: quantile(sorted, 0.25),
     p75: quantile(sorted, 0.75),
-    min: n === 0 ? Number.NaN : sorted[0]!,
-    max: n === 0 ? Number.NaN : sorted[n - 1]!,
+    min: sorted[0]!,
+    max: sorted[n - 1]!,
   };
 }
 
 interface TaskRow {
   task: Task;
   domainId: string | null;
-  /** Latest estimate per source for this task. */
+  /**
+   * Estimate per source for this task: the LATEST created at or before the
+   * task's FIRST session (a real prediction). Fallback: that source's FIRST
+   * (earliest) estimate, so a source that only guessed after the work still
+   * shows up — but hindsight re-estimates made after finishing never win.
+   */
   latestBySource: Map<string, Estimate>;
   minutes: number;
 }
@@ -124,18 +136,39 @@ function latestEstimates(estimates: readonly Estimate[]): Map<string, Map<string
 
 function buildRows(input: AnalyticsInput): TaskRow[] {
   const projectsById = new Map(input.projects.map((p) => [p.id, p]));
-  const latest = latestEstimates(input.estimates);
   const minutesByTask = new Map<string, number>();
+  const firstSessionByTask = new Map<string, Date>();
   for (const session of input.sessions) {
     if (session.taskId == null || session.durationMinutes == null) continue;
     minutesByTask.set(session.taskId, (minutesByTask.get(session.taskId) ?? 0) + session.durationMinutes);
+    const first = firstSessionByTask.get(session.taskId);
+    if (!first || session.startedAt < first) firstSessionByTask.set(session.taskId, session.startedAt);
+  }
+  const estimatesByTask = new Map<string, Estimate[]>();
+  for (const estimate of input.estimates) {
+    const list = estimatesByTask.get(estimate.taskId);
+    if (list) list.push(estimate);
+    else estimatesByTask.set(estimate.taskId, [estimate]);
   }
   return input.tasks.map((task) => {
     const project = task.projectId != null ? projectsById.get(task.projectId) : undefined;
+    const cutoff = firstSessionByTask.get(task.id);
+    const bySource = new Map<string, Estimate>();
+    const all = [...(estimatesByTask.get(task.id) ?? [])].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1),
+    );
+    const firstBySource = new Map<string, Estimate>();
+    for (const estimate of all) {
+      if (!firstBySource.has(estimate.source)) firstBySource.set(estimate.source, estimate);
+      if (cutoff == null || estimate.createdAt <= cutoff) bySource.set(estimate.source, estimate);
+    }
+    for (const [source, first] of firstBySource) {
+      if (!bySource.has(source)) bySource.set(source, first); // fallback: the earliest guess
+    }
     return {
       task,
       domainId: task.domainId ?? project?.domainId ?? null,
-      latestBySource: latest.get(task.id) ?? new Map<string, Estimate>(),
+      latestBySource: bySource,
       minutes: minutesByTask.get(task.id) ?? 0,
     };
   });
@@ -172,12 +205,13 @@ export function estimateAccuracy(input: AnalyticsInput): EstimateAccuracy {
   }
 
   const materialize = (map: Map<string, number[]>) =>
-    Object.fromEntries([...map.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, list]) => [key, stats(list)]));
+    Object.fromEntries([...map.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, list]) => [key, stats(list)!]));
 
+  const ENERGY_LEVELS: Energy[] = ['low', 'med', 'high'];
   return {
     overall: stats(overall),
     byDomain: materialize(byDomain),
-    byEnergy: materialize(byEnergy) as Record<Energy, RatioStats>,
+    byEnergy: Object.fromEntries(ENERGY_LEVELS.map((level) => [level, stats(byEnergy.get(level) ?? [])])) as Record<Energy, RatioStats | null>,
     bySource: materialize(bySource),
   };
 }
@@ -205,7 +239,7 @@ export function calibrationFactor(input: AnalyticsInput): CalibrationResult {
   if (ratios.length < CALIBRATION_MIN_SAMPLES) {
     return { factor: null, sampleSize: ratios.length, basis: 'not-enough-data' };
   }
-  return { factor: stats(ratios).median, sampleSize: ratios.length, basis: 'enough-data' };
+  return { factor: stats(ratios)!.median, sampleSize: ratios.length, basis: 'enough-data' };
 }
 
 export interface DomainTime {
@@ -214,20 +248,33 @@ export interface DomainTime {
   sessions: number;
 }
 
-/** Attributed work minutes per domain, in the whole input (caller windows it). */
+/**
+ * Attributed work minutes per domain, in the whole input (caller windows it).
+ *
+ * The project comes from the SHARED rule (`sessionProjectId`: an explicit
+ * session project wins, else the task's project — so a W10 "minimum viable
+ * session" started from a project counts for that project). The DOMAIN is the
+ * task's own when it has one (even inside another domain's project), else the
+ * project's. Sessions with neither a task nor a project are practice and stay
+ * out of every table.
+ */
 export function timePerDomain(input: AnalyticsInput): DomainTime[] {
-  const rows = buildRows(input);
-  const tasksById = new Map(rows.map((r) => [r.task.id, r]));
+  const projectOfTask = projectOfTaskIndex(input.tasks);
+  const projectsById = new Map(input.projects.map((p) => [p.id, p]));
+  const tasksById = new Map(input.tasks.map((t) => [t.id, t]));
   const byDomain = new Map<string | null, DomainTime>();
   for (const session of input.sessions) {
-    if (session.taskId == null || session.durationMinutes == null) continue;
-    const row = tasksById.get(session.taskId);
-    if (!row) continue;
-    const key = row.domainId;
-    const current = byDomain.get(key) ?? { domainId: key, minutes: 0, sessions: 0 };
+    if (session.durationMinutes == null) continue;
+    const task = session.taskId != null ? tasksById.get(session.taskId) : undefined;
+    const projectId = sessionProjectId(session, projectOfTask);
+    const project = projectId != null ? projectsById.get(projectId) : undefined;
+    if (session.taskId != null && !task) continue; // task row gone: cannot attribute
+    if (task == null && project == null) continue; // practice, or an unknown project
+    const domainId = task?.domainId ?? project?.domainId ?? null;
+    const current = byDomain.get(domainId) ?? { domainId, minutes: 0, sessions: 0 };
     current.minutes += session.durationMinutes;
     current.sessions += 1;
-    byDomain.set(key, current);
+    byDomain.set(domainId, current);
   }
   return [...byDomain.values()].sort((a, b) => b.minutes - a.minutes);
 }
@@ -272,6 +319,8 @@ export interface CadenceWeek {
   sessions: number;
   target: number;
   met: boolean;
+  /** True for the week that is still happening: no verdict yet unless `met`. */
+  inProgress: boolean;
 }
 
 export interface CadenceAdherence {
@@ -317,16 +366,26 @@ export function cadenceAdherence(input: AnalyticsInput): CadenceAdherence[] {
     }
     const weekRows: CadenceWeek[] = allWeeks.map((weekKey) => {
       const sessions = weeks.get(weekKey) ?? 0;
-      return { weekKey, sessions, target: project.cadencePerWeek!, met: sessions >= project.cadencePerWeek! };
+      return {
+        weekKey,
+        sessions,
+        target: project.cadencePerWeek!,
+        met: sessions >= project.cadencePerWeek!,
+        inProgress: weekKey === nowWeek,
+      };
     });
+    // The in-progress week gets no verdict unless it already met the target
+    // (nothing can undo a met week), so a Wednesday with 1 of 2 sessions is
+    // not "an unmet week": it is still happening.
+    const verdictWeeks = weekRows.filter((week) => !week.inProgress || week.met);
     result.push({
       projectId: project.id,
       title: project.title,
       // Guarded at collection time (only projects WITH a target are collected).
       targetPerWeek: project.cadencePerWeek!,
       weeks: weekRows,
-      metWeeks: weekRows.filter((w) => w.met).length,
-      totalWeeks: weekRows.length,
+      metWeeks: verdictWeeks.filter((week) => week.met).length,
+      totalWeeks: verdictWeeks.length,
     });
   }
   return result.sort((a, b) => b.metWeeks - a.metWeeks);
@@ -345,14 +404,16 @@ export interface InboxThroughput {
  * counts as unprocessed — documented limitation, not a guess).
  */
 export function inboxThroughput(input: AnalyticsInput, windowDays = 90): InboxThroughput {
-  const from = new Date(input.now);
-  from.setDate(from.getDate() - windowDays);
-  const fromWeek = weekKeyFor(from);
+  // The window is in LOCAL DAYS, not instants: a task made any time on the
+  // boundary day is inside, whatever the wall clock of `now` is (day-key
+  // arithmetic via addDays, so DST weeks cannot shift the boundary).
+  const fromKey = addDays(toLocalDateString(input.now), -windowDays);
+  const fromWeek = mondayOf(fromKey);
   const byWeek = new Map<string, { captured: number; processed: number }>();
   let captured = 0;
   let processed = 0;
   for (const task of input.tasks) {
-    if (task.createdAt < from) continue;
+    if (toLocalDateString(task.createdAt) < fromKey) continue;
     captured += 1;
     const isProcessed = task.status !== 'inbox';
     if (isProcessed) processed += 1;

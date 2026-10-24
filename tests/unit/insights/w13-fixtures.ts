@@ -163,6 +163,20 @@ export function generateHistory(seed: number): SyntheticHistory {
         updatedAt: createdAt,
       });
 
+      // A hindsight re-estimate AFTER the work finished (must be ignored by
+      // the analytics: a prediction made after the last session is not a guess).
+      if (rand() < 0.3) {
+        estimates.push({
+          id: uuidFrom(taskCounter * 10 + 9, 'est'),
+          taskId: id,
+          source: 'user',
+          minutes: 1, // would distort the ratio wildly if it ever won
+          rationale: null,
+          createdAt: new Date(createdAt.getTime() + 30 * 3600 * 1000),
+          updatedAt: new Date(createdAt.getTime() + 30 * 3600 * 1000),
+        });
+      }
+
       // Sessions attributing exactly `actual` minutes to this task.
       const parts = 1 + Math.floor(rand() * 3);
       let remaining = actual;
@@ -190,6 +204,30 @@ export function generateHistory(seed: number): SyntheticHistory {
         } as Session);
       }
     }
+  }
+
+  // W10 "minimum viable sessions": a weekly 10-minute touch directly on a
+  // project (projectId set, NO task) keeping it alive.
+  for (let week = 0; week < 13; week++) {
+    const startedAt = new Date(start + week * 7 * dayMs + 9 * 3600 * 1000);
+    sessions.push({
+      id: uuidFrom(90000 + week, 'ses'),
+      startedAt,
+      endedAt: new Date(startedAt.getTime() + 10 * 60 * 1000),
+      durationMinutes: 10,
+      reps: null,
+      rating: 3,
+      activityLabel: 'touch',
+      note: undefined,
+      coachComment: null,
+      calendarEventId: null,
+      failedLLM: false,
+      taskId: null,
+      projectId: projects[0]!.id,
+      blockId: null,
+      createdAt: startedAt,
+      updatedAt: startedAt,
+    } as Session);
   }
 
   return { sessions, tasks, projects, estimates };

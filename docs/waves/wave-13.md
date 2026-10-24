@@ -30,8 +30,19 @@
   attributed total; identical results over shuffled input; six zones agree on
   every zone-independent number; cadence weeks sum back to session counts.
 
+## Statistical definitions (one sentence each)
+
+- **Median of an even number of ratios**: the average of the two middle values
+  after sorting the clamped ratios ascending (odd counts take the middle
+  value).
+- **p25/p75**: nearest-rank quantiles — the value at index `ceil(q·n) − 1` of
+  the sorted ratios (no interpolation).
+
 ## Choices where the roadmap was silent
 
+- An estimate counts as a prediction only if it was created at or before the
+  task's FIRST session; a source with no such estimate falls back to its
+  earliest guess, and hindsight re-estimates made after the work never win.
 - `actual` is recomputed from attributed sessions (an export of derived data,
   never a writer of it) rather than trusting `Task.actualMin`.
 - "Latest estimate per source" breaks ties on createdAt then id, so imports
