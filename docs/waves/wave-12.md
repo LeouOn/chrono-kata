@@ -1,7 +1,7 @@
 # Wave 12 — journal and domain accountability
 
 **Status:** in progress · **PRs:** part 1 (pure logic, schema fields and the write path), part 2 (the
-journal, shutdown and template screens), then export and search · **Roadmap:** Wave 12 · **Lane:** B
+journal, shutdown and template screens), part 3 (export and search) · **Roadmap:** Wave 12 · **Lane:** B
 
 ## What shipped (part 1)
 
@@ -173,6 +173,43 @@ journal, shutdown and template screens), then export and search · **Roadmap:** 
   the rollback proof (and four more); format-only day key → "refuses an invalid
   day key".
 
+## What shipped (part 3)
+
+- **Export card**: the day, its Monday-based week or its local calendar month as markdown, built from
+  the stored rows each time and handed over with the same order the calendar and error-log exports use
+  (native share, then download, then clipboard). The card says in one line what the file is and is not:
+  *"This is a readable copy of your journal. It is not a backup."* The button is disabled until the
+  entries have loaded, so a fast click cannot export a document that says the range is empty.
+- **Search card**: case- and whitespace-insensitive search across the journal, the shutdown note and
+  tomorrow's first move, newest first, with a one-line preview and the fields that matched; every hit
+  links to `/journal?date=…`. Results are computed by the part-1 pure function, so a multi-word query
+  finds an entry whose words span a line break.
+- **Bidi controls stripped** in `escapeInline` (the polish queued from part 1's review): U+202A–E and
+  the isolate set are removed rather than escaped, so a title cannot visually reverse the text around
+  it in a viewer.
+- `journalRepo.listAll()` reads every day plan newest first for search and the range export (no index:
+  a scan over a few thousand rows).
+
+### Part 3 tests
+
+- `tests/unit/journal/JournalExportSearch.test.tsx` (11): `listAll` newest first; the day/week/month
+  exports equal the pure functions byte for byte and their filenames follow the range; the
+  "not a backup" line; a failed hand-off says so and the button works again; the day export is
+  disabled until the list loads (a held read proves it) and for a day with no entry while its week can
+  still be exported; search finds multi-word phrases across a line break and a double space, reports
+  the field, links to the day, says when nothing matches, matches nothing for a blank query, and
+  searches the shutdown note and tomorrow's first move.
+- `tests/e2e/w12-journal.spec.ts` (7): the part-2 cases plus search across days with a line-break
+  phrase (link opens that day) and an export that captures the downloaded file and checks its
+  headings, quoted journal text, no raw `<`, and the range-specific filename.
+- Mutants: export ignores the chosen range; export from a list that has not loaded; search matches raw
+  text; `listAll` oldest first; bidi controls not stripped - each red on a named test.
+
+### Part 3 gates
+
+- `tsc --noEmit` 0, `eslint src tests` 0, the journal + repo test files 79/79, `npm run build` 0, the
+  journal spec 7/7 exit 0 (single run; the repeat-each run is the lead's gate).
+
 ## Known properties and deferred polish
 
 - **A deleted task's id stays in the record until the next write that changes
@@ -183,10 +220,8 @@ journal, shutdown and template screens), then export and search · **Roadmap:** 
   the only visible effect is a stale id for at most one save. Accepted rather
   than fixed in part 1: rewriting the row to prune would make every no-op write
   a write.
-- **Bidi control characters (U+202E and friends) still pass through titles.**
-  They do not create markdown structure, but some viewers can visually reverse
-  text around them. Stripping them in `escapeInline` is queued for part 3, with
-  the inline-escaping tests.
+- **Bidi control characters** (U+202E and friends) are stripped in `escapeInline`
+  as of part 3.
 
 ## Gates (part 1)
 

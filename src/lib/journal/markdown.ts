@@ -24,9 +24,18 @@ export function quoteBlock(text: string): string {
     .join('\n');
 }
 
+/**
+ * Bidirectional control characters: RLO/LRO/PDF and the isolate set can visually
+ * reverse or reorder the text around them in some viewers. They cannot create
+ * markdown structure, but they can make a title read as something else, so they
+ * are removed rather than escaped.
+ */
+const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+
 /** One line of user text, flattened and escaped so it stays one inert list item. */
 export function escapeInline(text: string): string {
   return text
+    .replace(BIDI_CONTROLS, '')
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/&/g, '&amp;')

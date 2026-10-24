@@ -224,6 +224,9 @@ describe('inline escaping: titles and domain names are external text', () => {
     'trailing backslash\\',
     `long ${'x'.repeat(300)}`,
     '& &amp; &lt;',
+    // Bidi controls would let a title visually reverse the text around it.
+    'safe\u202Etxet desrever\u202C',
+    'isolate\u2067inside\u2069',
   ];
 
   /** The inverse of escapeInline, for the round-trip assertion. */
@@ -253,9 +256,12 @@ describe('inline escaping: titles and domain names are external text', () => {
       }
       const item = out.split('\n').find((line) => line.startsWith('- [x] '))!;
       // Flattened onto one line, and no raw HTML can pass through.
-      // No raw HTML can pass through, and the visible text is recoverable.
+      // No raw HTML can pass through, no bidi control survives, and the visible
+      // text is recoverable.
       expect(item).not.toContain('<');
-      expect(unescapeInline(item.slice('- [x] '.length))).toBe(title.replace(/\s+/g, ' ').trim());
+      expect(item).not.toMatch(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/);
+      const stripped = title.replace(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '');
+      expect(unescapeInline(item.slice('- [x] '.length))).toBe(stripped.replace(/\s+/g, ' ').trim());
     }
   });
 

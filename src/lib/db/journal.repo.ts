@@ -16,6 +16,8 @@ import { isDayKey } from '@/lib/pacing/days';
 export interface JournalRepository {
   /** The day's plan, or null. */
   findByDate(date: string): Promise<DayPlan | null>;
+  /** Every day plan, newest first — what search and the range export read. */
+  listAll(): Promise<DayPlan[]>;
   /** Save the journal text for a day (creates a bare plan when the day has none). */
   saveJournal(date: string, journal: string, now?: Date): Promise<DayPlan>;
   /**
@@ -52,6 +54,11 @@ export interface DayPlanFields {
 export class DexieJournalRepository implements JournalRepository {
   async findByDate(date: string): Promise<DayPlan | null> {
     return (await getDb().dayPlans.get(assertDayKey(date))) ?? null;
+  }
+
+  async listAll(): Promise<DayPlan[]> {
+    const rows = await getDb().dayPlans.toArray();
+    return rows.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   async saveJournal(date: string, journal: string, now: Date = new Date()): Promise<DayPlan> {
