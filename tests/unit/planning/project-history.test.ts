@@ -3,9 +3,12 @@ import { addDays } from '@/lib/pacing/days';
 import { cadenceProgress, projectOfTaskIndex } from '@/lib/planning/cadence';
 import {
   NEXT_TASKS_SHOWN,
+  latestSessionNote,
+  outcomeLabel,
   projectNextAction,
   projectSessions,
   projectSummaries,
+  projectStatusLabel,
   projectTimeline,
   rhythmLines,
   timeInvested,
@@ -137,7 +140,7 @@ describe('projectNextAction', () => {
       const notNext = [t({ status: 'inbox' }), t({ status: 'waiting' }), t({ status: 'done', doneAt: daysAgo(1) })];
       const foreign = makeTask({ projectId: other.id, touchedAt: daysAgo(0) });
 
-      const got = projectNextAction(project, [old, fresh, mid, deferred, releasedDefer, foreign, ...notNext], NOW(), 10);
+      const got = projectNextAction(project, [old, fresh, mid, deferred, releasedDefer, foreign, ...notNext], NOW(), { limit: 10 });
       expect(got.breadcrumb).toBe('Review chapter 3');
       expect(got.nextTasks.map((x) => x.title)).toEqual(['fresh', 'released', 'mid', 'old']);
     });
@@ -150,6 +153,46 @@ describe('projectNextAction', () => {
       const got = projectNextAction(project, tasks, NOW());
       expect(got.nextTasks).toHaveLength(NEXT_TASKS_SHOWN);
       expect(got.breadcrumb).toBeNull();
+    });
+  });
+});
+
+describe('the note shown as "pick up here"', () => {
+  const noteAt = (daysBack: number, text: string) => ({ at: daysAgo(daysBack), text });
+
+  it('falls back to the latest session note when the project has none of its own', () => {
+    inZone('UTC', () => {
+      const project = makeProject({ breadcrumb: null });
+      expect(projectNextAction(project, [], NOW(), { sessionNote: noteAt(1, 'start the storm') }).breadcrumb).toBe('start the storm');
+      expect(projectNextAction(project, [], NOW()).breadcrumb).toBeNull();
+    });
+  });
+
+  it('prefers a session note that is newer than the project\'s last update (a task session)', () => {
+    inZone('UTC', () => {
+      const project = makeProject({ breadcrumb: 'older own note', updatedAt: daysAgo(5) });
+      expect(projectNextAction(project, [], NOW(), { sessionNote: noteAt(1, 'newer session note') }).breadcrumb).toBe('newer session note');
+    });
+  });
+
+  it('keeps the project\'s own note when it was written after the latest session (a review edit)', () => {
+    inZone('UTC', () => {
+      const project = makeProject({ breadcrumb: 'typed in the weekly review', updatedAt: daysAgo(1) });
+      expect(projectNextAction(project, [], NOW(), { sessionNote: noteAt(4, 'old session note') }).breadcrumb).toBe('typed in the weekly review');
+    });
+  });
+
+  it('latestSessionNote is the newest note in a newest-first timeline, skipping sessions without one', () => {
+    inZone('UTC', () => {
+      const project = makeProject({});
+      const sessions = [
+        makeSession({ projectId: project.id, startedAt: daysAgo(0, 18), breadcrumb: null }),
+        makeSession({ projectId: project.id, startedAt: daysAgo(0, 9), breadcrumb: ' the lighthouse ' }),
+        makeSession({ projectId: project.id, startedAt: daysAgo(3), breadcrumb: 'older' }),
+      ];
+      expect(latestSessionNote(projectTimeline(sessions))).toEqual({ at: daysAgo(0, 9), text: 'the lighthouse' });
+      expect(latestSessionNote(projectTimeline([sessions[0]!]))).toBeNull();
+      expect(latestSessionNote([])).toBeNull();
     });
   });
 });
@@ -251,6 +294,17 @@ describe('projectSummaries: the project list', () => {
       expect(ofA.progress).toEqual(cadenceProgress(a, sessions, NOW(), projectOfTaskIndex([task])));
       expect(ofA.progress.debt).toBe(2); // 10 of 90 minutes
     });
+  });
+});
+
+describe('labels', () => {
+  it('names every status and outcome in calm words, and "dropped" never appears', () => {
+    const statuses = ['active', 'paused', 'done', 'dropped'] as const;
+    expect(statuses.map(projectStatusLabel)).toEqual(['Active', 'Paused', 'Finished', 'Let go']);
+    for (const status of statuses) expect(projectStatusLabel(status)).not.toMatch(GUILT);
+    expect([outcomeLabel('done'), outcomeLabel('progress'), outcomeLabel('blocked')]).toEqual(['Done', 'Progress', 'Blocked']);
+    expect(outcomeLabel(null)).toBeNull();
+    expect(outcomeLabel(undefined)).toBeNull();
   });
 });
 

@@ -137,21 +137,55 @@ export function projectTimeline(sessionsOfProject: readonly SessionLike[]): Time
 /** How many tasks "what is next" lists. */
 export const NEXT_TASKS_SHOWN = 3;
 
+export interface SessionNote {
+  readonly at: Date;
+  readonly text: string;
+}
+
+/** The newest "pick up here" note in a timeline (newest first), or null. */
+export function latestSessionNote(timeline: readonly TimelineDay[]): SessionNote | null {
+  for (const day of timeline) {
+    for (const entry of day.entries) {
+      if (entry.breadcrumb) return { at: entry.at, text: entry.breadcrumb };
+    }
+  }
+  return null;
+}
+
 export interface NextAction {
-  /** The project's latest "after this, do X" note. */
+  /** The newest "after this, do X" note: the project's own, or the latest session's. */
   readonly breadcrumb: string | null;
   /** Its `next` tasks that are not deferred, most recently touched first. */
   readonly nextTasks: Task[];
 }
 
-/** What to do next on a project: its note, and a few of its next tasks. */
+/**
+ * What to do next on a project: its newest note, and a few of its next tasks.
+ *
+ * A session on the project itself writes its note to the project too, but a
+ * session on one of its TASKS (nearly all of them) only writes it to the task,
+ * so the project's own `breadcrumb` is often empty or behind. The note shown is
+ * therefore the newer of the two: the latest session note if that session
+ * started after the project was last updated, otherwise the project's own (a
+ * note typed in the weekly review is newer than the sessions before it).
+ */
 export function projectNextAction(
-  project: Pick<Project, 'id' | 'breadcrumb'>,
+  project: Pick<Project, 'id' | 'breadcrumb' | 'updatedAt'>,
   tasks: readonly Task[],
   now: Date,
-  limit: number = NEXT_TASKS_SHOWN,
+  options: { readonly limit?: number; readonly sessionNote?: SessionNote | null } = {},
 ): NextAction {
-  const note = typeof project.breadcrumb === 'string' ? project.breadcrumb.trim() : '';
+  const limit = options.limit ?? NEXT_TASKS_SHOWN;
+  const own = typeof project.breadcrumb === 'string' ? project.breadcrumb.trim() : '';
+  const fromSession = options.sessionNote ?? null;
+  const note =
+    own !== '' && fromSession !== null
+      ? fromSession.at.getTime() > project.updatedAt.getTime()
+        ? fromSession.text
+        : own
+      : own !== ''
+        ? own
+        : (fromSession?.text ?? '');
   const nextTasks = tasks
     .filter((task) => task.projectId === project.id && task.status === 'next')
     .filter((task) => !task.deferUntil || task.deferUntil.getTime() <= now.getTime())
@@ -237,4 +271,32 @@ export function projectSummaries(input: {
     if (byTitle !== 0) return byTitle;
     return a.project.id < b.project.id ? -1 : a.project.id > b.project.id ? 1 : 0;
   });
+}
+
+/** A project's status in the words the app uses: never "dropped" on screen. */
+export function projectStatusLabel(status: Project['status']): string {
+  switch (status) {
+    case 'active':
+      return 'Active';
+    case 'paused':
+      return 'Paused';
+    case 'done':
+      return 'Finished';
+    case 'dropped':
+      return 'Let go';
+  }
+}
+
+/** How a session ended, in the neutral words of the end-of-session sheet. */
+export function outcomeLabel(outcome: SessionOutcome | null | undefined): string | null {
+  switch (outcome) {
+    case 'done':
+      return 'Done';
+    case 'progress':
+      return 'Progress';
+    case 'blocked':
+      return 'Blocked';
+    default:
+      return null;
+  }
 }
