@@ -130,6 +130,10 @@ export type LowEnergyRestThreshold = z.infer<typeof LowEnergyRestThresholdSchema
 /** Default low-energy threshold; matches the pacing engine's rest floor. */
 export const DEFAULT_LOW_ENERGY_REST_THRESHOLD: LowEnergyRestThreshold = 2;
 
+/** Remembered .ics subscription address: https only, bounded, schema-checked
+ * as the NORMALISED value (percent-encoding inflates non-ASCII addresses). */
+export const IcsSubscriptionUrlSchema = z.string().url().startsWith('https://').max(500);
+
 export const SettingsSchema = z.object({
   id: z.literal('singleton'),
   displayName: z.string().max(50).optional(),
@@ -163,6 +167,8 @@ export const SettingsSchema = z.object({
   wakingHours: WakingHoursSchema.optional(),
   /** Recurring protected windows. Absent on rows written before planning existed. */
   anchors: z.array(AnchorSchema).optional(),
+  /** Remembered .ics subscription address (https only); stored only when the user opts in. */
+  icsSubscriptionUrl: IcsSubscriptionUrlSchema.nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
