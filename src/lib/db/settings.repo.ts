@@ -29,21 +29,43 @@ export class DexieSettingsRepository implements SettingsRepository {
     await getDb().settings.put(settings);
   }
 
+  /**
+   * Merge a patch into the stored row.
+   *
+   * The read and the write are ONE transaction: two patches that overlap (the
+   * two waking-hours inputs save on every change, for example) must not both
+   * read the old row and let the later write drop the earlier field. Dexie
+   * serialises transactions on the same table, so every caller — `setFlag`,
+   * `setLLMRouting`, the planning and settings screens — inherits the fix.
+   */
   async patch(patch: Partial<Settings>): Promise<Settings> {
-    const current = await this.get();
-    const updated: Settings = { ...current, ...patch, updatedAt: new Date() };
-    await getDb().settings.put(updated);
-    return updated;
+    return this.patchWith(() => patch);
+  }
+
+  /**
+   * Merge against the row as it is INSIDE the transaction.
+   *
+   * A caller that has to look at the current value before deciding what to
+   * write (a flag toggle merges into the other flags) must do that read here,
+   * not with a separate `get()` first: a value read outside the transaction can
+   * be stale by the time the write lands.
+   */
+  private async patchWith(merge: (current: Settings) => Partial<Settings>): Promise<Settings> {
+    const db = getDb();
+    return db.transaction('rw', db.settings, async () => {
+      const current = await this.get();
+      const updated: Settings = { ...current, ...merge(current), updatedAt: new Date() };
+      await db.settings.put(updated);
+      return updated;
+    });
   }
 
   async setFlag(flag: FlagName, value: boolean): Promise<Settings> {
-    const current = await this.get();
-    return this.patch({ flags: withFlag(current.flags, flag, value) });
+    return this.patchWith((current) => ({ flags: withFlag(current.flags, flag, value) }));
   }
 
   async setLLMRouting(routing: LLMRouting | undefined): Promise<Settings> {
-    const current = await this.get();
-    return this.patch({ llmRouting: routing });
+    return this.patchWith(() => ({ llmRouting: routing }));
   }
 }
 
