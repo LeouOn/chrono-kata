@@ -123,6 +123,41 @@ describe('what a copy holds', () => {
   });
 });
 
+describe('making a copy writes nothing to the app\'s data', () => {
+  it('a device without settings, streak or AI-settings records gets none created by a copy, and the copy restores fine', async () => {
+    const data = buildDataset(515, 'sparse', keys());
+    for (const table of ['settings', 'streak', 'llmSettings', 'tokens', 'pendingCalendarOps']) delete (data as Record<string, unknown>)[table];
+    // seed only what the person made
+    const db = getDb();
+    await db.domains.clear();
+    for (const [table, rows] of Object.entries(data)) await db.table(table).bulkPut(rows);
+    expect(await db.settings.count()).toBe(0);
+    const before = await readDb();
+
+    const made = await makeDailyCopyIfDue(new Date(2026, 5, 9, 9, 0));
+    if (!made.ok || !('copy' in made)) throw new Error('no copy made');
+    const after = await readDb();
+    for (const t of Object.keys(before)) expect(diffTable(t, keys()[t]!, before[t]!, after[t]!), t).toEqual([]);
+    expect(after.settings).toEqual([]);
+    expect(after.streak).toEqual([]);
+    expect(after.llmSettings).toEqual([]);
+
+    const parsed = parseEnvelope((await readCopyText(made.copy.id))!);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.envelope.settings).toBeNull();
+    expect(parsed.envelope.tasks!.length).toBe(data.tasks!.length);
+    expect(parsed.skipped).toBe(0);
+  });
+
+  it('while saving a file the person asked for still creates the defaults it always did', async () => {
+    await getDb().tasks.put(buildDataset(516, 'sparse', keys()).tasks![0] as never);
+    expect(await getDb().settings.count()).toBe(0);
+    const file = await collectAll();
+    expect(file.settings).not.toBeNull();
+    expect(await getDb().settings.count()).toBe(1);
+  });
+});
+
 describe('how many are kept', () => {
   it('the newest N, 7 unless the person chose otherwise, from a choice of 3, 7, 14, 30', async () => {
     expect(getKeep()).toBe(DEFAULT_KEEP);

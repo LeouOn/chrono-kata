@@ -14,13 +14,14 @@ import { AutoCopyRunner } from '@/components/system/AutoCopyRunner';
 import { ToastProvider } from '@/components/ui/Toast';
 import { COPIES_DB_NAME, deleteAllCopies, getCopiesDb } from '@/lib/copies/copies-db';
 import { HONEST_LIMIT, copyLabel, copySummary, lastCopyLine } from '@/lib/copies/text';
+import { COLLECTIONS } from '@/lib/data-transfer/collections';
 import { listCopies, makeCopy, readCopyText } from '@/lib/copies/copies';
 import { parseEnvelope } from '@/lib/data-transfer/import';
 import { resetDbForTesting } from '@/lib/db/db';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { diffTable } from '../data-transfer/oracle/compare';
 import { buildDataset } from '../data-transfer/oracle/dataset';
-import { backupTextOf, expectedAfterPlainRestore, primaryKeys, readDb, seedDb } from '../data-transfer/oracle/harness';
+import { backupTextOf, primaryKeys, readDb, seedDb } from '../data-transfer/oracle/harness';
 
 const keys = () => primaryKeys();
 
@@ -49,6 +50,13 @@ async function flagOn() {
   await settingsRepo.setFlag('taskInbox', true);
 }
 
+/** Seed a generated dataset whose settings keep the preview flag on (a random settings row would switch it off). */
+async function seedFlagged(data: ReturnType<typeof buildDataset>) {
+  (data.settings![0] as Record<string, unknown>).flags = { taskInbox: true };
+  await seedDb(data);
+  return data;
+}
+
 describe('flag off: nothing', () => {
   it('shows no card, makes no copy, and does not even open the copies database', async () => {
     await seedDb(buildDataset(601, 'sparse', keys()));
@@ -63,9 +71,9 @@ describe('the card', () => {
   beforeEach(flagOn);
 
   it('starts with "No copy yet.", makes one on request, and then says "Last copy: today."', async () => {
-    await seedDb(buildDataset(602, 'full', keys()));
+    await seedFlagged(buildDataset(602, 'full', keys()));
     wrap(<CopiesSettings />);
-    expect((await screen.findByTestId('last-copy')).textContent).toBe('No copy yet.');
+    await waitFor(() => expect(screen.getByTestId('last-copy').textContent).toBe('No copy yet.'));
     expect(screen.getByText(HONEST_LIMIT)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Make a copy now' }));
     await waitFor(() => expect(screen.getByTestId('last-copy').textContent).toBe('Last copy: today.'));
@@ -90,18 +98,18 @@ describe('the card', () => {
   });
 
   it('keeps fewer when asked, applying it at once and saying so', async () => {
-    await seedDb(buildDataset(603, 'sparse', keys()));
+    await seedFlagged(buildDataset(603, 'sparse', keys()));
     for (let i = 0; i < 5; i += 1) await makeCopy('manual', new Date(2026, 5, 1 + i, 9, 0));
     wrap(<CopiesSettings />);
     await screen.findAllByTestId('copy-item');
-    fireEvent.change(screen.getByLabelText('Keep the last'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText(/^Keep the last/), { target: { value: '3' } });
     await waitFor(() => expect(screen.getAllByTestId('copy-item')).toHaveLength(3));
     expect(screen.getByTestId('copies-message').textContent).toBe('Keeping the last 3 copies.');
-    expect((screen.getByLabelText('Keep the last') as HTMLSelectElement).value).toBe('3');
+    expect((screen.getByLabelText(/^Keep the last/) as HTMLSelectElement).value).toBe('3');
   });
 
   it('deletes a copy only after asking, and never touches the data', async () => {
-    await seedDb(buildDataset(604, 'sparse', keys()));
+    await seedFlagged(buildDataset(604, 'sparse', keys()));
     await makeCopy('manual', new Date(2026, 5, 1, 9, 0));
     const before = await readDb();
     wrap(<CopiesSettings />);
@@ -125,7 +133,7 @@ describe('the card', () => {
   });
 
   it('names every control by its visible text (copies by their time) and makes the targets large', async () => {
-    await seedDb(buildDataset(605, 'sparse', keys()));
+    await seedFlagged(buildDataset(605, 'sparse', keys()));
     await makeCopy('manual', new Date());
     wrap(<CopiesSettings />);
     const item = await screen.findByTestId('copy-item');
@@ -134,7 +142,7 @@ describe('the card', () => {
       expect(b.getAttribute('aria-label') ?? b.textContent).toMatch(/Today, \d\d:\d\d|Look at this copy/);
     }
     expect(screen.getByRole('button', { name: 'Make a copy now' }).className).toMatch(/min-h-11/);
-    expect(screen.getByLabelText('Keep the last').className).toMatch(/min-h-11/);
+    expect(screen.getByLabelText(/^Keep the last/).className).toMatch(/min-h-11/);
   });
 });
 
@@ -143,7 +151,7 @@ describe('restore from a copy', () => {
 
   it('puts the data back as it was when the copy was made, and the replaced state is itself kept as a copy (so it can be undone)', async () => {
     const data = buildDataset(606, 'full', keys());
-    await seedDb(data);
+    await seedFlagged(data);
     const made = await makeCopy('manual');
     if (!made.ok || !('copy' in made)) throw new Error('no copy');
     // A bad day: every task gone, a project renamed.
@@ -164,7 +172,8 @@ describe('restore from a copy', () => {
 
     const after = await readDb();
     const problems: string[] = [];
-    for (const [t, rows] of Object.entries(expectedAfterPlainRestore(data))) problems.push(...diffTable(t, keys()[t]!, rows, after[t] ?? []));
+    // The data the person made comes back as it was. (Settings, keys and the sign-in are the device's: see the secrets rule.)
+    for (const { key } of COLLECTIONS) problems.push(...diffTable(key, keys()[key]!, data[key]!, after[key] ?? []));
     expect(problems.join('\n')).toBe('');
 
     // The state it replaced was kept first.
@@ -179,7 +188,7 @@ describe('restore from a copy', () => {
   });
 
   it('a copy that cannot be read is not offered for restore, and says so', async () => {
-    await seedDb(buildDataset(607, 'sparse', keys()));
+    await seedFlagged(buildDataset(607, 'sparse', keys()));
     const made = await makeCopy('manual');
     if (!made.ok || !('copy' in made)) throw new Error('no copy');
     await getCopiesDb().copies.update(made.copy.id, { payload: Uint8Array.from([9, 9, 9, 9, 9, 9, 9, 9]) });
@@ -195,7 +204,7 @@ describe('the copy made before an import', () => {
 
   async function openImport(deviceSeed: number, fileSeed: number) {
     const device = buildDataset(deviceSeed, 'full', keys());
-    await seedDb(device);
+    await seedFlagged(device);
     wrap(<DataTransfer />);
     await screen.findByText(/Importing shows you what will change first/);
     const file = buildDataset(fileSeed, 'full', keys());
@@ -264,7 +273,7 @@ describe('the idle runner', () => {
   beforeEach(flagOn);
 
   it('makes the day\'s copy when the browser is idle, only once, and not at all if the page goes away first', async () => {
-    await seedDb(buildDataset(620, 'sparse', keys()));
+    await seedFlagged(buildDataset(620, 'sparse', keys()));
     const queued: (() => void)[] = [];
     vi.stubGlobal('requestIdleCallback', (cb: () => void) => queued.push(cb));
     vi.stubGlobal('cancelIdleCallback', vi.fn());
@@ -298,7 +307,7 @@ describe('the idle runner', () => {
   });
 
   it('falls back to a timer where idle callbacks do not exist', async () => {
-    await seedDb(buildDataset(621, 'sparse', keys()));
+    await seedFlagged(buildDataset(621, 'sparse', keys()));
     vi.stubGlobal('requestIdleCallback', undefined);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
@@ -314,7 +323,7 @@ describe('the idle runner', () => {
 describe('Clear all data', () => {
   it('takes the automatic copies with it (a wipe that left them behind would not be one)', async () => {
     await flagOn();
-    await seedDb(buildDataset(630, 'sparse', keys()));
+    await seedFlagged(buildDataset(630, 'sparse', keys()));
     await makeCopy('manual');
     await makeCopy('manual', new Date(Date.now() - 86_400_000));
     expect(await listCopies()).toHaveLength(2);
@@ -332,7 +341,7 @@ describe('Clear all data', () => {
   });
 
   it('with the flag off the words are the old ones, and it still clears any copies that exist', async () => {
-    await seedDb(buildDataset(631, 'sparse', keys()));
+    await seedFlagged(buildDataset(631, 'sparse', keys()));
     await makeCopy('manual');
     const reload = vi.fn();
     vi.stubGlobal('location', { ...window.location, reload });

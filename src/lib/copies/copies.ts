@@ -108,7 +108,7 @@ function countsOf(envelope: Record<string, unknown>): Record<string, number> {
 }
 
 async function build(reason: CopyReason, now: Date): Promise<CopyRow> {
-  const envelope = await collectAll();
+  const envelope = await collectAll({ createDefaults: false }); // a copy writes nothing to the app's data
   const packed = await pack(JSON.stringify(envelope));
   return {
     id: newId(),
