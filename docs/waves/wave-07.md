@@ -57,6 +57,44 @@ No UI, no DB writes and no LLM in this part.
 - Week view is **deferred**: the roadmap's done-when is about the day; a week
   view needs multi-day capacity semantics first.
 
+## Review fixes and the adopted oracle (PR #40)
+
+dev-lead's independent layout oracle (250 random cases × 18 zones on real DST
+days) found four issues, all fixed here:
+
+1. **`replanFromNow` dropped picks whose block was still in the future**
+   (`keptTaskIds` was built from every existing block, not just the started
+   ones; 352 violations/250 cases). It now subtracts only `kept` picks, so a
+   not-yet-started block is superseded and its pick is re-laid; the doc says the
+   caller replaces those future blocks. Kept blocks also reserve a gap around
+   themselves, so the 5-minute rule holds between a kept and a re-laid block.
+   A dedicated replan test file covers kept/re-laid/overflow partition,
+   determinism, no-overlap with kept blocks, an ended day and the six DST nights.
+2. **`moveBlock` snapped with floor**, making a drag asymmetric (+8 min moved
+   0, −8 moved −15) while resize used nearest. It now snaps to the **nearest**
+   step; ±7 minutes stays put, ±8 moves a step.
+3. **Blocks could land off the step grid at an off-grid window edge** (a
+   07:07–22:00 waking window). Move and resize now clamp to the first grid point
+   at or after the window start and the last at or before the window end.
+4. **The "day is over" branch returned `unplaced` in input order.** It now uses
+   the same deterministic order; the shuffle test covers the before/inside/after
+   `now` branches.
+
+The oracle is adopted as `tests/unit/planning/layout-oracle.test.ts` (60 cases ×
+7 zones including Auckland/Chatham/Lord Howe, completeness and replan-partition
+checks), credited to dev-lead. Mutations for each fix turn the intended test red.
+
+## Known gaps
+
+- The step is **5 or 15 minutes**: the grid is anchored at the Unix epoch, which
+  equals the local clock grid for those steps in every real zone, but not for
+  30/60-minute steps in a +5:45 zone (Nepal). Guard/clamp any other step later.
+- The energy split uses local noon of the window's start day, so for an
+  overnight window starting in the evening the high-energy rule never applies
+  (v1 behaviour).
+- The 5-minute gap is enforced between proposed blocks and after kept blocks,
+  not next to fixed commitments or anchors. By design.
+
 ## Not in this part
 
 The timeline UI, fixed-commitment CRUD, applying a proposal, drag/resize,

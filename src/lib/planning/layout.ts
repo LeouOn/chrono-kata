@@ -97,19 +97,35 @@ function snapUp(instant: number, stepMin: number): number {
  * Move a block by `deltaMs`, snapped, clamped to the window, keeping its length.
  * A window too short for the block clamps the block's end to the window.
  */
+/** First grid point at or after an instant (the grid is anchored at the epoch). */
+function gridCeil(instant: number, stepMin: number): number {
+  return snapUp(instant, stepMin);
+}
+
+/** Last grid point at or before an instant. */
+function gridFloor(instant: number, stepMin: number): number {
+  return snapDown(instant, stepMin);
+}
+
+/**
+ * Move a block by `deltaMs`, snapped to the NEAREST step (so a drag feels the
+ * same up and down), clamped so both edges stay on the grid and inside the
+ * window. The duration is preserved.
+ */
 export function moveBlock(
   block: Interval,
   deltaMs: number,
   window: LayoutWindow,
   stepMin: number = DEFAULT_STEP_MIN,
 ): Interval {
-  const duration = Math.max(stepMin * MINUTE_MS, block.end - block.start);
-  let start = snapDown(block.start + deltaMs, stepMin);
-  start = Math.max(window.start, Math.min(start, window.end - duration));
-  start = snapDown(start, stepMin);
-  if (start < window.start) start = window.start;
-  const end = Math.min(start + duration, window.end);
-  return { start, end };
+  const step = Math.max(1, stepMin) * MINUTE_MS;
+  const duration = Math.max(step, block.end - block.start);
+  const gridStart = gridCeil(window.start, stepMin);
+  const gridEnd = gridFloor(window.end, stepMin);
+  const lastStart = Math.max(gridStart, gridFloor(window.end - duration, stepMin));
+  const snapped = snapToStep(block.start + deltaMs, stepMin, 'nearest');
+  const start = Math.min(Math.max(snapped, gridStart), lastStart);
+  return { start, end: start + duration };
 }
 
 /**
@@ -124,13 +140,19 @@ export function resizeBlock(
   stepMin: number = DEFAULT_STEP_MIN,
 ): Interval {
   const step = Math.max(1, stepMin) * MINUTE_MS;
+  const gridStart = gridCeil(window.start, stepMin);
+  const gridEnd = gridFloor(window.end, stepMin);
   if (edge === 'start') {
-    let start = snapToStep(target, stepMin, 'nearest');
-    start = Math.max(window.start, Math.min(start, block.end - step));
+    const start = Math.min(
+      Math.max(snapToStep(target, stepMin, 'nearest'), gridStart),
+      block.end - step,
+    );
     return { start, end: block.end };
   }
-  let end = snapToStep(target, stepMin, 'nearest');
-  end = Math.min(window.end, Math.max(end, block.start + step));
+  const end = Math.max(
+    Math.min(snapToStep(target, stepMin, 'nearest'), gridEnd),
+    block.start + step,
+  );
   return { start: block.start, end };
 }
 
@@ -241,7 +263,7 @@ export function proposeLayout(input: ProposeLayoutInput): LayoutResult {
   const gap = MIN_GAP_MIN * MINUTE_MS;
   const earliestStart = snapUp(Math.max(input.now, input.window.start), stepMin);
   if (earliestStart >= input.window.end) {
-    return { blocks: [], unplaced: [...input.picks] };
+    return { blocks: [], unplaced: deterministicOrder(input.picks) };
   }
   const window: LayoutWindow = { start: earliestStart, end: input.window.end };
   const noon = noonBoundary(window.start);
@@ -264,14 +286,14 @@ export function proposeLayout(input: ProposeLayoutInput): LayoutResult {
         .map((interval) => ({ start: interval.start, end: Math.min(interval.end, noon) }))
         .filter((interval) => interval.end - interval.start >= duration);
       slot =
-        earliestSlot(beforeNoon, duration, window.start, step, window.start) ??
-        earliestSlot(free, duration, window.start, step, window.start);
+        earliestSlot(beforeNoon, duration, window.start, step, 0) ??
+        earliestSlot(free, duration, window.start, step, 0);
     } else if (energy === 'low') {
       slot =
-        earliestSlot(free, duration, Math.max(window.start, noon), step, window.start) ??
-        earliestSlot(free, duration, window.start, step, window.start);
+        earliestSlot(free, duration, Math.max(window.start, noon), step, 0) ??
+        earliestSlot(free, duration, window.start, step, 0);
     } else {
-      slot = earliestSlot(free, duration, window.start, step, window.start);
+      slot = earliestSlot(free, duration, window.start, step, 0);
     }
 
     if (!slot) {
@@ -295,20 +317,30 @@ export function proposeLayout(input: ProposeLayoutInput): LayoutResult {
  */
 export function replanFromNow(input: ReplanInput): ReplanResult {
   const stepMin = input.stepMin ?? DEFAULT_STEP_MIN;
-  const kept = input.existingFocusBlocks.filter((block) => block.start <= input.now);
+  const now = input.now;
+  const kept = input.existingFocusBlocks.filter((block) => block.start <= now);
   const keptTaskIds = new Set(
-    input.existingFocusBlocks.map((block) => block.taskId).filter((id): id is string => typeof id === 'string'),
+    kept.map((block) => block.taskId).filter((id): id is string => typeof id === 'string'),
   );
 
-  // Picks still to place: the ones asked for, minus any already kept/started.
+  // Picks still to place: everything asked for except the ones whose block
+  // already started (or finished). A pick whose old block is still in the
+  // future is exactly what "replan from now" must re-lay: the caller replaces
+  // its superseded future block.
   const remaining = input.picks.filter((pick) => !keptTaskIds.has(pick.id));
 
+  const gap = MIN_GAP_MIN * MINUTE_MS;
   const proposal = proposeLayout({
     picks: remaining,
     window: input.window,
-    fixedBlocks: [...input.fixedBlocks, ...kept.map((block) => ({ start: block.start, end: block.end }))],
+    fixedBlocks: [
+      ...input.fixedBlocks,
+      ...kept.map((block) => ({ start: block.start - gap, end: block.end + gap })),
+    ],
+    // Kept blocks reserve their time for the relaid picks with the same gap
+    // rule proposeLayout uses between proposed blocks.
     anchors: input.anchors,
-    now: input.now,
+    now,
     stepMin,
   });
 
