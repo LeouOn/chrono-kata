@@ -48,7 +48,7 @@ actually exists.
 | W8 | Calendar interop (local-first) | partial (ICS UI in review; native later) | M | C | native calendar |
 | W9 | Work block → timed session flow | partial | M | B | outcome + breadcrumb, session links |
 | W10 | Long projects without heroic pushes | partial (part 1 of 3) | M | B | project page, revive card, minimum viable session |
-| W11 | Weekly review wizard | partial (data core) | M | B | Review+stats shipped; wizard/AI next |
+| W11 | Weekly review wizard | partial (data + wizard) | M | B | Review, stats and wizard shipped; AI step next |
 | W12 | Journal and domain accountability | missing | M | B | journal, shutdown ritual, markdown export |
 | W13 | Analytics and calibration | partial | M | A | estimate accuracy, calibration, CSV export |
 | W14 | AI coach upgrade (context and tools) | partial | L | C | tool-calling, prompt library, modes |
@@ -424,7 +424,7 @@ where dropping happens, so they must agree).
 
 ## W11 — Weekly review wizard
 
-**Status:** partial (data core shipped 2026-10-24) · **Size:** M · **Lanes:** B · **Depends on:** W1 (Task/Project), W6
+**Status:** partial (data core and wizard shipped 2026-10-24; AI summary step next) · **Size:** M · **Lanes:** B · **Depends on:** W1 (Task/Project), W6
 
 **Evidence**
 - Exists: an AI weekly reflection — `generateWeeklyReflection()` in `src/lib/llm/llm-service.ts`,
@@ -437,8 +437,11 @@ where dropping happens, so they must agree).
   transactional `complete`, local-Monday week keys (`src/lib/review/week.ts`) and pure weekly stats
   (`src/lib/review/stats.ts`: domain balance, week-scoped estimate vs actual, waiting tasks, cadence
   debt, moved/stalled). Backup envelope carries both tables as optional fields.
-- Missing: the wizard itself — no guided 6-step flow, no inbox clearing, no sweep list, no domain
-  balance, no estimate check, no "shape next week".
+- Shipped (wizard, 2026-10-24): `/review` with the six steps (inbox via `ProcessMode`, waiting sweep
+  with keep/reshape/defer/let-go and undo, projects with pause + breadcrumb, domain balance, estimate
+  check, shape next week), a progress indicator, pause/resume through `ReviewDraft` (`latestDraft()`
+  across the week boundary), and an atomic finish. Intended rhythm per project writes
+  `Project.cadencePerWeek`; next-week intentions are stored on the review.
 - Missing: the optional AI summary step wired into the review flow (the generator exists; the review
   does not call it yet).
 

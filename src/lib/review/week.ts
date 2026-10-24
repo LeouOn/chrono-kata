@@ -40,6 +40,25 @@ export function weekKeyFor(date: Date): string {
   return mondayOf(toLocalDateString(date));
 }
 
+/** The Monday of the week before `weekOf`. */
+export function weekBefore(weekOf: string): string {
+  return addDays(mondayOf(weekOf), -7);
+}
+
+/**
+ * A short human label for the week, e.g. "15 June". Formatted in UTC from the
+ * bare calendar date, so the label cannot drift a day with the device zone.
+ */
+export function formatWeekLabel(weekOf: string): string {
+  const monday = mondayOf(weekOf);
+  const [y, m, d] = monday.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
 /**
  * The instants that bound the week: local midnight on its Monday and local
  * midnight on the next one. A DST week is 167 or 169 hours long, so callers

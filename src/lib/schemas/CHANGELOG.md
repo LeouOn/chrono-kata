@@ -1,5 +1,18 @@
 # Schema Changelog
 
+## 2026-10-24 — Review intentions for the week ahead (roadmap W11, wizard)
+
+`review.ts`: `Review` gains optional `nextWeekIntentions`, a record of minutes
+per domain id for the week AFTER the reviewed one. The wizard's last step
+("shape next week") writes it, and the next week's review reads it as the aim
+its domain balance is measured against — the roadmap has no other home for a
+forward-looking intention, and putting it on the reviewed week's review needs no
+extra table. Optional and non-indexed, so Dexie stays on **v8** and rows written
+before this change remain valid. The value is produced by
+`IntentionsSchema` in `src/lib/review/decisions.ts`, which also bounds it to a
+real week of minutes (0–10,080), so the input and the stored value share one
+limit.
+
 ## 2026-10-24 — Weekly review and resumable draft (roadmap W11, data core)
 
 New `review.ts`: `Review` (keyed by the local Monday `weekOf`, `notes` up to

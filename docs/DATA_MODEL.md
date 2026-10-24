@@ -119,8 +119,11 @@ Schemas are the boundary: repos validate on write, import validates on read.
   `observations` (1–5 strings), `question`, `sourceSessionIds`, `createdAt`.
 - **review** (`review.ts`): `weekOf` (primary key — the local Monday day key of
   the reviewed week), `notes` (≤ 10,000), an optional `statsSnapshot` (the
-  `WeeklyStatsSchema` object from `src/lib/review/stats.ts`), `createdAt`,
-  `updatedAt`. One review per week; existence means the review was completed.
+  `WeeklyStatsSchema` object from `src/lib/review/stats.ts`), an optional
+  `nextWeekIntentions` (minutes per domain for the following week, written by
+  the wizard's last step and read by the next review), `createdAt`, `updatedAt`.
+  One review per week; existence means the review was completed. Additive and
+  non-indexed, so it needs no Dexie version.
 - **reviewDraft** (`review.ts`): `weekOf` (primary key), `step` (0–5, the
   zero-based wizard step), `decisions` (open record owned by the wizard: what
   the user chose in each step so far), `updatedAt`. Indexed by `updatedAt` so

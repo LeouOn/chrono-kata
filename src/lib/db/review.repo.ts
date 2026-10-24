@@ -67,6 +67,7 @@ export function buildReview(
     weekOf,
     notes: patch.notes ?? existing?.notes ?? '',
     statsSnapshot,
+    nextWeekIntentions: patch.nextWeekIntentions ?? existing?.nextWeekIntentions,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   });
