@@ -33,11 +33,6 @@ function minutesOf(clock: string): number {
 }
 
 /**
- * Planning settings (roadmap Wave 6, behind `taskInbox`): waking hours and the
- * recurring protected windows ("anchors"). Optional fields, saved through the
- * settings repository, so backups already round-trip them.
- */
-/**
  * The waking-hours inputs fire with '' every time somebody clears one to retype
  * it. That is an incomplete edit, not a failure: it must abort the write quietly
  * (no red toast), unlike a real storage error.
@@ -49,6 +44,11 @@ export class IncompleteWakingHours extends Error {
   }
 }
 
+/**
+ * Planning settings (roadmap Wave 6, behind `taskInbox`): waking hours and the
+ * recurring protected windows ("anchors"). Optional fields, saved through the
+ * settings repository, so backups already round-trip them.
+ */
 export function PlanningSettings() {
   const enabled = useFlag('taskInbox');
   const { settings, updateSettings, updateSettingsWith } = useSettings();
