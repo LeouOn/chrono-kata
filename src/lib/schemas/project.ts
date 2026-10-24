@@ -27,6 +27,14 @@ const ProjectBaseSchema = z.object({
   stallAfterDays: z.number().int().min(3).max(365).nullable().optional(),
   /** Latest denormalized next step ("after this, do X"). */
   breadcrumb: z.string().max(500).nullable().optional(),
+  /**
+   * Wave 10: when `breadcrumb` last CHANGED. `updatedAt` moves on every write to
+   * the row (pausing, a cadence edit, any session), so it cannot tell a newer
+   * session note from an older project note; this can. Stamped by the project
+   * repository, never passed in, absent on rows from before this field
+   * (readers fall back to `updatedAt`). Optional and not indexed (no Dexie bump).
+   */
+  breadcrumbAt: z.date().nullable().optional(),
   lastTouchedAt: z.date(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -40,5 +48,6 @@ export const ProjectInputSchema = ProjectBaseSchema.omit({
   createdAt: true,
   updatedAt: true,
   lastTouchedAt: true,
+  breadcrumbAt: true,
 });
 export type ProjectInput = z.infer<typeof ProjectInputSchema>;

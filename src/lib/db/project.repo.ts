@@ -22,6 +22,11 @@ export interface ProjectRepository {
   delete(id: string): Promise<void>;
 }
 
+/** A note's text as the app compares it: trimmed, and blank is "no note". */
+function noteText(value: string | null | undefined): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 export class DexieProjectRepository implements ProjectRepository {
   async getAll(): Promise<Project[]> {
     const all = await getDb().projects.toArray();
@@ -57,6 +62,7 @@ export class DexieProjectRepository implements ProjectRepository {
       lastTouchedAt: now,
       createdAt: now,
       updatedAt: now,
+      ...(noteText(parsed.breadcrumb) !== '' ? { breadcrumbAt: now } : {}),
     });
     await getDb().projects.put(project);
     return project;
@@ -67,12 +73,18 @@ export class DexieProjectRepository implements ProjectRepository {
     return db.transaction('rw', db.projects, async () => {
       const existing = await db.projects.get(id);
       if (!existing) throw new Error(`Project ${id} not found`);
+      const now = new Date();
+      // The note's own time moves only when its TEXT changes: a write that merely
+      // re-sends the same note (pausing in the weekly review, a cadence edit) must
+      // not make an old note look new. Nothing a caller passes can set it.
+      const noteChanged = 'breadcrumb' in patch && noteText(patch.breadcrumb) !== noteText(existing.breadcrumb);
       const updated = ProjectSchema.parse({
         ...existing,
         ...patch,
         id: existing.id,
         createdAt: existing.createdAt,
-        updatedAt: new Date(),
+        updatedAt: now,
+        breadcrumbAt: noteChanged ? now : existing.breadcrumbAt,
       });
       await db.projects.put(updated);
       return updated;

@@ -66,7 +66,10 @@ export function TodayPlanCard() {
     <Card className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xs uppercase tracking-wide text-text-muted">Today&apos;s plan</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-x-3">
+          <Link href="/projects" className="text-xs text-accent min-h-11 flex items-center">
+            Projects
+          </Link>
           <Link href="/timeline" className="text-xs text-accent min-h-11 flex items-center">
             Timeline
           </Link>

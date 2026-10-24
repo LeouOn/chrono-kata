@@ -104,6 +104,9 @@ describe('Wave 1 backup round-trip', () => {
     expect(project.cadencePerWeek).toBe(2);
     // Wave 10 fields: optional, so older backups lack them and still import.
     expect(project.cadenceBlockMin).toBe(45);
+    // The note's own time (stamped by the repository) is a Date again after the JSON round trip.
+    expect(project.breadcrumbAt).toBeInstanceOf(Date);
+    expect(project.breadcrumbAt!.getTime()).toBe(before.projects![0]!.breadcrumbAt!.getTime());
     expect(project.stallAfterDays).toBe(10);
     expect(project.breadcrumb).toBe('after this: pick 3 projects');
 
