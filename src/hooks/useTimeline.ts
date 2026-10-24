@@ -11,7 +11,7 @@ import type { AnchorInterval as DatedAnchor } from '@/lib/planning/anchors';
 import { wakingWindow } from '@/lib/planning/time';
 import { proposeLayout, type Interval, type ProposedBlock } from '@/lib/planning/layout';
 import type { Block, BlockInput } from '@/lib/schemas/block';
-import type { Settings } from '@/lib/schemas/settings';
+import type { Settings, WakingHours } from '@/lib/schemas/settings';
 
 export const TIMELINE_STEP_MIN = 15;
 
@@ -27,14 +27,12 @@ export interface TimelineView {
 }
 
 /** Blocks that overlap a day's waking window (any kind). Flag-gated. */
-export function useDayBlocks(dayKey: string) {
+export function useDayBlocks(dayKey: string, wakingHours: WakingHours) {
   const enabled = useFlag('taskInbox');
+  const window = wakingWindow(dayKey, wakingHours);
   return useQuery({
-    queryKey: ['timelineBlocks', dayKey],
-    queryFn: async () => {
-      const window = wakingWindow(dayKey, { start: '00:00', end: '23:59' });
-      return blockRepo.range(new Date(window.start), new Date(window.end));
-    },
+    queryKey: ['timelineBlocks', dayKey, window.start, window.end],
+    queryFn: async () => blockRepo.range(new Date(window.start), new Date(window.end)),
     enabled,
   });
 }
@@ -46,7 +44,7 @@ export function useTimeline(dayKey: string, settings: Settings | null | undefine
   const anchorDefs = useMemo(() => resolveAnchors(settings), [settings]);
   const window = useMemo(() => wakingWindow(dayKey, wakingHours), [dayKey, wakingHours]);
   const anchors = useMemo(() => anchorsWithinWindow(anchorDefs, dayKey, window), [anchorDefs, dayKey, window]);
-  const blocksQuery = useDayBlocks(dayKey);
+  const blocksQuery = useDayBlocks(dayKey, wakingHours);
   const plan = usePlanToday(dayKey);
 
   const blocks = blocksQuery.data ?? [];
@@ -118,23 +116,7 @@ export function useApplyLayout(dayKey: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ blocks }: { blocks: ProposedBlock[] }) => {
-      const window = wakingWindow(dayKey, { start: '00:00', end: '23:59' });
-      const existing = await blockRepo.range(new Date(window.start), new Date(window.end));
-      const focus = existing.filter((block) => block.kind === 'focus');
-      const now = new Date();
-      for (const block of focus) {
-        await blockRepo.delete(block.id);
-      }
-      for (const proposed of blocks) {
-        await blockRepo.create({
-          start: new Date(proposed.start),
-          end: new Date(proposed.end),
-          kind: 'focus',
-          title: 'Focus',
-          taskId: proposed.taskId,
-        });
-      }
-      void now;
+      await blockRepo.replaceFutureFocus(windowDates(dayKey), new Date(), blocks);
     },
     onSuccess: () => {
       invalidate(qc, dayKey);
@@ -142,6 +124,12 @@ export function useApplyLayout(dayKey: string) {
       void qc.invalidateQueries({ queryKey: ['plan'] });
     },
   });
+}
+
+/** The calendar window the apply transaction scopes itself to. */
+function windowDates(dayKey: string): { start: Date; end: Date } {
+  const window = wakingWindow(dayKey, { start: '00:00', end: '23:59' });
+  return { start: new Date(window.start), end: new Date(window.end) };
 }
 
 export type { Interval };

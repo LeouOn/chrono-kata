@@ -6,8 +6,12 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useFlag } from '@/hooks/useFlags';
 import { useTasks } from '@/hooks/useTasks';
+import { useSettings } from '@/hooks/useSettings';
+import { resolveWakingHours } from '@/lib/planning/resolve';
+import { useMemo } from 'react';
 import { usePlanToday, useTodayKey } from '@/hooks/usePlanning';
 import { useDayBlocks } from '@/hooks/useTimeline';
+import { useNow } from '@/hooks/useNow';
 import { useSessionLauncher } from '@/components/session/SessionLauncher';
 import { DEFAULT_PICK_MINUTES } from '@/lib/planning/overcommit';
 
@@ -21,8 +25,11 @@ export function TodayPlanCard() {
   const dayKey = useTodayKey();
   const { dayPlan, capacity } = usePlanToday(dayKey);
   const { data: tasks = [] } = useTasks({ enabled });
-  const { data: blocks = [] } = useDayBlocks(dayKey);
+  const { settings } = useSettings();
+  const wakingHours = useMemo(() => resolveWakingHours(settings), [settings]);
+  const { data: blocks = [] } = useDayBlocks(dayKey, wakingHours);
   const sessionLauncher = useSessionLauncher();
+  const now = useNow();
 
   if (!enabled) return null;
 
@@ -31,7 +38,6 @@ export function TodayPlanCard() {
     .map((id) => taskById.get(id))
     .filter((task): task is NonNullable<typeof task> => task !== undefined && task.status !== 'done' && task.status !== 'dropped');
 
-  const now = Date.now();
   const focusWithTask = blocks
     .filter((block) => block.kind === 'focus' && block.taskId && taskById.has(block.taskId))
     .filter((block) => {
@@ -67,7 +73,7 @@ export function TodayPlanCard() {
           <Button
             variant="ghost"
             className="shrink-0 min-h-11 px-3 text-sm border border-border"
-            aria-label={`Start a session for ${taskById.get(current.taskId!)?.title}`}
+            aria-label={`Start now: ${taskById.get(current.taskId!)?.title}`}
             onClick={() =>
               sessionLauncher.openForLink({
                 taskId: current.taskId!,
@@ -88,7 +94,7 @@ export function TodayPlanCard() {
           <Button
             variant="ghost"
             className="shrink-0 min-h-11 px-3 text-sm border border-border"
-            aria-label={`Start a session for ${taskById.get(next.taskId!)?.title}`}
+            aria-label={`Start next: ${taskById.get(next.taskId!)?.title}`}
             onClick={() =>
               sessionLauncher.openForLink({
                 taskId: next.taskId!,

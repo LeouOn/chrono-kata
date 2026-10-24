@@ -73,13 +73,14 @@ test('propose writes focus blocks only on Apply, and Today shows Now or Next', a
   // Apply writes the proposal.
   await page.getByRole('button', { name: /propose a layout/i }).click();
   await page.getByRole('button', { name: /apply this layout/i }).click();
-  await expect(page.getByRole('button', { name: /focus block/i }).first()).toBeVisible();
+  // Applied focus blocks show the TASK title, not three identical "Focus" labels.
+  await expect(page.getByRole('button', { name: /focus block write the report/i }).first()).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: /focus block/i }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /focus block write the report/i }).first()).toBeVisible();
 
   // Home's Today card shows the block as Now or Next with Start.
   await page.goto('/');
   await expect(page.getByText("Today's plan")).toBeVisible();
   await expect(page.getByText(/^(Now|Next) · /)).toBeVisible();
-  await expect(page.getByRole('button', { name: /start a session for/i }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Start (now|next):/ }).first()).toBeVisible();
 });

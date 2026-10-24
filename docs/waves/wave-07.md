@@ -87,26 +87,46 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
 ## Shipped (part 2 — the day timeline)
 
 - **`/timeline`** (flag-gated like the rest of planning): one column from the
-  waking window to its end, hour lines, a now line, fixed commitments, anchors
-  (read-only, from Settings), focus blocks, and a plain "nothing fits" state.
-  A proposed layout renders above the day as dashed ghosts until Apply; Cancel
-  writes nothing.
+  waking window to its end, **local** hour lines (not UTC hours: India and Nepal
+  would otherwise get :30/:45 lines), a ticking now line, fixed commitments,
+  anchors (read-only, tapping one points to Settings > Planning), focus blocks,
+  and a plain "nothing fits" state. A proposed layout renders above the day as
+  dashed ghosts until Apply; Cancel writes nothing.
+- **Overnight windows are real**: the block sheet maps a clock to the first
+  instant at or after the window start with that local clock, so in a
+  20:00–02:00 day "00:30" belongs to the next date and 23:00–01:00 saves;
+  block queries use the waking window, not the calendar day. A daytime
+  11:00–10:00 is still refused.
 - **Adding and editing is never drag-only**: "Add a commitment" and tapping any
   block open a labelled sheet (Title/From/Until) with inline validation
   ("The end time needs to be after the start"), a double-submit guard and a
   two-step remove. Fixed-commitment create/update/delete go through
   `blockRepo`; a focus block keeps its task link when its times move.
-- **Apply is one action**: `useApplyLayout` replaces the day's focus blocks with
-  the proposal inside a single Dexie transaction; picks that do not fit are not
+- **Apply is one action**: `blockRepo.replaceFutureFocus` replaces only the
+  day's **not-yet-started** focus blocks with the proposal inside a single Dexie
+  transaction; blocks that already started are history and survive a replan,
+  and a failure rolls the whole write back. Picks that do not fit are not
   written and stay on the task list. Nothing is written before Apply.
+- **A focus block wears its task's name**: the timeline and the sheet read the
+  task title through `taskId`, so a rename shows up without rewriting blocks.
+  The edit sheet heading is "Focus block for <task>".
 - **Today card** gained a Now/Next line with until/at clock and Start (the
   block's duration becomes the session estimate) linked to the same session
-  launcher, plus a Timeline link.
-- Tests: `tests/unit/timeline/timeline-screen.test.tsx` (flag gate, add once
-  under a double submit, end-before-start writes nothing, edit, confirm-remove),
-  `timeline-proposal.test.tsx` (ghost then Apply, cancel writes nothing, single
-  Apply), `tests/e2e/w7-timeline.spec.ts` at 390×844 (persisted commitment,
-  edit, remove, propose/apply, Today Now/Next). Hand-rolled geometry stays
+  launcher, plus a Timeline link. One shared `useNow()` hook (30 s tick plus
+  focus/visibility) drives both that strip and the timeline's now line, so a
+  block ending stops reading "Now" without needing another render.
+- Tests: `timeline-screen` (flag gate, add once under a double submit, empty
+  title and end-before-start write nothing, edit, confirm-remove),
+  `timeline-proposal` (ghost then Apply, cancel writes nothing, single Apply),
+  `timeline-apply` (two Apply clicks in one act write once),
+  `timeline-overnight` (00:30 lands next day, 23:00–01:00 saves),
+  `timeline-hours` (Kolkata/Kathmandu local hours, 25/23-hour DST days),
+  `timeline-display` (task title on a focus block, anchor note, now-line
+  window), `today-now-next` (Now/Next and the block length as Start's
+  estimate, never stale after the end), `use-now` (tick and focus),
+  `block-replace-future` (started blocks kept, atomic rollback),
+  `clock-at-or-after` (DST nights in LA/Helsinki), and
+  `tests/e2e/w7-timeline.spec.ts` at 390×844. Hand-rolled geometry stays
   dependency-free; PR 3 adds pointer drag/resize on the same geometry and a
   keyboard/tap path for every move.
 
@@ -120,6 +140,11 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   (v1 behaviour).
 - The 5-minute gap is enforced between proposed blocks and after kept blocks,
   not next to fixed commitments or anchors. By design.
+- **Overlapping blocks are drawn on top of each other** (all full-width), so
+  the covered block cannot be tapped. PR 2 lets a commitment be added over a
+  focus block, so this is reachable today. **PR 3 must lay overlaps out in
+  side-by-side lanes (interval-graph colouring in `layout.ts`, unit-tested) and
+  add the conflict UI.**
 
 ## Not in this part
 

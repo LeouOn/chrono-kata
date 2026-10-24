@@ -66,6 +66,18 @@ describe('timeline screen', () => {
     expect(saved.start.getMinutes()).toBe(7);
   });
 
+  it('refuses an empty title with a plain message and writes nothing', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: /add a commitment/i }));
+    fireEvent.change(await screen.findByLabelText('From'), { target: { value: '09:00' } });
+    fireEvent.change(screen.getByLabelText('Until'), { target: { value: '10:00' } });
+    fireEvent.submit(screen.getByRole('button', { name: /save block/i }).closest('form')!);
+    expect((await screen.findByRole('alert')).textContent).toMatch(/give this block a title/i);
+    const db = await getDb();
+    expect(await db.blocks.count()).toBe(0);
+  });
+
   it('refuses an end before the start with a plain message and writes nothing', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     renderScreen();

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -8,6 +8,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { useTasks } from '@/hooks/useTasks';
 import { useTodayKey } from '@/hooks/usePlanning';
 import { useTimeline, useFixedBlockMutations, useApplyLayout, TIMELINE_STEP_MIN } from '@/hooks/useTimeline';
+import { useNow } from '@/hooks/useNow';
 import { snapToStep } from '@/lib/planning/layout';
 import { Timeline, toTimelineBlocks, type TimelineBlock } from './Timeline';
 import { BlockSheet } from './BlockSheet';
@@ -39,12 +40,23 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
     | null
   >(null);
   const [error, setError] = useState<string | null>(null);
+  const [anchorNotice, setAnchorNotice] = useState(false);
   const [applying, setApplying] = useState(false);
+  const applyingRef = useRef(false);
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task] as const)), [tasks]);
   const entries = useMemo(
-    () => toTimelineBlocks([...timeline.fixedBlocks, ...timeline.focusBlocks], timeline.anchors),
-    [timeline.fixedBlocks, timeline.focusBlocks, timeline.anchors],
+    () =>
+      toTimelineBlocks([...timeline.fixedBlocks, ...timeline.focusBlocks], timeline.anchors)
+        .filter((entry) => entry.end > timeline.window.start && entry.start < timeline.window.end)
+        // A focus block shows its task's current name: a rename is visible without
+        // rewriting the block, and applied blocks are not all called "Focus".
+        .map((entry) =>
+          entry.kind === 'focus' && entry.block?.taskId
+            ? { ...entry, title: taskById.get(entry.block.taskId)?.title ?? entry.title }
+            : entry,
+        ),
+    [timeline.fixedBlocks, timeline.focusBlocks, timeline.anchors, timeline.window, taskById],
   );
   const ghosts = useMemo(() => {
     if (!preview || !timeline.proposal) return [];
@@ -55,7 +67,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
       title: taskById.get(block.taskId)?.title ?? 'Focus',
     }));
   }, [preview, timeline.proposal, taskById]);
-  const now = Date.now();
+  const now = useNow();
   const sheetInitial = sheet
     ? sheet.mode === 'new'
       ? { kind: sheet.kind, title: '', start: sheet.start, end: sheet.end }
@@ -79,7 +91,11 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   }
 
   function openBlock(entry: TimelineBlock) {
-    if (entry.kind === 'anchor' || !entry.block) return;
+    if (entry.kind === 'anchor') {
+      setAnchorNotice(true);
+      return;
+    }
+    if (!entry.block) return;
     setSheet({ mode: 'edit', block: entry.block, kind: entry.block.kind === 'focus' ? 'focus' : 'fixed' });
   }
 
@@ -105,7 +121,8 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   }
 
   async function apply() {
-    if (!timeline.proposal || applying) return;
+    if (!timeline.proposal || applyingRef.current) return;
+    applyingRef.current = true;
     setApplying(true);
     setError(null);
     try {
@@ -114,6 +131,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not apply the layout.');
     } finally {
+      applyingRef.current = false;
       setApplying(false);
     }
   }
@@ -173,6 +191,23 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
         </p>
       ) : null}
 
+      {anchorNotice ? (
+        <div role="status" className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-text">
+          Protected windows are set in{' '}
+          <Link href="/settings" className="text-accent">
+            Settings &gt; Planning
+          </Link>
+          . They are shown here so you can plan around them.
+          <button
+            type="button"
+            className="ml-2 text-xs text-text-muted underline min-h-11"
+            onClick={() => setAnchorNotice(false)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
       <Card>
         <Timeline
           window={timeline.window}
@@ -190,8 +225,13 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
         <BlockSheet
           key={sheet.mode === 'edit' ? sheet.block.id : `new-${sheet.start}`}
           open
-          dayKey={dayKey}
           initial={sheetInitial ?? undefined}
+          window={timeline.window}
+          focusTaskTitle={
+            sheet && sheet.mode === 'edit' && sheet.block.taskId
+              ? taskById.get(sheet.block.taskId)?.title
+              : undefined
+          }
           onClose={() => setSheet(null)}
           onSave={saveBlock}
           onDelete={sheet.mode === 'edit' ? removeBlock : undefined}

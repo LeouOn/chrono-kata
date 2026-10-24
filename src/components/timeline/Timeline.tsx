@@ -7,6 +7,22 @@ import type { AnchorInterval as DatedAnchor } from '@/lib/planning/anchors';
 const MIN = 60_000;
 const PX_PER_MIN = 1.1;
 
+/**
+ * Local wall-clock hour boundaries inside [start, end]. Anchoring at whole UTC
+ * hours puts the lines at :30 in India (UTC+5:30) and :45 in Nepal (UTC+5:45),
+ * and hides the window's own start label. A DST fall-back day repeats 01:00,
+ * which is truthful and must stay.
+ */
+export function localHourMarks(start: number, end: number): number[] {
+  const first = new Date(start);
+  first.setMinutes(0, 0, 0);
+  let cursor = first.getTime();
+  if (cursor < start) cursor += 60 * MIN;
+  const marks: number[] = [];
+  for (let instant = cursor; instant <= end; instant += 60 * MIN) marks.push(instant);
+  return marks;
+}
+
 export interface TimelineBlock {
   id: string;
   kind: 'fixed' | 'anchor' | 'focus';
@@ -39,10 +55,7 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect }: Pr
   const height = Math.round(minutes * PX_PER_MIN);
   const top = (instant: number) =>
     Math.max(0, Math.min(height, Math.round(((instant - window.start) / MIN) * PX_PER_MIN)));
-  const hours: number[] = [];
-  for (let instant = Math.ceil(window.start / (60 * MIN)) * 60 * MIN; instant <= window.end; instant += 60 * MIN) {
-    hours.push(instant);
-  }
+  const hours = localHourMarks(window.start, window.end);
 
   return (
     <div className="flex gap-2" data-testid="timeline">

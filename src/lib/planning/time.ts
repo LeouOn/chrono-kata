@@ -151,3 +151,19 @@ export function wakingWindow(
   const end = localWallClockToEpoch(endDay, wakingHours.end);
   return { start, end };
 }
+
+/**
+ * The first instant at or after `windowStart` (or strictly after it) whose
+ * local wall clock equals `clock`. This is what the block sheet needs on an
+ * overnight window: in a 20:00-02:00 day the clock 00:30 belongs to the NEXT
+ * calendar date, and 23:00-01:00 must end after it starts. Tries up to three
+ * local dates, so DST transitions and skipped wall clocks stay truthful.
+ */
+export function clockAtOrAfter(windowStart: number, clock: string, strictAfter = false): number {
+  const { dayKey } = epochToLocalClock(windowStart);
+  for (let offset = 0; offset < 4; offset += 1) {
+    const candidate = localWallClockToEpoch(addDays(dayKey, offset), clock);
+    if (strictAfter ? candidate > windowStart : candidate >= windowStart) return candidate;
+  }
+  return localWallClockToEpoch(addDays(dayKey, 4), clock);
+}
