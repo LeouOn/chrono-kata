@@ -1,6 +1,6 @@
 # Wave 10 — Long projects without heroic pushes
 
-**Status:** part 2 of 3 (the project list and page, read-only, behind `taskInbox`) on top of part 1 (pure logic + optional schema fields) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 10
+**Status:** all three parts: part 3 (the gentle offer and the ten-minute session), part 2 (the project list and page, read-only), part 1 (pure logic + optional schema fields), all behind `taskInbox` · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 10
 **Status map:** `docs/ROADMAP_STATUS.md` W10
 
 Three PRs: 1) the pure logic (this part); 2) the project page (a static route
@@ -8,6 +8,44 @@ that reads the project from the query string, like `/sessions/detail`, because
 Android is a static export); 3) the revive card and the minimum viable session
 on Today/Plan and on the project page. Everything user-visible is behind the
 `taskInbox` flag; this part has no UI and writes nothing.
+
+## Part 3: the gentle offer and the ten-minute session (behind `taskInbox`, default OFF)
+
+When a project has gone quiet (see "When is a project stalled?" below), **one** small
+card offers a way back in, and then the app leaves the user alone about it.
+
+- **The offer** (`ReviveCard`, on Home after the Today card and on the plan screen
+  after "Your day"): the project's name, "Worked on 2 weeks ago. Ten minutes is
+  enough to keep it going.", its newest "pick up here" note, and three 44 px
+  controls: **Start 10 minutes**, **Not now**, **Open project**. Nothing on it says
+  stalled, late, behind or missed (tested against the guilt list).
+- **The ten-minute session is the existing session form**, opened through the same
+  `SessionLauncher.openForLink` with `{ projectId, label, estimateMin: 10 }`. There is
+  no second timer. A project-linked session needs its pick-up note to save (W9), which
+  is the whole point: touch the project and leave a note. Saving touches the project,
+  so it is no longer quiet and the offer goes away on its own.
+- **The same button on the project page** ("Start a 10-minute session", for active and
+  paused projects) whether or not it is quiet. Opening the page still writes nothing;
+  only saving the session does.
+
+Restraint is the design (`src/lib/planning/revive.ts`, pure and simulated):
+
+- **At most one offer per local day.** Answering it ("Not now") ends the day's offers.
+- **The same project is not offered again for three local days** after it was put aside.
+- **Which one:** the first in `detectStalls`' order, the project that went quiet most
+  recently (the easiest to pick back up). The consequence, on purpose: the few most
+  recent quiet projects take turns, and the longest-quiet ones simply rest. An unpicked
+  project rests on the list without guilt; the weekly review is where it is let go.
+- **Nothing is changed by the app.** A project is never paused, dropped or marked.
+- **State** is one device-local localStorage key (`chrono-kata-revive`): a quiet day and
+  when each put-aside project may be offered again. It is a UI nicety, not user data: not
+  in the backup, not in the database, tolerant of anything it finds, never throws; losing
+  it only means an offer may show once more.
+- With the flag off the card renders nothing and reads neither the database nor that key.
+
+Not built, on purpose: no setting for the three days or for turning the offer off
+(the preview flag is the off switch), no notification, and no offer for paused,
+finished or let-go projects.
 
 ## Part 2: the project list and the project page (behind `taskInbox`, default OFF)
 
