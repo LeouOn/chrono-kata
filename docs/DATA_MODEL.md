@@ -172,8 +172,10 @@ pages that need several tables at once.
   keys** (environment-sourced providers are dropped from the export);
   `downloadExport()` writes `chrono-kata-backup-YYYY-MM-DD.json`.
 - `import.ts`: `parseEnvelope(json)` revives ISO date strings, validates every
-  row against its Zod schema, dedupes by id (check-ins by `date`), and reports
-  `skipped`; `replaceAll(envelope)` wipes and restores inside one Dexie
+  row against its Zod schema, dedupes by id (check-ins and day plans by `date`,
+  reviews and drafts by `weekOf`), and reports `skipped` plus
+  `snapshotsDropped` (a review whose derived `statsSnapshot` no longer matches
+  the current schema keeps its notes and loses only the snapshot); `replaceAll(envelope)` wipes and restores inside one Dexie
   transaction, preserving locally stored API keys when the file has empty ones,
   and leaves tables untouched when the file omits them.
 - Backup UI: `src/components/settings/DataTransfer.tsx`.

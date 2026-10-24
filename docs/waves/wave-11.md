@@ -34,6 +34,11 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
 - Backup envelope: `reviews` and `reviewDrafts` ride as **optional** fields;
   the envelope stays `version: 2`. An absent key preserves local rows on
   import; a present one replaces them inside `replaceAll`'s transaction.
+- The snapshot is treated as derived data on both paths: an imported review
+  whose snapshot no longer matches the (still growing) stats schema keeps its
+  notes and loses only the snapshot, counted as `snapshotsDropped`; the write
+  path drops a stored snapshot that no longer validates instead of refusing to
+  save the review. `saveDraft` also refuses a decisions payload over 64 KB.
 - `docs/DATA_MODEL.md`, `src/lib/schemas/CHANGELOG.md` and this note updated.
 
 ## Decisions where the roadmap was silent

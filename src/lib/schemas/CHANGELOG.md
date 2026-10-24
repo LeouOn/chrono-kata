@@ -20,6 +20,14 @@ is still found after the week key has changed. The v2 backup envelope carries
 `reviews` and `reviewDrafts` as optional fields; an absent key means "preserve
 local rows", and the envelope version stays 2.
 
+The importer treats the snapshot as derived data: a review row that fails
+validation only because of `statsSnapshot` (a snapshot written by an older build,
+whose schema keeps growing) is restored **without** the snapshot and counted
+separately (`snapshotsDropped`), so the user's notes are never lost. A review
+that is invalid for its own reasons (a non-Monday key, notes over 10,000, bad
+dates) is still skipped. `reviewRepo` applies the same rule on the write path,
+and `saveDraft` refuses a decisions payload above 64 KB with a calm error.
+
 ## 2026-10-24 — Remembered .ics subscription address (roadmap W8 part 2)
 
 `settings.ts` gains optional `icsSubscriptionUrl` (https URL, <= 500 chars,

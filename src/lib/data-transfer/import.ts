@@ -23,7 +23,17 @@ import type { ExportEnvelope, ExportEnvelopeV2 } from './types';
 import { migrateEnvelope } from './migrate';
 
 export type ParseResult =
-  | { ok: true; envelope: ExportEnvelopeV2; skipped: number }
+  | {
+      ok: true;
+      envelope: ExportEnvelopeV2;
+      skipped: number;
+      /**
+       * Reviews whose stored stats snapshot no longer matched the current
+       * schema and were restored without it. Their notes are kept; the numbers
+       * are derived data that a later version can recompute.
+       */
+      snapshotsDropped: number;
+    }
   | { ok: false; error: string };
 
 function reviveDate(value: unknown): Date | null {
@@ -48,6 +58,57 @@ function hasValidDates(row: Record<string, unknown>, fields: string[]): boolean 
     if (v == null) return true;
     return reviveDate(v) != null;
   });
+}
+
+/**
+ * Reviews get their own row mapper because a review carries two kinds of data:
+ * the user's own writing, and a derived stats snapshot whose schema will keep
+ * growing. A snapshot from an older build must never cost the user their notes,
+ * so a row that fails validation only because of `statsSnapshot` is retried
+ * without it. Everything else (a non-Monday week key, notes over the limit, bad
+ * dates) is still skipped and counted.
+ */
+function reviveReviews(rows: unknown): {
+  valid: Review[];
+  skipped: number;
+  snapshotsDropped: number;
+} {
+  if (!Array.isArray(rows)) return { valid: [], skipped: 0, snapshotsDropped: 0 };
+  const valid: Review[] = [];
+  let skipped = 0;
+  let snapshotsDropped = 0;
+  for (const row of rows) {
+    if (typeof row !== 'object' || row === null) {
+      skipped++;
+      continue;
+    }
+    const raw = row as Record<string, unknown>;
+    if (!hasValidDates(raw, REVIEW_DATE_FIELDS)) {
+      skipped++;
+      continue;
+    }
+    const revived = {
+      ...raw,
+      createdAt: reviveDate(raw.createdAt),
+      updatedAt: reviveDate(raw.updatedAt),
+    };
+    const parsed = ReviewSchema.safeParse(revived);
+    if (parsed.success) {
+      valid.push(parsed.data);
+      continue;
+    }
+    if ('statsSnapshot' in revived) {
+      const { statsSnapshot: _dropped, ...withoutSnapshot } = revived;
+      const retried = ReviewSchema.safeParse(withoutSnapshot);
+      if (retried.success) {
+        valid.push(retried.data);
+        snapshotsDropped++;
+        continue;
+      }
+    }
+    skipped++;
+  }
+  return { valid, skipped, snapshotsDropped };
 }
 
 function reviveRows<T>(
@@ -338,17 +399,9 @@ export function parseEnvelope(json: string): ParseResult {
     );
     skipped += estimatesResult.skipped;
 
-    const reviewsResult = dedupeBy(
-      reviveRows(
-        p.reviews === undefined ? [] : p.reviews,
-        ReviewSchema,
-        (row) =>
-          hasValidDates(row, REVIEW_DATE_FIELDS)
-            ? { ...row, createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
-            : null
-      ),
-      (review) => review.weekOf
-    );
+    const reviewRows = reviveReviews(p.reviews === undefined ? [] : p.reviews);
+    const snapshotsDropped = reviewRows.snapshotsDropped;
+    const reviewsResult = dedupeBy(reviewRows, (review) => review.weekOf);
     skipped += reviewsResult.skipped;
 
     const reviewDraftsResult = dedupeBy(
@@ -396,7 +449,7 @@ export function parseEnvelope(json: string): ParseResult {
       ...(p.reviews !== undefined ? { reviews: reviewsResult.unique as Review[] } : {}),
       ...(p.reviewDrafts !== undefined ? { reviewDrafts: reviewDraftsResult.unique as ReviewDraft[] } : {}),
     };
-    return { ok: true, envelope, skipped };
+    return { ok: true, envelope, skipped, snapshotsDropped };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

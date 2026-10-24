@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDbForTesting } from '@/lib/db/db';
-import { reviewRepo } from '@/lib/db/review.repo';
+import { REVIEW_DECISIONS_MAX_BYTES, reviewRepo } from '@/lib/db/review.repo';
 import { summarizeWeek } from '@/lib/review/stats';
 import type { Domain } from '@/lib/schemas/domain';
+import type { Review } from '@/lib/schemas/review';
 
 const WEEK = '2026-06-15';
 const NEXT_WEEK = '2026-06-22';
@@ -54,6 +55,26 @@ describe('upsert', () => {
     expect(await getDb().reviews.count()).toBe(1);
   });
 
+  it('drops a stored snapshot this version cannot read instead of refusing the review', async () => {
+    // An older build wrote a snapshot shape this version no longer accepts.
+    const stale = {
+      weekOf: WEEK,
+      notes: 'older notes',
+      statsSnapshot: { weekOf: WEEK, futureField: true },
+      createdAt: new Date('2026-06-21T18:00:00Z'),
+      updatedAt: new Date('2026-06-21T18:00:00Z'),
+    } as unknown as Review;
+    await getDb().reviews.put(stale);
+
+    const edited = await reviewRepo.upsert(WEEK, { notes: 'edited after an upgrade' });
+    expect(edited.notes).toBe('edited after an upgrade');
+    expect(edited.statsSnapshot).toBeUndefined();
+
+    const completed = await reviewRepo.complete(WEEK, { notes: 'finished after an upgrade' });
+    expect(completed.notes).toBe('finished after an upgrade');
+    expect(completed.statsSnapshot).toBeUndefined();
+  });
+
   it('accepts the schema limit and rejects one character more without writing', async () => {
     await reviewRepo.upsert(WEEK, { notes: 'x'.repeat(10_000) });
     expect((await reviewRepo.getByWeek(WEEK))?.notes).toHaveLength(10_000);
@@ -82,6 +103,12 @@ describe('drafts and pause/resume', () => {
     await reviewRepo.saveDraft(WEEK, { step: 3, decisions: { shape: 'lighter' } }, new Date('2026-06-21T20:10:00'));
     expect(await getDb().reviewDrafts.count()).toBe(1);
     expect((await reviewRepo.getDraft(WEEK))?.decisions).toEqual({ shape: 'lighter' });
+  });
+
+  it('refuses a draft above the size bound without writing anything', async () => {
+    const tooBig = { blob: 'x'.repeat(REVIEW_DECISIONS_MAX_BYTES) };
+    await expect(reviewRepo.saveDraft(WEEK, { step: 1, decisions: tooBig })).rejects.toThrow();
+    expect(await getDb().reviewDrafts.count()).toBe(0);
   });
 
   it('rejects a step outside the six-step wizard', async () => {

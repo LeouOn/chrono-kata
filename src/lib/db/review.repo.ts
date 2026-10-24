@@ -5,8 +5,15 @@ import {
   type ReviewDraft,
   type ReviewPatch,
 } from '@/lib/schemas/review';
+import { WeeklyStatsSchema } from '@/lib/review/stats';
 import { WeekKeySchema } from '@/lib/review/week';
 import { getDb } from './db';
+
+/**
+ * A draft is a few small decisions, never a document. This bound exists so a
+ * wizard bug (or a pasted blob) cannot grow one draft row on every step.
+ */
+export const REVIEW_DECISIONS_MAX_BYTES = 64 * 1024;
 
 /**
  * Reviews and their resumable drafts (roadmap Wave 11).
@@ -38,6 +45,38 @@ function weekOrThrow(weekOf: string): string {
   return WeekKeySchema.parse(weekOf);
 }
 
+/**
+ * Assemble the review row a write will store.
+ *
+ * The snapshot is derived data whose schema will grow; a snapshot stored by an
+ * older build must not make the review unsaveable. When it no longer validates,
+ * it is dropped and the user's notes and intentions are kept.
+ */
+export function buildReview(
+  existing: Review | undefined,
+  weekOf: string,
+  patch: ReviewPatch,
+  now: Date,
+): Review {
+  const carriedSnapshot = patch.statsSnapshot ?? existing?.statsSnapshot;
+  const statsSnapshot =
+    carriedSnapshot && WeeklyStatsSchema.safeParse(carriedSnapshot).success
+      ? carriedSnapshot
+      : undefined;
+  return ReviewSchema.parse({
+    weekOf,
+    notes: patch.notes ?? existing?.notes ?? '',
+    statsSnapshot,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  });
+}
+
+/** Byte size of a decisions payload, as it would be stored. */
+export function decisionsByteSize(decisions: Record<string, unknown>): number {
+  return new TextEncoder().encode(JSON.stringify(decisions)).length;
+}
+
 export class DexieReviewRepository implements ReviewRepository {
   async getByWeek(weekOf: string): Promise<Review | null> {
     return (await getDb().reviews.get(weekOrThrow(weekOf))) ?? null;
@@ -48,13 +87,7 @@ export class DexieReviewRepository implements ReviewRepository {
     const db = getDb();
     return db.transaction('rw', db.reviews, async () => {
       const existing = await db.reviews.get(week);
-      const review = ReviewSchema.parse({
-        weekOf: week,
-        notes: patch.notes ?? existing?.notes ?? '',
-        statsSnapshot: patch.statsSnapshot ?? existing?.statsSnapshot,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      });
+      const review = buildReview(existing, week, patch, now);
       await db.reviews.put(review);
       return review;
     });
@@ -65,13 +98,7 @@ export class DexieReviewRepository implements ReviewRepository {
     const db = getDb();
     return db.transaction('rw', db.reviews, db.reviewDrafts, async () => {
       const existing = await db.reviews.get(week);
-      const review = ReviewSchema.parse({
-        weekOf: week,
-        notes: patch.notes ?? existing?.notes ?? '',
-        statsSnapshot: patch.statsSnapshot ?? existing?.statsSnapshot,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      });
+      const review = buildReview(existing, week, patch, now);
       await db.reviews.put(review);
       await db.reviewDrafts.delete(week);
       return review;
@@ -98,6 +125,9 @@ export class DexieReviewRepository implements ReviewRepository {
     input: { step: number; decisions: Record<string, unknown> },
     now: Date = new Date(),
   ): Promise<ReviewDraft> {
+    if (decisionsByteSize(input.decisions) > REVIEW_DECISIONS_MAX_BYTES) {
+      throw new Error('This draft grew too large to save. Nothing was changed.');
+    }
     const draft = ReviewDraftSchema.parse({
       weekOf: weekOrThrow(weekOf),
       step: input.step,
