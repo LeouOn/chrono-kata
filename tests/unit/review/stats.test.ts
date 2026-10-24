@@ -294,6 +294,90 @@ describe('projects and cadence', () => {
   });
 });
 
+describe('project attribution through the task', () => {
+  it('counts work done on a project task even when the session has no projectId', () => {
+    useTz('Europe/Helsinki');
+    const projects = [project(P_CAREER, { domainId: CAREER, cadencePerWeek: 2 })];
+    const taskOnProject = task(T_ESTIMATED, { domainId: CAREER, projectId: P_CAREER, estimateMin: 30 });
+    // Every Start button opens a session with a task only (WorkingOnPicker is
+    // exclusive), so this is what real work on a project looks like.
+    const stats = summarizeWeek(
+      weekInput({
+        weekOf: WEEK,
+        now: NOW,
+        projects,
+        domains: [domain(CAREER, 'Career/Build', 0)],
+        tasks: [taskOnProject],
+        sessions: [
+          session({
+            id: 'd1111111-1111-4111-8111-111111111111',
+            startedAt: new Date(2026, 5, 16, 9),
+            durationMinutes: 30,
+            taskId: T_ESTIMATED,
+          }),
+        ],
+      }),
+    );
+    expect(stats.projects).toEqual([
+      { projectId: P_CAREER, status: 'active', sessionsThisWeek: 1, cadenceDebt: 1, daysSinceTouched: 171 },
+    ]);
+    expect(stats.sessions.total).toBe(1);
+    expect(stats.domainBalance).toEqual([
+      { domainId: CAREER, minutes: 30, intended: null, delta: null },
+    ]);
+  });
+
+  it('keeps the session project when it has both ids, and leaves an unlinked session unattributed', () => {
+    useTz('UTC');
+    const projects = [
+      project(P_TRADING, { domainId: TRADING, cadencePerWeek: 2 }),
+      project(P_CAREER, { domainId: CAREER, cadencePerWeek: 2 }),
+    ];
+    // The task belongs to P_CAREER, but the session was linked to P_TRADING: the
+    // session's own link is the more specific choice.
+    const taskOnCareer = task(T_ESTIMATED, { domainId: CAREER, projectId: P_CAREER });
+    const stats = summarizeWeek(
+      weekInput({
+        weekOf: WEEK,
+        now: NOW,
+        projects,
+        tasks: [taskOnCareer],
+        sessions: [
+          session({
+            id: 'd2222222-2222-4222-8222-222222222222',
+            startedAt: new Date(2026, 5, 16, 9),
+            taskId: T_ESTIMATED,
+            projectId: P_TRADING,
+          }),
+          // Neither link: it must not be charged to any project.
+          session({ id: 'd3333333-3333-4333-8333-333333333333', startedAt: new Date(2026, 5, 17, 9) }),
+        ],
+      }),
+    );
+    const byProject = new Map(stats.projects.map((row) => [row.projectId, row] as const));
+    expect(byProject.get(P_TRADING)?.sessionsThisWeek).toBe(1);
+    expect(byProject.get(P_CAREER)?.sessionsThisWeek).toBe(0);
+    expect(byProject.get(P_CAREER)?.cadenceDebt).toBe(2);
+  });
+
+  it('gives the same answer whatever order the sessions arrive in', () => {
+    useTz('Europe/Helsinki');
+    const projects = [project(P_CAREER, { domainId: CAREER, cadencePerWeek: 3 })];
+    const tasks = [task(T_ESTIMATED, { domainId: CAREER, projectId: P_CAREER })];
+    const sessions = [
+      session({ id: 'd4444444-4444-4444-8444-444444444444', startedAt: new Date(2026, 5, 16, 9), taskId: T_ESTIMATED, outcome: 'done' }),
+      session({ id: 'd5555555-5555-4555-8555-555555555555', startedAt: new Date(2026, 5, 17, 9), projectId: P_CAREER, outcome: 'blocked' }),
+      session({ id: 'd6666666-6666-4666-8666-666666666666', startedAt: new Date(2026, 5, 18, 9), outcome: 'progress' }),
+    ];
+    const forward = summarizeWeek(weekInput({ weekOf: WEEK, now: NOW, projects, tasks, sessions }));
+    const reversed = summarizeWeek(
+      weekInput({ weekOf: WEEK, now: NOW, projects, tasks, sessions: [...sessions].reverse() }),
+    );
+    expect(reversed).toEqual(forward);
+    expect(forward.projects[0]?.sessionsThisWeek).toBe(2);
+  });
+});
+
 describe('sessions: what moved and what stalled', () => {
   it('counts outcomes without treating a blocked session as a failure', () => {
     useTz('UTC');

@@ -60,6 +60,14 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
 - **Cadence debt is measured over the reviewed week**, not over the seven days
   before "now": re-opening the same review a month later reports the same debt.
   Paused projects report `cadenceDebt: 0` — they are not trying to keep a rhythm.
+- **A session belongs to a project through its task when it has no project link.**
+  The "Working on" picker is exclusive, so every Start button opens a session
+  with a task id and no project id; counting only `session.projectId` would make
+  a project's own task work invisible to its weekly count and its cadence debt.
+  `projectForSession` resolves `session.projectId ?? task.projectId`, and the
+  cadence call gets sessions resolved the same way (without touching
+  `rank-picks.ts`, which Wave 10 owns). Wave 10 will replace this with the
+  shared helper; the rule stays the same.
 - **Domain balance shows every domain**, including a 0-minute one with a stated
   intention; omitting untouched areas would hide exactly the imbalance the step
   exists to show. Minutes that belong to no known domain are reported separately
@@ -73,7 +81,7 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
 
 ## Tests
 
-- `tests/unit/review/stats.test.ts` (16): Monday week keys including Sunday
+- `tests/unit/review/stats.test.ts` (19): Monday week keys including Sunday
   night, a Monday just after midnight, a +14 zone and the year boundary; real
   DST weeks (Helsinki 2026-03-23/10-19, Los Angeles 2026-03-02/10-26, Auckland
   2026-03-30/09-21) at 167/169 hours; local midnights in Asia/Kolkata; weekly
@@ -81,7 +89,10 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
   boundary across Helsinki's spring-forward (elapsed time says 13.9 days,
   local days say 14); deferred and non-`next` exclusions; cadence measured on
   the reviewed week and stable when re-run later; moved/stalled/practice-only
-  counts; determinism and schema agreement.
+  counts; task-linked sessions attributed to their task's project (weekly count
+  and cadence both), a session with both ids keeping its own project, an
+  unlinked session staying unattributed, determinism over session order and
+  schema agreement.
 - `tests/unit/review/review-repo.test.ts` (11): `null` reads, non-Monday keys
   rejected without writing, `createdAt` preservation, the 10,000-character
   boundary (10,000 accepted, 10,001 rejected and nothing written), latest-draft

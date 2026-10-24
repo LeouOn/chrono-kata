@@ -19,6 +19,10 @@ import { WeekKeySchema, mondayOf, weekRange } from './week';
  * "Untouched for N local days" is the shared W10/W11 definition of a task that
  * is **waiting** (never "stale", never "overdue"). It is kept in this one pure
  * function so project stall detection and the review agree.
+ *
+ * Sessions are attributed to a project through their own `projectId` first and
+ * through their task's `projectId` second, because the "Working on" picker is
+ * exclusive: work on a project's task carries no project id of its own.
  */
 export const WAITING_DAYS = 14;
 
@@ -106,11 +110,26 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
   const projectById = new Map(input.projects.map((project) => [project.id, project] as const));
   const knownDomain = new Set(input.domains.map((domain) => domain.id));
 
+  /**
+   * The project a session belongs to.
+   *
+   * The "Working on" picker is exclusive (`WorkingOnPicker`): choosing a task
+   * sends `taskId` and `projectId: null`, and every Start button opens a
+   * session with a task only. So work done on a project's task carries no
+   * `projectId` and must be attributed through the task, or per-project counts
+   * and cadence debt would miss it entirely.
+   */
+  const projectForSession = (session: Session): string | null => {
+    if (session.projectId) return session.projectId;
+    const task = session.taskId ? taskById.get(session.taskId) : undefined;
+    return task?.projectId ?? null;
+  };
+
   // The most specific link wins: the task's domain, then the session's project,
   // then the task's own project.
   const domainForSession = (session: Session): string | null => {
     const task = session.taskId ? taskById.get(session.taskId) : undefined;
-    const projectId = session.projectId ?? task?.projectId ?? null;
+    const projectId = projectForSession(session);
     const project = projectId ? projectById.get(projectId) : undefined;
     return task?.domainId ?? project?.domainId ?? null;
   };
@@ -184,9 +203,16 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
   const cadenceAsOf = new Date(localWallClockToEpoch(addDays(weekOf, 6), '12:00'));
   const sessionsByProject = new Map<string, number>();
   for (const session of inWeek) {
-    if (!session.projectId) continue;
-    sessionsByProject.set(session.projectId, (sessionsByProject.get(session.projectId) ?? 0) + 1);
+    const projectId = projectForSession(session);
+    if (!projectId) continue;
+    sessionsByProject.set(projectId, (sessionsByProject.get(projectId) ?? 0) + 1);
   }
+  // `cadenceDebt` (Wave 10) reads `session.projectId`, so hand it sessions whose
+  // project has been resolved through the task. rank-picks stays untouched.
+  const sessionsWithProject = input.sessions.map((session) => {
+    const projectId = projectForSession(session);
+    return projectId === session.projectId ? session : { ...session, projectId };
+  });
   const weekProjects = input.projects
     .filter((project): project is Project & { status: 'active' | 'paused' } =>
       project.status === 'active' || project.status === 'paused',
@@ -196,7 +222,7 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
       status: project.status,
       sessionsThisWeek: sessionsByProject.get(project.id) ?? 0,
       cadenceDebt:
-        project.status === 'active' ? cadenceDebt(project, input.sessions, cadenceAsOf) : 0,
+        project.status === 'active' ? cadenceDebt(project, sessionsWithProject, cadenceAsOf) : 0,
       daysSinceTouched: Math.max(
         0,
         daysBetweenDayKeys(toLocalDateString(project.lastTouchedAt), todayKey),
