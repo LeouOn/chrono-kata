@@ -28,6 +28,7 @@ afterEach(() => {
 
 const history = generateHistory(20260630);
 const input = { now: NOW, ...history };
+const PROJECT0 = history.projects[0]!.id;
 
 function closeTo(actual: number, expected: number, tolerance = 0.03): boolean {
   return Math.abs(actual - expected) <= tolerance;
@@ -89,6 +90,29 @@ describe('W13 oracle: the analytics recover the ground truth', () => {
     // The weekly minimum-viable touches are visible per domain.
     const trading = domains.find((d) => d.domainId === DOMAINS[0])!;
     expect(trading.minutes).toBeGreaterThanOrEqual(13 * 10);
+
+    // A session whose task row is GONE but whose project is live (integrity
+    // detector #67's exact case) attributes through the project, so domain
+    // totals still add up to project totals.
+    const orphan: (typeof history.sessions)[number] = {
+      ...history.sessions[0]!,
+      id: 'ffffffff-0000-4000-8000-0000000000ff',
+      taskId: 'eeeeeeee-0000-4000-8000-0000000000ee', // no such task
+      projectId: history.projects[0]!.id,
+      durationMinutes: 10,
+    };
+    const sessionsWithOrphan = [...history.sessions, orphan];
+    const domainsWithOrphan = timePerDomain({ ...input, sessions: sessionsWithOrphan });
+    const baseTotal = domains.reduce((sum, d) => sum + d.minutes, 0);
+    const orphanTotal = domainsWithOrphan.reduce((sum, d) => sum + d.minutes, 0);
+    // The orphan's minutes appear in the domain of its LIVE project...
+    expect(domainsWithOrphan.find((d) => d.domainId === DOMAINS[0])!.minutes).toBe(trading.minutes + 10);
+    // ...domain totals grow by exactly the orphan, and the project table
+    // counts the same minutes, so the two tables cannot drift apart.
+    expect(orphanTotal).toBeCloseTo(baseTotal + 10, 6);
+    const projectBase = projectTimeInvested(input).find((pr) => pr.projectId === PROJECT0)!.minutes;
+    const projectOrphan = projectTimeInvested({ ...input, sessions: sessionsWithOrphan }).find((pr) => pr.projectId === PROJECT0)!.minutes;
+    expect(projectOrphan).toBeCloseTo(projectBase + 10, 6);
   });
 
   it('results are identical over shuffled input', () => {

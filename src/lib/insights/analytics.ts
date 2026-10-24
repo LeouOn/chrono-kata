@@ -268,8 +268,11 @@ export function timePerDomain(input: AnalyticsInput): DomainTime[] {
     const task = session.taskId != null ? tasksById.get(session.taskId) : undefined;
     const projectId = sessionProjectId(session, projectOfTask);
     const project = projectId != null ? projectsById.get(projectId) : undefined;
-    if (session.taskId != null && !task) continue; // task row gone: cannot attribute
-    if (task == null && project == null) continue; // practice, or an unknown project
+    // A GONE task row (deleted task, integrity-detected link) must not lose
+    // the session's minutes when the project is live: attribute by the
+    // session's project, exactly like the project table does, so domain
+    // totals still add up to project totals.
+    if (task == null && project == null) continue; // practice, or nothing live to attribute to
     const domainId = task?.domainId ?? project?.domainId ?? null;
     const current = byDomain.get(domainId) ?? { domainId, minutes: 0, sessions: 0 };
     current.minutes += session.durationMinutes;
