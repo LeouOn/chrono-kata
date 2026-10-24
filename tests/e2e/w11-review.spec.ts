@@ -13,6 +13,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 const WEEKING_TASK = '7c1d6a5e-1111-4111-8111-111111111111';
 const INBOX_TASK = '7c1d6a5e-2222-4222-8222-222222222222';
 const PROJECT = '7c1d6a5e-3333-4333-8333-333333333333';
+const SESSION = '7c1d6a5e-4444-4444-8444-444444444444';
 const TRADING = '11111111-1111-4111-8111-111111111111';
 
 test.beforeEach(async ({ page }) => {
@@ -60,11 +61,11 @@ async function seedReviewData(page: Page) {
   });
   await openDb(page);
   await page.evaluate(
-    async ({ waitingTask, inboxTask, project }) => {
+    async ({ waitingTask, inboxTask, project, session }) => {
       const db = (window as unknown as { __reviewDb: IDBDatabase }).__reviewDb;
       const now = new Date();
       const old = new Date(now.getTime() - 20 * 86_400_000);
-      const tx = db.transaction(['tasks', 'projects'], 'readwrite');
+      const tx = db.transaction(['tasks', 'projects', 'sessions'], 'readwrite');
       tx.objectStore('projects').put({
         id: project,
         title: 'Rebuild the portfolio',
@@ -94,13 +95,29 @@ async function seedReviewData(page: Page) {
         createdAt: now,
         touchedAt: now,
       });
+      // A timed session on the project's task, today at 09:00 so it is always
+      // inside the reviewed week. It carries no project id of its own (the
+      // picker is exclusive), which is the shape the stats attribute.
+      const startedAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0);
+      tx.objectStore('sessions').put({
+        id: session,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 30 * 60_000),
+        durationMinutes: 30,
+        rating: 4,
+        activityLabel: 'Trading journal',
+        taskId: waitingTask,
+        outcome: 'done',
+        createdAt: startedAt,
+        updatedAt: startedAt,
+      });
       await new Promise<void>((resolve, reject) => {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       });
       db.close();
     },
-    { waitingTask: WEEKING_TASK, inboxTask: INBOX_TASK, project: PROJECT },
+    { waitingTask: WEEKING_TASK, inboxTask: INBOX_TASK, project: PROJECT, session: SESSION },
   );
 }
 
@@ -277,7 +294,7 @@ test('finishing writes the review, its intentions and the snapshot, and clears t
   expect(String(review.notes)).toBe('A steady week; the trading journal helped.');
   expect(review.nextWeekIntentions).toEqual({ [TRADING]: 120 });
   const snapshot = review.statsSnapshot as { sessions: { total: number }; waitingTaskIds: string[] };
-  expect(snapshot.sessions.total).toBe(0);
+  expect(snapshot.sessions.total).toBe(1);
   expect(snapshot.waitingTaskIds).toEqual([WEEKING_TASK]);
 
   const drafts = await readAll(page, 'reviewDrafts');
@@ -286,6 +303,34 @@ test('finishing writes the review, its intentions and the snapshot, and clears t
   // A saved review does not leave a "resume" affordance behind.
   await page.goto('/');
   await expect(page.getByRole('link', { name: 'Start your weekly review' })).toBeVisible();
+});
+
+test('the optional summary shows exactly what would leave the device and sends nothing by itself', async ({
+  page,
+}) => {
+  await openReview(page);
+  for (let i = 0; i < 5; i += 1) await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByText('Step 6 of 6: Shape next week')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Get a summary' }).click();
+  const wire = page.locator('pre');
+  await expect(wire).toContainText('Total sessions: 1');
+  // A session note would be the one thing that must never travel; the seeded
+  // session has none, so check the scrubbed fields are what is shown.
+  await expect(wire).toContainText('Trading journal');
+  // No provider is configured in this browser, so the panel names that state
+  // instead of offering a send.
+  await expect(page.getByText(/No provider|Checking the provider|Private mode/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Send to provider$/ })).toBeDisabled();
+  await page.screenshot({ path: '/tmp/qa-w11-shots/summary-disclosure.png', fullPage: true });
+
+  // Leaving it leaves the notes untouched, and the review still completes.
+  await page.getByRole('button', { name: 'Not now' }).click();
+  await page.getByLabel('What stood out?').fill('No AI needed this week.');
+  await page.getByRole('button', { name: 'Finish review' }).click();
+  await expect(page.getByRole('heading', { name: 'Review saved' })).toBeVisible();
+  const reviews = await readAll(page, 'reviews');
+  expect(String(reviews[0]?.notes)).toBe('No AI needed this week.');
 });
 
 test('an unfinished review from an earlier week asks before it takes over', async ({ page }) => {
