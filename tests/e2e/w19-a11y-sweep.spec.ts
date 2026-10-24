@@ -554,8 +554,8 @@ test('reduced motion stops CSS animation and the modal slide', async ({ page }) 
   await add.fill('a task for the reduced-motion check');
   const modalButton = page.getByRole('button', { name: 'Capture a task' });
   if ((await modalButton.count()) > 0) {
-    await page.keyboard.press('Control+k');
-    const dialog = page.getByRole('dialog');
+    await modalButton.click();
+    const dialog = page.getByRole('dialog', { name: 'Capture' });
     await expect(dialog).toBeVisible();
     // motion/react still paints its initial keyframe for a frame; what reduced
     // motion must remove is the SLIDE, so the panel is in place two frames later

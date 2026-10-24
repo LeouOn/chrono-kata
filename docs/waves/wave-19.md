@@ -1,8 +1,8 @@
 # Wave 19 — UX, accessibility, performance
 
 **Status:** in progress · **PRs:** (1) the in-house a11y sweep and the fixes it found, (2) high
-contrast, (3) command palette and cheat sheet, (4) performance on a 10k-task dataset, (5) empty states
-and first-run · **Roadmap:** Wave 19 · **Lane:** B
+contrast, (3) command palette and shortcut sheet, (4) performance on a 10k-task dataset, (5) empty
+states and first-run · **Roadmap:** Wave 19 · **Lane:** B
 
 ## What shipped (part 1)
 
@@ -72,6 +72,47 @@ and first-run · **Roadmap:** Wave 19 · **Lane:** B
   token ratios and the computed colours of a `text-accent` link and a primary button.
 - A note on the measurement itself: the page background is the `base` token; `body` is transparent, and
   measuring against it compared every colour with black (found and fixed while writing the case).
+
+## What shipped (part 3)
+
+- **The command palette** (Ctrl/Cmd+K): one registry (`src/lib/commands/registry.ts`) of navigation
+  commands (Home, Sessions, Reflect, Insights, LLM, Settings; and with the flag on: Inbox, Plan,
+  Timeline, Projects, Journal, Weekly review) and three actions (capture a task, start a session,
+  keyboard shortcuts). The dialog is the shared `Modal` (focus trap, Escape, focus restore), the list
+  is a `listbox` driven by `aria-activedescendant`, arrows move and Enter runs, and typing filters on
+  the title, group and keywords.
+- **The palette is a shortcut layer, never the only path**: every navigation command targets a route
+  that exists in the tab bar or a screen, capture opens the sheet the FAB already opens (a window event
+  the launcher listens for), and "start a session" opens the existing form. Running a command performs
+  no write of its own, so it cannot bypass a confirmation.
+- **The shortcut sheet** is a Settings card generated from the SAME registry (only commands with a
+  shortcut appear there), reachable at `/settings#shortcuts` without the palette, and rendered per
+  platform (⌘ on Apple).
+- **Existing global key handlers, listed so they cannot collide**: `CaptureLauncher` used to bind
+  Ctrl/Cmd+K and now listens for the palette's capture request; `ProcessMode` owns keys 1–6 and `s` for
+  triage (inert while another dialog is open, and while typing); `Timeline` owns Escape for a live
+  drag; `Modal` owns Escape and the Tab cycle for the topmost dialog. The palette adds exactly one
+  binding (Ctrl/Cmd+K) and is inert while any other dialog is open.
+- **Decision**: Ctrl/Cmd+K opens the palette even while focus is in a text field. It is the app's one
+  global launcher and making it depend on the cursor is how a shortcut starts to feel unreliable; the
+  alternative (inert in inputs) would leave a text field as a dead zone for the only global shortcut.
+  The cheat sheet says so. Modals do suppress it.
+
+### Part 3 tests
+
+- `tests/unit/commands/registry.test.ts` (6): unique ids, flag filtering, case/whitespace-insensitive
+  search over title/group/keywords, the sheet = exactly the shortcut-bearing commands, per-platform
+  labels, and that running a command goes through the caller's context.
+- `tests/unit/commands/CommandPalette.test.tsx` (8): opens on Ctrl+K and runs the filtered command;
+  arrow movement updates `aria-activedescendant`/`aria-selected`; "no command matches"; inert while
+  another dialog is on screen; Escape closes; opens from inside a text field (the documented decision);
+  the capture action requests the sheet rather than writing anything; flag-off hides gated commands;
+  the sheet lists the registry's shortcuts.
+- `tests/e2e/w19-palette.spec.ts` (3): Ctrl+K → filter → Enter navigates to the journal; arrows and
+  Escape; inert while the capture sheet is open; the Settings sheet is in view at `#shortcuts` and lists
+  the same command the palette finds. The inbox spec's capture helper now goes through the palette, and
+  the sweep opens the capture sheet with its button (the shortcut moved).
+- Mutants: the dialog guard removed → the inert test red; flag filtering removed → the flag test red.
 
 ## Decisions where the roadmap was silent
 

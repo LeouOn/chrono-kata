@@ -12,6 +12,7 @@ import { ThemeSettings } from '@/components/settings/ThemeSettings';
 import { KataTemplateSettings } from '@/components/settings/KataTemplateSettings';
 import { HabitSettings } from '@/components/settings/HabitSettings';
 import { ConfirmationSettings } from '@/components/settings/ConfirmationSettings';
+import { ShortcutSheet } from '@/components/commands/ShortcutSheet';
 import { ClearDataSettings } from '@/components/settings/ClearDataSettings';
 import { GoalSettings } from '@/components/settings/GoalSettings';
 import { TaskInboxSettings } from '@/components/settings/TaskInboxSettings';
@@ -98,6 +99,8 @@ export default function SettingsPage() {
       <ConfirmationSettings />
 
       <ThemeSettings />
+
+      <ShortcutSheet />
 
       <CalendarSettings />
 

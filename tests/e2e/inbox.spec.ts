@@ -25,7 +25,12 @@ async function openCaptureSheet(page: Page) {
   // The launcher only mounts once the flag query resolves; waiting for its
   // button also asserts the control exists.
   await expect(page.getByRole('button', { name: 'Capture a task' })).toBeVisible();
+  // Ctrl/Cmd+K is the command palette now; capture is one of its commands.
   await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Commands' });
+  await expect(palette).toBeVisible();
+  await page.getByLabel('Type a command').fill('capture a task');
+  await page.getByLabel('Type a command').press('Enter');
   await expect(page.getByRole('dialog', { name: 'Capture' })).toBeVisible();
 }
 
