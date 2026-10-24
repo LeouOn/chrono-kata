@@ -37,6 +37,27 @@ async function openDb(page: Page) {
 
 async function seedReviewData(page: Page) {
   await page.goto('/');
+  // Wait for the app to finish creating and upgrading the database (Dexie v8),
+  // using indexedDB.databases() so the wait itself cannot create a v1 database,
+  // and for the default domains the balance step needs.
+  await page.waitForFunction(async () => {
+    const databases = await indexedDB.databases();
+    return databases.some((entry) => entry.name === 'chrono-kata' && (entry.version ?? 0) >= 8);
+  });
+  await page.waitForFunction(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('chrono-kata');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const count = await new Promise<number>((resolve, reject) => {
+      const request = db.transaction('domains', 'readonly').objectStore('domains').count();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return count > 0;
+  });
   await openDb(page);
   await page.evaluate(
     async ({ waitingTask, inboxTask, project }) => {

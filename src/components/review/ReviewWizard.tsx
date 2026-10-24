@@ -234,7 +234,9 @@ export function ReviewWizard() {
       } else if (decision.action === 'redefine') {
         await sweepTask.mutateAsync({
           taskId,
-          patch: { nextAction: decision.nextAction ?? null },
+          // Matches the inbox's `next-action` outcome: a named next step is a
+          // `next` task with no stale defer date left on it.
+          patch: { nextAction: decision.nextAction ?? null, deferUntil: null },
           status: 'next',
         });
       } else if (decision.action === 'defer') {

@@ -157,6 +157,27 @@ describe('ReviewWizard', () => {
     });
   });
 
+  it('redefining the next step clears a stale defer date, like the inbox does', async () => {
+    await seedWaitingTask();
+    const stale = await taskRepo.getById(WAITING_ID);
+    await getDb().tasks.put({ ...stale!, deferUntil: new Date(2026, 0, 1, 12) });
+    renderWizard();
+
+    await goToStep(1);
+    fireEvent.click(screen.getByRole('button', { name: /Name a new next step/ }));
+    fireEvent.change(await screen.findByLabelText(/The next small step for/), {
+      target: { value: 'ask the editor for the receipt' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save next step' }));
+
+    await waitFor(async () => {
+      const task = await taskRepo.getById(WAITING_ID);
+      expect(task?.status).toBe('next');
+      expect(task?.nextAction).toBe('ask the editor for the receipt');
+      expect(task?.deferUntil ?? null).toBeNull();
+    });
+  });
+
   it('deferring writes the day and the scheduled status together', async () => {
     await seedWaitingTask();
     renderWizard();
