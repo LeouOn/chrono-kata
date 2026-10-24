@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { addDays, daysBetweenDayKeys } from '@/lib/pacing/days';
-import { cadenceDebt } from '@/lib/planning/rank-picks';
+import { cadenceDebt, projectOfTaskIndex, sessionProjectId } from '@/lib/planning/cadence';
+import { WAITING_AFTER_DAYS, isUntouchedFor } from '@/lib/planning/untouched';
 import { localWallClockToEpoch } from '@/lib/planning/time';
 import { toLocalDateString } from '@/lib/utils/date';
 import type { Session } from '@/lib/schemas/session';
@@ -17,14 +18,17 @@ import { WeekKeySchema, mondayOf, weekRange } from './week';
  * and the shape this function builds cannot drift apart.
  *
  * "Untouched for N local days" is the shared W10/W11 definition of a task that
- * is **waiting** (never "stale", never "overdue"). It is kept in this one pure
- * function so project stall detection and the review agree.
+ * is **waiting** (never "stale", never "overdue"). It lives in
+ * `planning/untouched.ts`, so project stall detection and the review cannot
+ * disagree.
  *
  * Sessions are attributed to a project through their own `projectId` first and
- * through their task's `projectId` second, because the "Working on" picker is
- * exclusive: work on a project's task carries no project id of its own.
+ * through their task's `projectId` second (`sessionProjectId`), because the
+ * "Working on" picker is exclusive: work on a project's task carries no
+ * project id of its own.
  */
-export const WAITING_DAYS = 14;
+/** Kept as an alias of the shared rule so existing importers keep working. */
+export const WAITING_DAYS = WAITING_AFTER_DAYS;
 
 /** Minutes per domain for the week, optionally against a stated intention. */
 export const DomainBalanceRowSchema = z.object({
@@ -109,27 +113,16 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
   const taskById = new Map(input.tasks.map((task) => [task.id, task] as const));
   const projectById = new Map(input.projects.map((project) => [project.id, project] as const));
   const knownDomain = new Set(input.domains.map((domain) => domain.id));
-
-  /**
-   * The project a session belongs to.
-   *
-   * The "Working on" picker is exclusive (`WorkingOnPicker`): choosing a task
-   * sends `taskId` and `projectId: null`, and every Start button opens a
-   * session with a task only. So work done on a project's task carries no
-   * `projectId` and must be attributed through the task, or per-project counts
-   * and cadence debt would miss it entirely.
-   */
-  const projectForSession = (session: Session): string | null => {
-    if (session.projectId) return session.projectId;
-    const task = session.taskId ? taskById.get(session.taskId) : undefined;
-    return task?.projectId ?? null;
-  };
+  // The "Working on" picker is exclusive and every Start button links a task
+  // only, so work on a project's task carries no `projectId` of its own: it is
+  // attributed through the task (`sessionProjectId`), here and in cadence debt.
+  const projectOfTask = projectOfTaskIndex(input.tasks);
 
   // The most specific link wins: the task's domain, then the session's project,
   // then the task's own project.
   const domainForSession = (session: Session): string | null => {
     const task = session.taskId ? taskById.get(session.taskId) : undefined;
-    const projectId = projectForSession(session);
+    const projectId = sessionProjectId(session, projectOfTask);
     const project = projectId ? projectById.get(projectId) : undefined;
     return task?.domainId ?? project?.domainId ?? null;
   };
@@ -186,15 +179,16 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
     else estimatedMin += task.estimateMin;
   }
 
-  // Waiting: a `next` task untouched for WAITING_DAYS local days. Local day
-  // arithmetic (not elapsed milliseconds) keeps this the same on a DST week.
-  // A task deliberately deferred into the future is not waiting for a decision.
+  // Waiting: a `next` task untouched for WAITING_AFTER_DAYS local days (the
+  // shared rule in planning/untouched.ts: local days, not elapsed milliseconds,
+  // so it is the same on a DST week). A task deliberately deferred into the
+  // future is not waiting for a decision.
   const todayKey = toLocalDateString(input.now);
   const nowMs = input.now.getTime();
   const waitingTaskIds = input.tasks
     .filter((task) => task.status === 'next')
     .filter((task) => !task.deferUntil || task.deferUntil.getTime() <= nowMs)
-    .filter((task) => daysBetweenDayKeys(toLocalDateString(task.touchedAt), todayKey) >= WAITING_DAYS)
+    .filter((task) => isUntouchedFor(task.touchedAt, input.now, WAITING_AFTER_DAYS))
     .map((task) => task.id)
     .sort();
 
@@ -203,16 +197,10 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
   const cadenceAsOf = new Date(localWallClockToEpoch(addDays(weekOf, 6), '12:00'));
   const sessionsByProject = new Map<string, number>();
   for (const session of inWeek) {
-    const projectId = projectForSession(session);
+    const projectId = sessionProjectId(session, projectOfTask);
     if (!projectId) continue;
     sessionsByProject.set(projectId, (sessionsByProject.get(projectId) ?? 0) + 1);
   }
-  // `cadenceDebt` (Wave 10) reads `session.projectId`, so hand it sessions whose
-  // project has been resolved through the task. rank-picks stays untouched.
-  const sessionsWithProject = input.sessions.map((session) => {
-    const projectId = projectForSession(session);
-    return projectId === session.projectId ? session : { ...session, projectId };
-  });
   const weekProjects = input.projects
     .filter((project): project is Project & { status: 'active' | 'paused' } =>
       project.status === 'active' || project.status === 'paused',
@@ -222,7 +210,7 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
       status: project.status,
       sessionsThisWeek: sessionsByProject.get(project.id) ?? 0,
       cadenceDebt:
-        project.status === 'active' ? cadenceDebt(project, sessionsWithProject, cadenceAsOf) : 0,
+        project.status === 'active' ? cadenceDebt(project, input.sessions, cadenceAsOf, input.tasks) : 0,
       daysSinceTouched: Math.max(
         0,
         daysBetweenDayKeys(toLocalDateString(project.lastTouchedAt), todayKey),
