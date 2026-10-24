@@ -21,3 +21,18 @@ export function milestoneForDay(day: number): number | null {
   }
   return null;
 }
+
+/**
+ * Said by the session-save path when a save EARNED a new milestone, and by nothing else.
+ *
+ * The celebration used to compare the milestone list with what the screen last saw, so a streak that merely
+ * ARRIVED (restoring a backup onto a new device, a first read, a recompute at app open) looked like an
+ * achievement and threw confetti over whatever the person was doing. An event cannot be mistaken that way:
+ * nobody says it unless a save just earned the milestone.
+ */
+export const MILESTONE_EVENT = 'chrono-kata-milestone';
+
+export function announceMilestone(milestone: number): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<{ milestone: number }>(MILESTONE_EVENT, { detail: { milestone } }));
+}
