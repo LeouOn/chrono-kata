@@ -163,6 +163,8 @@ export const SettingsSchema = z.object({
   wakingHours: WakingHoursSchema.optional(),
   /** Recurring protected windows. Absent on rows written before planning existed. */
   anchors: z.array(AnchorSchema).optional(),
+  /** Remembered .ics subscription address (https only); stored only when the user opts in. */
+  icsSubscriptionUrl: z.string().url().startsWith('https://').max(500).nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

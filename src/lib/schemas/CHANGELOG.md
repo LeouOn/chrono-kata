@@ -1,5 +1,13 @@
 # Schema Changelog
 
+## 2026-10-24 — Remembered .ics subscription address (roadmap W8 part 2)
+
+`settings.ts` gains optional `icsSubscriptionUrl` (https URL, <= 500 chars,
+nullable): the remembered calendar subscription address for the ICS import,
+stored only when the user explicitly opts in ("Remember this address", off by
+default). Optional and non-indexed, so Dexie stays on v7 and the backup
+envelope stays version 2 (optional field only).
+
 ## 2026-10-23 — Planning settings: waking hours and anchors (roadmap W6 part 1)
 
 `settings.ts` gains optional `wakingHours` (`{ start, end }`, `HH:MM` 24-hour,

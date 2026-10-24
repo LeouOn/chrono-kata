@@ -45,7 +45,7 @@ actually exists.
 | W5 | Local LLM backbone | partial | M | C | LM Studio, per-feature routing, budget |
 | W6 | Daily planning (picks and capacity) | shipped | L | A/B | capacity math, pick ranking, anchors |
 | W7 | Time blocking and calendar view | partial (parts 1–2) | L | B | roadmap core + timeline; drag/resize, replan UI next |
-| W8 | Calendar interop (local-first) | partial (Google only) | M | C | ICS export/import, native calendar |
+| W8 | Calendar interop (local-first) | partial (ICS UI in review; native later) | M | C | native calendar |
 | W9 | Work block → timed session flow | partial | M | B | outcome + breadcrumb, session links |
 | W10 | Long projects without heroic pushes | missing | M | B | cadence debt, stall detection, project page |
 | W11 | Weekly review wizard | partial | M | B | wizard, Review entity, pause/resume |

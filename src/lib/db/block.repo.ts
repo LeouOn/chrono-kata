@@ -12,6 +12,11 @@ export interface BlockRepository {
   update(id: string, patch: Partial<BlockInput>): Promise<Block>;
   delete(id: string): Promise<void>;
   /**
+   * Wave 8 part 2: apply a reconciled calendar import in ONE transaction.
+   * Rollback on any failure — no partial import.
+   */
+  applyCalendarImport(blocks: readonly Block[], now?: Date): Promise<void>;
+  /**
    * Replace the not-yet-started focus blocks inside a waking window with a
    * proposed layout, atomically. Blocks whose start is at or before `now`
    * already happened and are kept, so a replan never rewrites history.
@@ -78,6 +83,23 @@ export class DexieBlockRepository implements BlockRepository {
 
   async delete(id: string): Promise<void> {
     await getDb().blocks.delete(id);
+  }
+
+  /**
+   * Wave 8 part 2: apply a reconciled calendar import in ONE transaction.
+   * Every block in `blocks` comes from buildImportPreview and carries a
+   * calendarRef; hand-made blocks are structurally invisible to the plan
+   * (the pure layer never emits them). A failure anywhere rolls the whole
+   * write back — no partial import.
+   */
+  async applyCalendarImport(blocks: readonly Block[], now: Date = new Date()): Promise<void> {
+    const db = getDb();
+    await db.transaction('rw', db.blocks, async () => {
+      for (const block of blocks) {
+        const parsed = BlockSchema.parse({ ...block, updatedAt: now });
+        await db.blocks.put(parsed);
+      }
+    });
   }
 
   async replaceFutureFocus(
