@@ -422,3 +422,51 @@ describe('CalendarInteropSettings — round-2 gaps', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('CalendarInteropSettings — the importer window reaches the reconciler (q4)', () => {
+  it('a local occurrence outside the window does not pair with a near incoming one, through the real UI path', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    // A local calendar block from 8 days ago (window.from is now-7d: outside).
+    const now = new Date();
+    const outside = new Date(now.getTime() - 8 * 24 * 3600 * 1000);
+    await blockRepo.create({
+      start: outside,
+      end: new Date(outside.getTime() + 30 * 60 * 1000),
+      kind: 'fixed',
+      title: 'Old physio',
+      taskId: null,
+      projectId: null,
+      calendarRef: 'physio-window@cal',
+    });
+    // A file whose one-off (same UID) sits at now-7d: within 1 day of the local
+    // row but the local row is OUTSIDE the importer's window, so no pairing.
+    const incomingAt = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dt = (d: Date) =>
+      `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+    const file = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Test//EN',
+      'BEGIN:VEVENT', 'UID:physio-window@cal', 'DTSTAMP:20260501T000000Z',
+      `DTSTART:${dt(incomingAt)}`, `DTEND:${dt(new Date(incomingAt.getTime() + 30 * 60 * 1000))}`,
+      'SUMMARY:Physio (file)', 'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+
+    const applySpy = vi.spyOn(blockRepo, 'applyCalendarImport');
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+    fireEvent.change(screen.getByLabelText('Import from a file'), {
+      target: { files: [new File([file], 'physio.ics', { type: 'text/calendar' })] },
+    });
+    // New, not updated-in-place: the write is a fresh id.
+    await waitFor(() => expect(screen.getByText(/1 new ·/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Save 1 block/ }));
+    await waitFor(() => expect(applySpy).toHaveBeenCalledTimes(1));
+    const written = applySpy.mock.calls[0]![0] as { id: string; start: Date }[];
+    const rows = await blockRepo.getAll();
+    // The historic row is untouched and distinct from the new one.
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.id)).size).toBe(2);
+    expect(written).toHaveLength(1);
+  });
+});

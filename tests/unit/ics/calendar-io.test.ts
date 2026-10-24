@@ -141,3 +141,47 @@ describe('validateSubscriptionUrl', () => {
     expect(validateSubscriptionUrl(raw).ok).toBe(ok);
   });
 });
+
+describe('round-3: each pairing guard is load-bearing alone', () => {
+  const DAY = 24 * 3600 * 1000;
+  const WINDOW_FROM = new Date('2026-06-10T00:00:00Z');
+  const WINDOW_TO = new Date('2027-06-10T00:00:00Z');
+  const window = { from: WINDOW_FROM, to: WINDOW_TO };
+
+  const occurrence = (id: string, when: Date, ref = 'series@x') =>
+    block({ id, calendarRef: ref, start: when, end: new Date(when.getTime() + 30 * 60 * 1000), title: 'Physio' });
+
+  it('WINDOW guard alone: a local occurrence just OUTSIDE the window does not pair even 1 day from the incoming', () => {
+    const justOutside = new Date(WINDOW_FROM.getTime() - 60 * 60 * 1000); // 1h before window.from
+    const incomingAt = new Date(WINDOW_FROM.getTime() + 60 * 60 * 1000); // 2h apart, inside the window
+    const preview = buildImportPreview(
+      [occurrence('a1', incomingAt)],
+      [occurrence('local-1', justOutside)],
+      window,
+    );
+    // Not paired: incoming is new, the historic local occurrence untouched.
+    expect(preview.counts).toEqual({ new: 1, updated: 0, unchanged: 0, skipped: 0 });
+    expect(preview.entries[0]!.block.id).toBe(uuid('a1'));
+  });
+
+  it('DISTANCE guard alone: two in-window occurrences 10 days apart do not pair', () => {
+    const first = new Date('2026-06-20T09:00:00Z');
+    const second = new Date('2026-06-30T09:00:00Z'); // both inside the window, 10 days apart
+    const preview = buildImportPreview(
+      [occurrence('a1', second)],
+      [occurrence('local-1', first)],
+      window,
+    );
+    expect(preview.counts).toEqual({ new: 1, updated: 0, unchanged: 0, skipped: 0 });
+  });
+
+  it('boundary: exactly 7 days apart pairs, 8 days does not', () => {
+    const base = new Date('2026-06-20T09:00:00Z');
+    const at7 = new Date(base.getTime() + 7 * DAY);
+    const at8 = new Date(base.getTime() + 8 * DAY);
+    const pairs = buildImportPreview([occurrence('a1', at7)], [occurrence('local-1', base)], window);
+    expect(pairs.counts).toEqual({ new: 0, updated: 1, unchanged: 0, skipped: 0 });
+    const noPair = buildImportPreview([occurrence('a2', at8)], [occurrence('local-2', base)], window);
+    expect(noPair.counts).toEqual({ new: 1, updated: 0, unchanged: 0, skipped: 0 });
+  });
+});
