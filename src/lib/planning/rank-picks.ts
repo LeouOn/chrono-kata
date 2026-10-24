@@ -22,9 +22,11 @@ import type { Session } from '@/lib/schemas/session';
 import type { Task } from '@/lib/schemas/task';
 import type { AnchorInterval } from './anchors';
 import { toLocalDateString } from '@/lib/utils/date';
-import { addDays } from '@/lib/pacing/days';
+import { daysBetweenDayKeys } from '@/lib/pacing/days';
+import { cadenceProgress, projectOfTaskIndex, type CadenceProgress } from './cadence';
 
-const DAY_MS = 86_400_000;
+// Re-exported so existing callers keep importing it from here.
+export { cadenceDebt } from './cadence';
 
 /** Points by how close the due date is. */
 const DUE_POINTS = { passed: 40, within3: 30, within7: 20, within14: 10 } as const;
@@ -82,21 +84,12 @@ export interface RankedPick {
   readonly reasons: string[];
 }
 
-/** Whole local calendar days between two day keys (negative when `to` is past). */
-function calendarDaysBetween(fromKey: string, toKey: string): number {
-  const parts = (key: string) => key.split('-').map(Number) as [number, number, number];
-  const [fy, fm, fd] = parts(fromKey);
-  const [ty, tm, td] = parts(toKey);
-  // Date.UTC on bare calendar dates has no DST, so the difference is exact.
-  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / DAY_MS);
-}
-
 function duePoints(task: Task, now: Date): { points: number; reason?: string } {
   if (!task.dueAt) return { points: 0 };
   // Local calendar days, not 24-hour elapsed time: a due date at 00:00 tomorrow
   // is one day away at 23:00 tonight, not "passed".
   const dayKey = toLocalDateString(task.dueAt);
-  const days = calendarDaysBetween(toLocalDateString(now), dayKey);
+  const days = daysBetweenDayKeys(toLocalDateString(now), dayKey);
   if (days <= 0) {
     // The date has passed. Say what it is; do not say it is late.
     return { points: DUE_POINTS.passed, reason: `due ${dayKey}` };
@@ -107,27 +100,11 @@ function duePoints(task: Task, now: Date): { points: number; reason?: string } {
   return { points: 0 };
 }
 
-function sessionsInLastWeek(projectId: string, sessions: readonly Session[], now: Date): number {
-  // The last seven LOCAL days, today included. Elapsed-time windows drift by an
-  // hour across a DST change and can include or drop a session at the edge.
-  const todayKey = toLocalDateString(now);
-  const days = new Set<string>();
-  for (let offset = 0; offset < 7; offset += 1) days.add(addDays(todayKey, -offset));
-  return sessions.filter(
-    (session) => session.projectId === projectId && days.has(toLocalDateString(session.startedAt)),
-  ).length;
-}
-
-/**
- * How many sessions a project still wants this week.
- *
- * The count is the project's own rhythm minus the sessions it has had in the
- * last seven days, never below zero.
- */
-export function cadenceDebt(project: Project, sessions: readonly Session[], now: Date): number {
-  const wanted = project.cadencePerWeek ?? 0;
-  if (wanted <= 0) return 0;
-  return Math.max(0, wanted - sessionsInLastWeek(project.id, sessions, now));
+function cadenceReason(project: Project, progress: CadenceProgress): string {
+  if (progress.blockMin !== null) {
+    return `${project.title} wants ${progress.wanted} blocks of ${progress.blockMin} min a week and has had ${Math.round(progress.minutes)} min this week`;
+  }
+  return `${project.title} wants ${progress.wanted} a week and has had ${progress.wanted - progress.debt} this week`;
 }
 
 /**
@@ -180,6 +157,18 @@ export function rankPicks(input: RankPicksInput): RankedPick[] {
   const { now, capacity } = input;
   const projectById = new Map(input.projects.map((project) => [project.id, project] as const));
   const domainName = new Map((input.domains ?? []).map((domain) => [domain.id, domain.name] as const));
+  // Every Start button links a task, so work on a project is mostly recorded
+  // against its tasks: cadence has to see through that link or it never moves.
+  const projectOfTask = projectOfTaskIndex(input.tasks);
+  const progressByProject = new Map<string, CadenceProgress>();
+  const progressFor = (project: Project): CadenceProgress => {
+    let progress = progressByProject.get(project.id);
+    if (!progress) {
+      progress = cadenceProgress(project, input.recentSessions, now, projectOfTask);
+      progressByProject.set(project.id, progress);
+    }
+    return progress;
+  };
 
   const candidates = input.tasks.filter((task) => {
     if (task.status !== 'next') return false;
@@ -197,13 +186,10 @@ export function rankPicks(input: RankPicksInput): RankedPick[] {
 
     const project = task.projectId ? projectById.get(task.projectId) : undefined;
     if (project && project.status === 'active') {
-      const debt = cadenceDebt(project, input.recentSessions, now);
-      if (debt > 0) {
-        score += Math.min(CADENCE_POINTS_MAX, debt * CADENCE_POINTS_PER_SESSION);
-        const had = project.cadencePerWeek! - debt;
-        reasons.push(
-          `${project.title} wants ${project.cadencePerWeek} a week and has had ${had} this week`,
-        );
+      const progress = progressFor(project);
+      if (progress.debt > 0) {
+        score += Math.min(CADENCE_POINTS_MAX, progress.debt * CADENCE_POINTS_PER_SESSION);
+        reasons.push(cadenceReason(project, progress));
       }
     }
 

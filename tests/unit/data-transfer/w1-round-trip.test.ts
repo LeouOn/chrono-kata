@@ -24,6 +24,8 @@ describe('Wave 1 backup round-trip', () => {
       domainId: DOMAIN_SEED_IDS.career,
       status: 'active',
       cadencePerWeek: 2,
+      cadenceBlockMin: 45,
+      stallAfterDays: 10,
       breadcrumb: 'after this: pick 3 projects',
     });
     const task = await taskRepo.create({
@@ -100,6 +102,9 @@ describe('Wave 1 backup round-trip', () => {
     const project = (await projectRepo.getAll())[0]!;
     expect(project.title).toBe('Rebuild portfolio');
     expect(project.cadencePerWeek).toBe(2);
+    // Wave 10 fields: optional, so older backups lack them and still import.
+    expect(project.cadenceBlockMin).toBe(45);
+    expect(project.stallAfterDays).toBe(10);
     expect(project.breadcrumb).toBe('after this: pick 3 projects');
 
     const tasks = await taskRepo.getAll();
