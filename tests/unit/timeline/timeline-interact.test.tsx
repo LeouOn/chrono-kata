@@ -191,6 +191,41 @@ describe('timeline pointer editing', () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
+  it('renders exact lane geometry for 2 and 3 lanes, and full width for one', () => {
+    const two = [
+      { ...entry('a', 9, 11), lane: 0, laneCount: 2 },
+      { ...entry('b', 10, 12), lane: 1, laneCount: 2 },
+    ];
+    const { rerender } = render(<Timeline window={dayWindow} blocks={two} now={dayWindow.start} onSelect={() => {}} />);
+    const a = screen.getByRole('button', { name: /fixed block a 09:00 to 11:00/i });
+    const b = screen.getByRole('button', { name: /fixed block b 10:00 to 12:00/i });
+    expect(a.style.left).toBe('calc(0% + 2px)');
+    expect(a.style.width).toBe('calc(50% - 4px)');
+    expect(b.style.left).toBe('calc(50% + 2px)');
+    expect(b.style.width).toBe('calc(50% - 4px)');
+
+    const three = [
+      { ...entry('a', 9, 12), lane: 0, laneCount: 3 },
+      { ...entry('b', 10, 12), lane: 1, laneCount: 3 },
+      { ...entry('c', 10, 12), lane: 2, laneCount: 3 },
+    ];
+    rerender(<Timeline window={dayWindow} blocks={three} now={dayWindow.start} onSelect={() => {}} />);
+    const percent = (value: string) => Number(/([\d.]+)%/.exec(value)?.[1]);
+    const a3 = screen.getByRole('button', { name: /fixed block a 09:00 to 12:00/i });
+    const b3 = screen.getByRole('button', { name: /fixed block b 10:00 to 12:00/i });
+    const c3 = screen.getByRole('button', { name: /fixed block c 10:00 to 12:00/i });
+    expect(percent(a3.style.width)).toBeCloseTo(100 / 3, 3);
+    expect(percent(a3.style.left)).toBeCloseTo(0, 3);
+    expect(percent(b3.style.left)).toBeCloseTo(100 / 3, 3);
+    expect(percent(c3.style.left)).toBeCloseTo(200 / 3, 3);
+    expect(a3.style.width.endsWith('- 4px)')).toBe(true);
+
+    rerender(<Timeline window={dayWindow} blocks={[entry('only', 9, 10)]} now={dayWindow.start} onSelect={() => {}} />);
+    const only = screen.getByRole('button', { name: /fixed block only 09:00 to 10:00/i });
+    expect(only.style.width).toBe('calc(100% - 4px)');
+    expect(only.style.left).toBe('calc(0% + 2px)');
+  });
+
   it('draws overlapping blocks side by side and both are tappable', () => {
     const onSelect = vi.fn();
     const lanes = [

@@ -99,8 +99,18 @@ test('overlapping commitments sit in lanes and both are tappable by touch', asyn
   const boxB = await b.boundingBox();
   expect(boxA).not.toBeNull();
   expect(boxB).not.toBeNull();
-  // Side by side, not stacked: B starts at or after A's right edge.
+  const lane = await page.getByTestId('timeline').locator('div.relative.flex-1').boundingBox();
+  expect(lane).not.toBeNull();
+  // Each lane is half the column minus the 4px inset the component subtracts.
+  const expected = lane!.width / 2 - 4;
+  expect(Math.abs(boxA!.width - expected)).toBeLessThanOrEqual(3);
+  expect(Math.abs(boxB!.width - expected)).toBeLessThanOrEqual(3);
+  // Side by side inside the timeline column, not stacked or overflowing.
   expect(boxA!.x + boxA!.width).toBeLessThanOrEqual(boxB!.x + 2);
+  for (const box of [boxA!, boxB!]) {
+    expect(box.x).toBeGreaterThanOrEqual(lane!.x - 1);
+    expect(box.x + box.width).toBeLessThanOrEqual(lane!.x + lane!.width + 1);
+  }
 
   await page.screenshot({ path: '/tmp/qa-w7-shots/w7-lanes-touch.png', fullPage: true });
 
