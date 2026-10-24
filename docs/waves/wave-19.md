@@ -93,16 +93,23 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
   triage (inert while another dialog is open, and while typing); `Timeline` owns Escape for a live
   drag; `Modal` owns Escape and the Tab cycle for the topmost dialog. The palette adds exactly one
   binding (Ctrl/Cmd+K) and is inert while any other dialog is open.
-- **Decision**: Ctrl/Cmd+K opens the palette even while focus is in a text field. It is the app's one
-  global launcher and making it depend on the cursor is how a shortcut starts to feel unreliable; the
-  alternative (inert in inputs) would leave a text field as a dead zone for the only global shortcut.
-  The cheat sheet says so. Modals do suppress it.
+- **Decision**: the launcher is **Ctrl+K off Apple and ⌘K on Apple**, and it opens even while focus is in
+  a text field. It is the app's one global launcher and making it depend on the cursor is how a shortcut
+  starts to feel unreliable; the alternative (inert in inputs) would leave a text field as a dead zone
+  for the only global shortcut. On Apple it is Meta-only on purpose: Ctrl+K is the native kill-line in a
+  text field, and hijacking it there would be a real loss — so the shortcut keeps the platform's
+  convention instead of fighting it. Modals do suppress it, and the sheet states the platform's key.
+- **Search ranks, it does not just filter**: a title that starts with the query beats one that contains
+  it, which beats a group match, which beats a keyword hit. Without that, typing "capture" listed Inbox
+  first (its keyword says captured tasks land there) and put the capture action second — the one word a
+  person types to capture would run the wrong command.
 
 ### Part 3 tests
 
-- `tests/unit/commands/registry.test.ts` (6): unique ids, flag filtering, case/whitespace-insensitive
-  search over title/group/keywords, the sheet = exactly the shortcut-bearing commands, per-platform
-  labels, and that running a command goes through the caller's context.
+- `tests/unit/commands/registry.test.ts` (7): unique ids, flag filtering, case/whitespace-insensitive
+  search over title/group/keywords, ranking (prefix > contains > group > keyword), the sheet = exactly
+  the shortcut-bearing commands, per-platform labels, and that running a command goes through the
+  caller's context.
 - `tests/unit/commands/CommandPalette.test.tsx` (8): opens on Ctrl+K and runs the filtered command;
   arrow movement updates `aria-activedescendant`/`aria-selected`; "no command matches"; inert while
   another dialog is on screen; Escape closes; opens from inside a text field (the documented decision);
@@ -112,6 +119,13 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
   Escape; inert while the capture sheet is open; the Settings sheet is in view at `#shortcuts` and lists
   the same command the palette finds. The inbox spec's capture helper now goes through the palette, and
   the sweep opens the capture sheet with its button (the shortcut moved).
+- `tests/unit/commands/capture-path.test.tsx` (2) is the path that used to be one keystroke, end to end:
+  Ctrl+K → palette → type "capture" → Enter leaves the **capture sheet as the only open dialog** and the
+  palette closed; the second case reaches the same command with arrows and no query. That is the new
+  keystroke count: Ctrl+K, a query (or arrows), Enter — plus the button, which stays one click.
+- `tests/unit/tasks/CaptureSheet.test.tsx` moved to the new contract: the launcher opens on the palette's
+  capture request and **not** on a bare Ctrl/Cmd+K keydown, the flag-off case listens for nothing (both
+  the event and the key), and the stacking/Escape test requests the sheet instead of pressing a key.
 - Mutants: the dialog guard removed → the inert test red; flag filtering removed → the flag test red.
 
 ## Decisions where the roadmap was silent

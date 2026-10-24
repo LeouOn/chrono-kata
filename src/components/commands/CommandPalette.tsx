@@ -3,7 +3,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { useFlag } from '@/hooks/useFlags';
-import { filterCommands, visibleCommands, type CommandSpec } from '@/lib/commands/registry';
+import {
+  filterCommands,
+  shortcutLabel,
+  visibleCommands,
+  type CommandSpec,
+} from '@/lib/commands/registry';
 
 interface Props {
   open: boolean;
@@ -20,6 +25,7 @@ export function CommandPalette({ open, onClose, onRun }: Props) {
   const enabled = useFlag('taskInbox');
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
+  const [platform, setPlatform] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const commands = useMemo(
@@ -34,6 +40,8 @@ export function CommandPalette({ open, onClose, onRun }: Props) {
       setActive(0);
     }
   }, [open]);
+
+  useEffect(() => setPlatform(navigator.platform ?? ''), []);
 
   useEffect(() => {
     if (!open) return;
@@ -105,7 +113,9 @@ export function CommandPalette({ open, onClose, onRun }: Props) {
                 <span className="block text-[11px] text-text-muted">{command.group}</span>
               </span>
               {command.shortcut ? (
-                <span className="shrink-0 text-[11px] text-text-muted">{command.shortcut}</span>
+                <span className="shrink-0 text-[11px] text-text-muted">
+                  {shortcutLabel(command.shortcut, platform)}
+                </span>
               ) : null}
             </li>
           ))}

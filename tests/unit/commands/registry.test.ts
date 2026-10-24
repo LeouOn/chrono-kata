@@ -47,6 +47,17 @@ describe('the command registry', () => {
     );
   });
 
+  it('ranks a title match above a keyword match', () => {
+    const commands = visibleCommands(allOn);
+    // "Inbox" has "capture" as a keyword; the capture command's title wins.
+    expect(filterCommands(commands, 'capture').map((command) => command.id)).toEqual([
+      'act.capture',
+      'go.inbox',
+    ]);
+    // A prefix beats a mid-title match.
+    expect(filterCommands(commands, 'week').map((command) => command.id)[0]).toBe('go.review');
+  });
+
   it('gives the shortcut sheet exactly the commands that have a shortcut', () => {
     const commands = visibleCommands(allOn);
     const sheet = shortcutCommands(commands);

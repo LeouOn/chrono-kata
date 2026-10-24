@@ -101,13 +101,30 @@ export function visibleCommands(flags: { isEnabled: (flag: FlagName) => boolean 
 }
 
 /** Case- and whitespace-insensitive search over the title and keywords. */
+/**
+ * Filter, then rank: a title that starts with the query beats a title that
+ * only contains it, which beats a group match, which beats a keyword hit. That
+ * is what makes "capture" put "Capture a task" above "Inbox" (whose keyword
+ * says captured tasks land there). Registry order breaks ties.
+ */
 export function filterCommands(commands: readonly CommandSpec[], query: string): CommandSpec[] {
   const needle = query.replace(/\s+/g, ' ').trim().toLowerCase();
   if (needle === '') return [...commands];
-  return commands.filter((command) => {
-    const haystack = [command.title, command.group, ...(command.keywords ?? [])].join(' ').toLowerCase();
-    return haystack.includes(needle);
-  });
+
+  const score = (command: CommandSpec): number => {
+    const title = command.title.toLowerCase();
+    if (title.startsWith(needle)) return 0;
+    if (title.includes(needle)) return 1;
+    if (command.group.toLowerCase().includes(needle)) return 2;
+    const keywords = (command.keywords ?? []).join(' ').toLowerCase();
+    return keywords.includes(needle) ? 3 : -1;
+  };
+
+  return commands
+    .map((command, index) => ({ command, index, rank: score(command) }))
+    .filter((entry) => entry.rank >= 0)
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.command);
 }
 
 /** The shortcut sheet: every command that has a shortcut, grouped. */
@@ -116,7 +133,12 @@ export function shortcutCommands(commands: readonly CommandSpec[]): CommandSpec[
 }
 
 /** Render a shortcut label for the platform (⌘ on Apple, Ctrl elsewhere). */
+/** Apple platforms get ⌘ labels, and the launcher is Meta-only there. */
+export function isApplePlatform(platform: string): boolean {
+  return /^(Mac|iPhone|iPad|iPod)/.test(platform);
+}
+
 export function shortcutLabel(shortcut: string, platform: string): string {
   if (!shortcut.includes('Ctrl')) return shortcut;
-  return platform.startsWith('Mac') || platform === 'iOS' ? shortcut.replace('Ctrl+', '⌘') : shortcut;
+  return isApplePlatform(platform) ? shortcut.replace('Ctrl+', '⌘') : shortcut;
 }
