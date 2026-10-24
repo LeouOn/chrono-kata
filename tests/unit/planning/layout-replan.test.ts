@@ -134,6 +134,64 @@ describe('replanFromNow', () => {
     });
   });
 
+  it('keeps the full gap after a kept block that ends exactly at now', () => {
+    inZone('UTC', () => {
+      const window = windowOf(DAY, '09:00', '12:00');
+      const keptBlock = {
+        start: localWallClockToEpoch(DAY, '09:30'),
+        end: localWallClockToEpoch(DAY, '10:00'),
+        taskId: 'p1',
+      };
+      const now = localWallClockToEpoch(DAY, '10:00');
+
+      for (const [step, expected] of [
+        [5, '10:05'],
+        [15, '10:15'],
+      ] as const) {
+        const result = replanFromNow({
+          picks: [pick('p1', { createdAt: new Date(2026, 5, 1, 9, 0) }), pick('p2', { createdAt: new Date(2026, 5, 1, 9, 1), estimateMin: 30 })],
+          existingFocusBlocks: [keptBlock],
+          window,
+          fixedBlocks: [],
+          anchors: [],
+          now,
+          stepMin: step,
+        });
+        expect(result.relaid).toHaveLength(1);
+        expect(result.relaid[0]!.start).toBe(localWallClockToEpoch(DAY, expected));
+        expect(result.relaid[0]!.start).toBeGreaterThanOrEqual(keptBlock.end + MIN_GAP_MIN * MIN);
+      }
+    });
+  });
+
+  it('keeps the full gap when the kept block is still in progress', () => {
+    inZone('UTC', () => {
+      const window = windowOf(DAY, '09:00', '12:00');
+      const keptBlock = {
+        start: localWallClockToEpoch(DAY, '09:45'),
+        end: localWallClockToEpoch(DAY, '10:15'),
+        taskId: 'p1',
+      };
+      const now = localWallClockToEpoch(DAY, '10:00');
+      for (const [step, expected] of [
+        [5, '10:20'],
+        [15, '10:30'],
+      ] as const) {
+        const result = replanFromNow({
+          picks: [pick('p1', { createdAt: new Date(2026, 5, 1, 9, 0) }), pick('p2', { createdAt: new Date(2026, 5, 1, 9, 1), estimateMin: 30 })],
+          existingFocusBlocks: [keptBlock],
+          window,
+          fixedBlocks: [],
+          anchors: [],
+          now,
+          stepMin: step,
+        });
+        expect(result.relaid[0]!.start).toBe(localWallClockToEpoch(DAY, expected));
+        expect(result.relaid[0]!.start).toBeGreaterThanOrEqual(keptBlock.end + MIN_GAP_MIN * MIN);
+      }
+    });
+  });
+
   it('is identical over shuffled input, including a finished day', () => {
     inZone('UTC', () => {
       const random = randomFactory(7);
