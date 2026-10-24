@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useInbox } from '@/hooks/useTasks';
 import { ProcessMode } from './ProcessMode';
 import { InlineCapture } from './InlineCapture';
 import { useSessionLauncher } from '@/components/session/SessionLauncher';
+import { DecomposeSheet } from './DecomposeSheet';
+import { useProjects } from '@/hooks/useTasks';
 import { toLocalDateString } from '@/lib/utils/date';
 
 /**
@@ -18,6 +20,11 @@ export function InboxScreen() {
   const [processing, setProcessing] = useState(false);
   const processButtonRef = useRef<HTMLButtonElement>(null);
   const sessionLauncher = useSessionLauncher();
+  const { data: projects = [] } = useProjects();
+  const projectTitleById = useMemo(
+    () => new Map(projects.map((p) => [p.id, p.title] as const)),
+    [projects]
+  );
 
   return (
     <div className="space-y-4">
@@ -88,6 +95,11 @@ export function InboxScreen() {
                 >
                   Start
                 </Button>
+                <DecomposeSheet
+                  task={task}
+                  projectTitle={task.projectId ? projectTitleById.get(task.projectId) : undefined}
+                  triggers={['break-it-down']}
+                />
               </div>
             </Card>
           </li>

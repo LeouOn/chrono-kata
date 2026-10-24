@@ -168,31 +168,27 @@ screen corner — one button, two payloads (session vs task). Decide the priorit
 
 ## W3 — Next-action decomposition (AI)
 
-**Status:** missing · **Size:** M · **Lanes:** C · **Depends on:** W1 (tasks), W5 (local routing)
+**Status:** exists (contract #20, UI + wired call #43) · **Size:** M · **Lanes:** C · **Depends on:** W1 (tasks), W5 (local routing)
 
 **Evidence**
-- Exists: the provider adapter layer (`src/lib/llm/provider-factory.ts`,
-  `openai-compatible-provider.ts`, `claude-provider.ts`, `gemini-provider.ts`) and a prompt builder
-  module (`src/lib/llm/prompt-builders.ts`).
-- Exists: the *pattern* the roadmap asks for is being landed by T5 — validated JSON + deterministic
-  fallback + contradiction guard in `src/lib/llm/clean-response.ts` (`parseCoachBriefing`) and a
-  zod-validated payload. Reuse it instead of inventing a second validation style.
-- Missing: no decomposition flow — `grep -rInE "decompos|breakdown|break it down" src tests` matches
-  only `src/lib/insights/breakdown.ts`, which is the *activity breakdown* chart (unrelated).
-- Missing: no retry/repair re-prompt, no "this feels heavy" affordance, no subtask save.
-- Exists: `zod` is already a dependency (`package.json`).
-
-**Skip / extend / net-new**
-- Skip: a new provider abstraction — the existing one is enough.
-- Extend: `clean-response.ts` gains a second schema (`firstAction`, `firstActionMinutes`, `needs`,
-  `steps`, `pitfalls`, `canSkipOrDoBadly`); the "re-prompt once with the validation error, then fall
-  back to plain text" rule is a second pass in the same module.
-- Net-new: decomposition prompt, the "break it down" UI, optional subtask save.
-
-**Conflicts:** principle 6 ("AI proposes, user disposes") — the first AI *write* in the app would be
-subtask creation, so the confirm/diff UI (W14) must exist before it, or subtasks stay manual.
-
----
+- Shipped: the pure contract (`src/lib/decomposition/{schema,prompt,decompose}.ts`, PR #20) —
+  Zod-validated JSON, ONE repair re-prompt carrying the validation error, then a flagged
+  plain-text fallback; provider errors propagate so a failed call writes nothing.
+- Shipped: the wired call (`src/lib/decomposition/service.ts`, PR #43) — routed via
+  `DECOMPOSITION_FEATURE` (per-feature routing, W5), private mode enforced before any fetch
+  (calm refusal message), the exact wire text returned for the privacy panel, timeout via the
+  shared `withTimeout` policy.
+- Shipped: the UI (`src/components/tasks/DecomposeSheet.tsx` + `useDecomposition`) —
+  "Break it down" + "This feels heavy" on inbox rows, process mode and plan-screen picks;
+  a what-leaves-the-device panel (exact task text, provider, local/remote) shown before the
+  first call; result UI with the first physical action prominent, needs/pitfalls/skip lists,
+  steps collapsed by default; the user picks subtasks and the next action; **nothing is saved
+  without Confirm**; fallback text is copy-only; calm error copy per LLMExceptionKind with
+  retry; double-submit guards (refs) on send and Confirm; abort on unmount.
+- Tests: service paths with faked providers (valid, repair, fallback, timeout, 429,
+  privacy-blocked, empty reply), an exact-wire snapshot (a leaking field fails the test),
+  component flows incl. double-click-in-one-act and unmount abort; E2E with the provider
+  mocked at the HTTP boundary (happy path + fallback). Mutants: 8/8 killed.
 
 ## W4 — Multi-model triangulation
 

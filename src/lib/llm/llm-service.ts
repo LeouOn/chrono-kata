@@ -38,7 +38,7 @@ function combineSignals(signals: (AbortSignal | undefined)[]): AbortSignal | und
   return controller.signal;
 }
 
-function withTimeout(signal?: AbortSignal): AbortSignal | undefined {
+export function withTimeout(signal?: AbortSignal): AbortSignal | undefined {
   const timeoutSignal = AbortSignal.timeout(LLM_TIMEOUT_MS);
   return combineSignals([signal, timeoutSignal]);
 }
@@ -435,7 +435,7 @@ export async function generateDailyBriefing(
  * Private mode is enforced here and in the provider factory, so a request to
  * a non-local provider is refused before any fetch happens.
  */
-async function resolveProviderFor(
+export async function resolveProviderFor(
   settings: LLMSettings,
   providerOverride: string | undefined,
   feature: LLMFeature,

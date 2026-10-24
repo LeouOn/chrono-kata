@@ -9,6 +9,7 @@ import { useTasks } from '@/hooks/useTasks';
 import { useConfirmDayPlan, usePlanToday, useTodayKey } from '@/hooks/usePlanning';
 import { checkOvercommit, DEFAULT_PICK_MINUTES } from '@/lib/planning/overcommit';
 import type { Task } from '@/lib/schemas/task';
+import { DecomposeSheet } from '@/components/tasks/DecomposeSheet';
 import type { RankedPick } from '@/lib/planning/rank-picks';
 
 interface Props {
@@ -211,6 +212,7 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
                   {(reasonsById.get(task.id) ?? []).length > 0 ? (
                     <p className="text-[11px] text-text-muted">{reasonsById.get(task.id)!.join(' · ')}</p>
                   ) : null}
+                  <DecomposeSheet task={task} triggers={['break-it-down']} />
                   <div>
                     <label
                       htmlFor={`swap-${task.id}`}

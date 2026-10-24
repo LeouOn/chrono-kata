@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { DecomposeSheet } from './DecomposeSheet';
 import { useToast } from '@/hooks/useToast';
 import { useInbox } from '@/hooks/useTasks';
 import { INBOX_OUTCOMES, outcomeForKey, type InboxOutcome } from '@/lib/tasks/outcomes';
@@ -226,6 +227,10 @@ export function ProcessMode({ open, onClose }: Props) {
             </div>
 
             {step === 'choose' ? (
+              <>
+              <div className="flex flex-wrap gap-1">
+                <DecomposeSheet task={current} triggers={['break-it-down', 'this-feels-heavy']} />
+              </div>
               <div className="grid grid-cols-2 gap-2" role="group" aria-label="Triage outcomes">
                 {INBOX_OUTCOMES.map((spec) => (
                   <Button
@@ -245,6 +250,7 @@ export function ProcessMode({ open, onClose }: Props) {
                   </Button>
                 ))}
               </div>
+              </>
             ) : null}
 
             {step === 'next-action' ? (
