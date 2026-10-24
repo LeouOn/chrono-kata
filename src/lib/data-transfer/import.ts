@@ -21,6 +21,7 @@ import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
 import { LeftOutItemSchema, type ExportEnvelope, type ExportEnvelopeV2, type LeftOutItem } from './types';
 import { migrateEnvelope } from './migrate';
 import { DATE_SPECS, reviveDate, reviveDates } from './dates';
+import type { BackupSecrets } from './encrypted';
 import { refuseIfHostile, refuseIfTooLarge, refuseIfTooManyRows } from './guard';
 
 export type ParseResult =
@@ -340,8 +341,9 @@ function reviveLLMSettings(value: unknown, backupTime: Date): Revived<LLMSetting
  * A singleton the backup does not carry (or that failed validation on the way in) is left as it is
  * on the device, never wiped.
  */
-export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
+export async function replaceAll(envelope: ExportEnvelope, options: { secrets?: BackupSecrets | null } = {}): Promise<void> {
   const db = getDb();
+  const secrets = options.secrets ?? null;
 
   // Wipe and restore atomically: if any restore step throws (e.g. a
   // constraint violation), the transaction rolls back and the previous
@@ -401,12 +403,14 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
 
       if (envelope.settings) {
         const settings: Settings = { ...envelope.settings };
-        // The private calendar link stays on this device when the backup (rightly) has none.
-        if (!settings.icsSubscriptionUrl && existingSettings?.icsSubscriptionUrl) {
+        // The private calendar link: the encrypted file's own when it carries one, else the device's
+        // when the backup (rightly) has none.
+        if (secrets?.icsSubscriptionUrl) settings.icsSubscriptionUrl = secrets.icsSubscriptionUrl;
+        else if (!settings.icsSubscriptionUrl && existingSettings?.icsSubscriptionUrl) {
           settings.icsSubscriptionUrl = existingSettings.icsSubscriptionUrl;
         }
         // "Connected" is only true where the sign-in is.
-        if (settings.googleCalendarConnectedAt && !googleToken) settings.googleCalendarConnectedAt = null;
+        if (settings.googleCalendarConnectedAt && !(secrets?.googleToken ?? googleToken)) settings.googleCalendarConnectedAt = null;
         await db.settings.put(settings);
       }
 
@@ -415,7 +419,7 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
         const providersWithKeys = Object.fromEntries(
           Object.entries(envelope.llmSettings.providers).map(([name, cfg]) => [
             name,
-            { ...cfg, apiKey: cfg.apiKey || existingKeys.get(name) || '' },
+            { ...cfg, apiKey: secrets?.llmApiKeys[name] || cfg.apiKey || existingKeys.get(name) || '' },
           ])
         );
         await db.llmSettings.put({
@@ -423,6 +427,9 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
           providers: providersWithKeys,
         } as LLMSettings);
       }
+
+      // The Google sign-in an ENCRYPTED backup carried (a plain one never does; the device's own stays).
+      if (secrets?.googleToken) await db.tokens.put(secrets.googleToken);
 
       // Kata templates (only for envelopes that carry them).
       if (envelope.kataTemplates !== undefined) {
