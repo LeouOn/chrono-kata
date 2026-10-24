@@ -74,11 +74,18 @@ describe('buildImportPreview (calendarRef reconciliation)', () => {
   it('hand-made blocks (no calendarRef) are never matched and never written', () => {
     const handmade = block({ id: 'local-1' });
     delete (handmade as { calendarRef?: string }).calendarRef;
+    // Even an exact content collision (same title, same time) must not match:
+    // matching is by calendarRef, never by content — a hand-made lookalike is
+    // invisible to the import.
+    const lookalike = { ...handmade, id: 'local-2' };
+    delete (lookalike as { calendarRef?: string }).calendarRef;
     const preview = buildImportPreview(
-      [block({ id: 'i-1', calendarRef: 'evt-1@cal' })],
-      [handmade],
+      [block({ id: 'i-1', calendarRef: 'evt-1@cal', title: handmade.title, start: handmade.start, end: handmade.end })],
+      [handmade, lookalike],
     );
     expect(preview.counts.new).toBe(1);
+    expect(preview.counts.updated).toBe(0);
+    expect(preview.counts.unchanged).toBe(0);
     // The write plan contains only the imported block.
     expect(preview.toWrite.map((b) => b.id)).toEqual(['i-1']);
   });
