@@ -12,6 +12,8 @@ import { useTodayKey } from '@/hooks/usePlanning';
 import { JournalEntryCard } from './JournalEntryCard';
 import { ShutdownCard } from './ShutdownCard';
 import { JournalTemplateCard } from './JournalTemplateCard';
+import { JournalExportCard } from './JournalExportCard';
+import { JournalSearchCard } from './JournalSearchCard';
 import { formatLongDate } from '@/lib/journal/export';
 import { addDays, isDayKey } from '@/lib/pacing/days';
 import { toLocalDateString } from '@/lib/utils/date';
@@ -111,6 +113,14 @@ export function JournalScreen({ dateParam }: Props) {
           </Card>
         </>
       )}
+
+      <Card>
+        <JournalExportCard dayKey={dayKey} plan={plan ?? null} />
+      </Card>
+
+      <Card>
+        <JournalSearchCard />
+      </Card>
 
       <Card>
         <JournalTemplateCard />

@@ -185,6 +185,53 @@ test('the journal is absent and inert with the flag off', async ({ page }) => {
   await expect(page.getByRole('link', { name: /journal/i })).toHaveCount(0);
 });
 
+test('search finds an entry across days and opens that day', async ({ page }) => {
+  await seedDay(page);
+  await enableTaskInbox(page);
+  await openJournal(page);
+  // Yesterday's entry has a phrase that spans a line break.
+  await page.goto('/journal?date=2020-01-01');
+  await page.getByLabel('What happened today').fill('Worked on position\nsizing today.');
+  await page.getByRole('button', { name: 'Save journal' }).click();
+  await expect(page.getByRole('status')).toContainText('Saved on this device.');
+
+  await openJournal(page);
+  await page.getByLabel('Search the journal').fill('position sizing');
+  const hit = page.getByRole('link', { name: /Open the entry for Wednesday 1 January 2020/ });
+  await expect(hit).toBeVisible();
+  await expect(hit).toContainText('in journal');
+  await hit.click();
+  await expect(page).toHaveURL(/\?date=2020-01-01$/);
+  await expect(page.getByLabel('What happened today')).toHaveValue(/position\nsizing/);
+  await page.screenshot({ path: '/tmp/qa-w12-shots/journal-search.png', fullPage: true });
+});
+
+test('export hands over the markdown file for the chosen range', async ({ page }) => {
+  await seedDay(page);
+  await enableTaskInbox(page);
+  await openJournal(page);
+  await page.getByLabel('What happened today').fill('A calm day.');
+  await page.getByRole('button', { name: 'Save journal' }).click();
+  await expect(page.getByRole('status')).toContainText('Saved on this device.');
+
+  const dayDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download markdown' }).click();
+  const day = await dayDownload;
+  const dayPath = await day.path();
+  const dayText = dayPath ? await (await import('node:fs/promises')).readFile(dayPath, 'utf8') : '';
+  expect(dayText).toContain('# ');
+  expect(dayText).toContain(`## `);
+  expect(dayText).toContain('> A calm day.');
+  expect(dayText).not.toContain('<');
+  expect(day.suggestedFilename()).toMatch(/^chrono-kata-journal-day-\d{4}-\d{2}-\d{2}\.md$/);
+
+  await page.getByRole('button', { name: 'This month: export month' }).click();
+  const monthDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download markdown' }).click();
+  const month = await monthDownload;
+  expect(month.suggestedFilename()).toMatch(/^chrono-kata-journal-month-\d{4}-\d{2}\.md$/);
+});
+
 test('every journal control fits the phone, has a name, and is not covered', async ({ page }) => {
   await seedDay(page);
   await enableTaskInbox(page);

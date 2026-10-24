@@ -19,6 +19,15 @@ export function useJournalDay(dayKey: string, options: { enabled?: boolean } = {
   });
 }
 
+/** Every day plan, newest first: what the search and the range export read. */
+export function useJournalList(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: ['journal', 'all'],
+    queryFn: () => journalRepo.listAll(),
+    enabled: options.enabled ?? true,
+  });
+}
+
 export interface ShutdownInput {
   date: string;
   decisions: ShutdownDecision[];
