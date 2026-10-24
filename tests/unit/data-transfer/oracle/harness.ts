@@ -94,3 +94,26 @@ export function secretStrings(data: Dataset): string[] {
   if (typeof ics === 'string') out.push(ics);
   return out;
 }
+
+const COLLECTION_KEYS = [
+  'sessions', 'reflections', 'kataTemplates', 'conversations', 'messages', 'habits', 'habitLogs', 'checkIns',
+  'domains', 'projects', 'tasks', 'blocks', 'dayPlans', 'estimates', 'reviews', 'reviewDrafts',
+];
+
+/**
+ * A dataset as the TEXT of a backup file, built by hand (not by `collectAll`): the three single-row records
+ * unwrapped, the collections as arrays, dates as ISO text. For tests that damage a file on purpose.
+ */
+export function backupTextOf(data: Dataset, tweak: (file: Record<string, unknown>) => void = () => undefined): string {
+  const file: Record<string, unknown> = {
+    version: 2,
+    exportedAt: '2026-10-24T12:00:00.000Z',
+    streak: data.streak![0],
+    settings: data.settings![0],
+    llmSettings: data.llmSettings![0],
+  };
+  for (const key of COLLECTION_KEYS) file[key] = data[key];
+  const copy = JSON.parse(JSON.stringify(file)) as Record<string, unknown>;
+  tweak(copy);
+  return JSON.stringify(copy);
+}

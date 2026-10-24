@@ -20,6 +20,7 @@ import { ReviewSchema, ReviewDraftSchema, type Review, type ReviewDraft } from '
 import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
 import { LeftOutItemSchema, type ExportEnvelope, type ExportEnvelopeV2, type LeftOutItem } from './types';
 import { migrateEnvelope } from './migrate';
+import { DATE_SPECS, reviveDate, reviveDates } from './dates';
 import { refuseIfHostile, refuseIfTooLarge, refuseIfTooManyRows } from './guard';
 
 export type ParseResult =
@@ -33,40 +34,14 @@ export type ParseResult =
        * are derived data that a later version can recompute.
        */
       snapshotsDropped: number;
+      /**
+       * Rows kept although a metadata date in them could not be read (the date was dropped, or replaced
+       * by another of the row's own times: see `dates.ts`). `repairedBy` counts them per table.
+       */
+      repaired: number;
+      repairedBy: Record<string, number>;
     }
   | { ok: false; error: string };
-
-function reviveDate(value: unknown): Date | null {
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-  if (typeof value === 'string' || typeof value === 'number') {
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-  return null;
-}
-
-function reviveNullableDate(value: unknown): Date | null | undefined {
-  if (value == null) return value === null ? null : undefined;
-  return reviveDate(value);
-}
-
-/**
- * `{ [key]: Date | null }` for a date field the row has, `{}` for one it does not: a field that was
- * absent stays absent and `null` stays `null`, so a restored row is the row that was backed up.
- */
-function presentDate(row: Record<string, unknown>, key: string): Record<string, Date | null> {
-  return row[key] === undefined ? {} : { [key]: reviveDate(row[key]) };
-}
-
-function hasValidDates(row: Record<string, unknown>, fields: string[]): boolean {
-  return fields.every((f) => {
-    const v = row[f];
-    if (v == null) return true;
-    return reviveDate(v) != null;
-  });
-}
 
 /**
  * Reviews get their own row mapper because a review carries two kinds of data:
@@ -76,33 +51,32 @@ function hasValidDates(row: Record<string, unknown>, fields: string[]): boolean 
  * without it. Everything else (a non-Monday week key, notes over the limit, bad
  * dates) is still skipped and counted.
  */
-function reviveReviews(rows: unknown): {
+function reviveReviews(rows: unknown, backupTime: Date): {
   valid: Review[];
   skipped: number;
   snapshotsDropped: number;
+  repaired: number;
 } {
-  if (!Array.isArray(rows)) return { valid: [], skipped: 0, snapshotsDropped: 0 };
+  if (!Array.isArray(rows)) return { valid: [], skipped: 0, snapshotsDropped: 0, repaired: 0 };
   const valid: Review[] = [];
   let skipped = 0;
   let snapshotsDropped = 0;
+  let repaired = 0;
   for (const row of rows) {
     if (typeof row !== 'object' || row === null) {
       skipped++;
       continue;
     }
-    const raw = row as Record<string, unknown>;
-    if (!hasValidDates(raw, REVIEW_DATE_FIELDS)) {
+    const dated = reviveDates(row as Record<string, unknown>, DATE_SPECS.reviews, backupTime);
+    if (!dated) {
       skipped++;
       continue;
     }
-    const revived = {
-      ...raw,
-      createdAt: reviveDate(raw.createdAt),
-      updatedAt: reviveDate(raw.updatedAt),
-    };
+    const revived = dated.row;
     const parsed = ReviewSchema.safeParse(revived);
     if (parsed.success) {
       valid.push(parsed.data);
+      if (dated.repaired.length > 0) repaired++;
       continue;
     }
     if ('statsSnapshot' in revived) {
@@ -111,12 +85,13 @@ function reviveReviews(rows: unknown): {
       if (retried.success) {
         valid.push(retried.data);
         snapshotsDropped++;
+        if (dated.repaired.length > 0) repaired++;
         continue;
       }
     }
     skipped++;
   }
-  return { valid, skipped, snapshotsDropped };
+  return { valid, skipped, snapshotsDropped, repaired };
 }
 
 function reviveRows<T>(
@@ -147,23 +122,6 @@ function reviveRows<T>(
   return { valid, skipped };
 }
 
-const SESSION_DATE_FIELDS = ['startedAt', 'endedAt', 'createdAt', 'updatedAt'];
-const REFLECTION_DATE_FIELDS = ['periodStart', 'periodEnd', 'createdAt'];
-const KATA_DATE_FIELDS = ['createdAt', 'updatedAt'];
-const CONVERSATION_DATE_FIELDS = ['createdAt', 'updatedAt'];
-const MESSAGE_DATE_FIELDS = ['createdAt', 'editedAt'];
-const HABIT_DATE_FIELDS = ['createdAt', 'updatedAt'];
-const HABIT_LOG_DATE_FIELDS = ['createdAt'];
-const CHECK_IN_DATE_FIELDS = ['createdAt', 'updatedAt'];
-const DOMAIN_DATE_FIELDS = ['createdAt', 'updatedAt'];
-const PROJECT_DATE_FIELDS = ['lastTouchedAt', 'createdAt', 'updatedAt', 'breadcrumbAt'];
-const TASK_DATE_FIELDS = ['dueAt', 'deferUntil', 'createdAt', 'touchedAt', 'doneAt'];
-const BLOCK_DATE_FIELDS = ['start', 'end', 'createdAt', 'updatedAt'];
-const DAY_PLAN_DATE_FIELDS = ['shutdownAt', 'createdAt', 'updatedAt'];
-const ESTIMATE_DATE_FIELDS = ['createdAt', 'updatedAt'];
-const REVIEW_DATE_FIELDS = ['createdAt', 'updatedAt'];
-const REVIEW_DRAFT_DATE_FIELDS = ['updatedAt'];
-
 export function parseEnvelope(json: string): ParseResult {
   const tooLarge = refuseIfTooLarge(json.length);
   if (!tooLarge.ok) return tooLarge;
@@ -192,246 +150,77 @@ export function parseEnvelope(json: string): ParseResult {
 
     let skipped = 0;
 
-    const sessionsResult = dedupeById(
-      reviveRows(
-        p.sessions,
-        SessionSchema,
-        (row) =>
-          hasValidDates(row, SESSION_DATE_FIELDS)
-            ? {
-                ...row,
-                startedAt: reviveDate(row.startedAt),
-                ...presentDate(row, 'endedAt'),
-                createdAt: reviveDate(row.createdAt),
-                updatedAt: reviveDate(row.updatedAt),
-              }
-            : null
-      )
-    );
+    // Rows whose metadata dates could not be read, by table: kept, with the date dropped or replaced.
+    const repairedBy: Record<string, number> = {};
+    const backupTime = reviveDate(p.exportedAt) ?? new Date();
+    const dated = (table: keyof typeof DATE_SPECS) => (row: Record<string, unknown>) => {
+      const revived = reviveDates(row, DATE_SPECS[table], backupTime);
+      if (!revived) return null;
+      if (revived.repaired.length > 0) repairedBy[table] = (repairedBy[table] ?? 0) + 1;
+      return revived.row;
+    };
+    const rowsOf = (field: string): unknown => (p[field] === undefined ? [] : p[field]);
+
+    const sessionsResult = dedupeById(reviveRows(p.sessions, SessionSchema, dated('sessions')));
     skipped += sessionsResult.skipped;
 
-    const reflectionsResult = dedupeById(
-      reviveRows(
-        p.reflections ?? [],
-        ReflectionSchema,
-        (row) =>
-          hasValidDates(row, REFLECTION_DATE_FIELDS)
-            ? {
-                ...row,
-                periodStart: reviveDate(row.periodStart),
-                periodEnd: reviveDate(row.periodEnd),
-                createdAt: reviveDate(row.createdAt),
-              }
-            : null
-      )
-    );
+    const reflectionsResult = dedupeById(reviveRows(p.reflections ?? [], ReflectionSchema, dated('reflections')));
     skipped += reflectionsResult.skipped;
 
-    const kataResult = dedupeById(
-      reviveRows(
-        p.kataTemplates === undefined ? [] : p.kataTemplates,
-        KataTemplateSchema,
-        (row) =>
-          hasValidDates(row, KATA_DATE_FIELDS)
-            ? {
-                ...row,
-                createdAt: reviveDate(row.createdAt),
-                updatedAt: reviveDate(row.updatedAt),
-              }
-            : null
-      )
-    );
+    const kataResult = dedupeById(reviveRows(rowsOf('kataTemplates'), KataTemplateSchema, dated('kataTemplates')));
     skipped += kataResult.skipped;
 
-    const conversationsResult = dedupeById(
-      reviveRows(
-        p.conversations === undefined ? [] : p.conversations,
-        ConversationSchema,
-        (row) =>
-          hasValidDates(row, CONVERSATION_DATE_FIELDS)
-            ? {
-                ...row,
-                createdAt: reviveDate(row.createdAt),
-                updatedAt: reviveDate(row.updatedAt),
-              }
-            : null
-      )
-    );
+    const conversationsResult = dedupeById(reviveRows(rowsOf('conversations'), ConversationSchema, dated('conversations')));
     skipped += conversationsResult.skipped;
 
-    const messagesResult = dedupeById(
-      reviveRows(
-        p.messages === undefined ? [] : p.messages,
-        MessageSchema,
-        (row) => {
-          if (!hasValidDates(row, MESSAGE_DATE_FIELDS)) return null;
-          const revived: Record<string, unknown> = {
-            ...row,
-            createdAt: reviveDate(row.createdAt),
-          };
-          if (row.editedAt !== undefined) revived.editedAt = reviveDate(row.editedAt);
-          return revived;
-        }
-      )
-    );
+    const messagesResult = dedupeById(reviveRows(rowsOf('messages'), MessageSchema, dated('messages')));
     skipped += messagesResult.skipped;
 
-    const habitsResult = dedupeById(
-      reviveRows(
-        p.habits === undefined ? [] : p.habits,
-        HabitSchema,
-        (row) =>
-          hasValidDates(row, HABIT_DATE_FIELDS)
-            ? {
-                ...row,
-                ...presentDate(row, 'archivedAt'),
-                createdAt: reviveDate(row.createdAt),
-                updatedAt: reviveDate(row.updatedAt),
-              }
-            : null
-      )
-    );
+    const habitsResult = dedupeById(reviveRows(rowsOf('habits'), HabitSchema, dated('habits')));
     skipped += habitsResult.skipped;
 
-    const habitLogsResult = dedupeById(
-      reviveRows(
-        p.habitLogs === undefined ? [] : p.habitLogs,
-        HabitLogSchema,
-        (row) =>
-          hasValidDates(row, HABIT_LOG_DATE_FIELDS)
-            ? { ...row, createdAt: reviveDate(row.createdAt) }
-            : null
-      )
-    );
+    const habitLogsResult = dedupeById(reviveRows(rowsOf('habitLogs'), HabitLogSchema, dated('habitLogs')));
     skipped += habitLogsResult.skipped;
 
-    const checkInsResult = dedupeBy(
-      reviveRows(
-        p.checkIns === undefined ? [] : p.checkIns,
-        CheckInSchema,
-        (row) =>
-          hasValidDates(row, CHECK_IN_DATE_FIELDS)
-            ? {
-                ...row,
-                createdAt: reviveDate(row.createdAt),
-                updatedAt: reviveDate(row.updatedAt),
-              }
-            : null
-      ),
-      (c) => c.date
-    );
+    const checkInsResult = dedupeBy(reviveRows(rowsOf('checkIns'), CheckInSchema, dated('checkIns')), (c) => c.date);
     skipped += checkInsResult.skipped;
 
-    const domainsResult = dedupeById(
-      reviveRows(
-        p.domains === undefined ? [] : p.domains,
-        DomainSchema,
-        (row) =>
-          hasValidDates(row, DOMAIN_DATE_FIELDS)
-            ? { ...row, createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
-            : null
-      )
-    );
+    const domainsResult = dedupeById(reviveRows(rowsOf('domains'), DomainSchema, dated('domains')));
     skipped += domainsResult.skipped;
 
-    const projectsResult = dedupeById(
-      reviveRows(
-        p.projects === undefined ? [] : p.projects,
-        ProjectSchema,
-        (row) =>
-          hasValidDates(row, PROJECT_DATE_FIELDS)
-            ? {
-                ...row,
-                lastTouchedAt: reviveDate(row.lastTouchedAt),
-                createdAt: reviveDate(row.createdAt),
-                updatedAt: reviveDate(row.updatedAt),
-                breadcrumbAt: reviveNullableDate(row.breadcrumbAt),
-              }
-            : null
-      )
-    );
+    const projectsResult = dedupeById(reviveRows(rowsOf('projects'), ProjectSchema, dated('projects')));
     skipped += projectsResult.skipped;
 
-    const tasksResult = dedupeById(
-      reviveRows(
-        p.tasks === undefined ? [] : p.tasks,
-        TaskSchema,
-        (row) => {
-          if (!hasValidDates(row, TASK_DATE_FIELDS)) return null;
-          return {
-            ...row,
-            dueAt: reviveNullableDate(row.dueAt),
-            deferUntil: reviveNullableDate(row.deferUntil),
-            createdAt: reviveDate(row.createdAt),
-            touchedAt: reviveDate(row.touchedAt),
-            doneAt: reviveNullableDate(row.doneAt),
-          };
-        }
-      )
-    );
+    const tasksResult = dedupeById(reviveRows(rowsOf('tasks'), TaskSchema, dated('tasks')));
     skipped += tasksResult.skipped;
 
-    const blocksResult = dedupeById(
-      reviveRows(
-        p.blocks === undefined ? [] : p.blocks,
-        BlockSchema,
-        (row) =>
-          hasValidDates(row, BLOCK_DATE_FIELDS)
-            ? {
-                ...row,
-                start: reviveDate(row.start),
-                end: reviveDate(row.end),
-                createdAt: reviveDate(row.createdAt),
-                updatedAt: reviveDate(row.updatedAt),
-              }
-            : null
-      )
-    );
+    const blocksResult = dedupeById(reviveRows(rowsOf('blocks'), BlockSchema, dated('blocks')));
     skipped += blocksResult.skipped;
 
-    const dayPlansResult = dedupeBy(
-      reviveRows(
-        p.dayPlans === undefined ? [] : p.dayPlans,
-        DayPlanSchema,
-        (row) =>
-          hasValidDates(row, DAY_PLAN_DATE_FIELDS)
-            ? { ...row, ...presentDate(row, 'shutdownAt'), createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
-            : null
-      ),
-      (d) => d.date
-    );
+    const dayPlansResult = dedupeBy(reviveRows(rowsOf('dayPlans'), DayPlanSchema, dated('dayPlans')), (d) => d.date);
     skipped += dayPlansResult.skipped;
 
-    const estimatesResult = dedupeById(
-      reviveRows(
-        p.estimates === undefined ? [] : p.estimates,
-        EstimateSchema,
-        (row) =>
-          hasValidDates(row, ESTIMATE_DATE_FIELDS)
-            ? { ...row, createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
-            : null
-      )
-    );
+    const estimatesResult = dedupeById(reviveRows(rowsOf('estimates'), EstimateSchema, dated('estimates')));
     skipped += estimatesResult.skipped;
 
-    const reviewRows = reviveReviews(p.reviews === undefined ? [] : p.reviews);
+    const reviewRows = reviveReviews(rowsOf('reviews'), backupTime);
     const snapshotsDropped = reviewRows.snapshotsDropped;
+    if (reviewRows.repaired > 0) repairedBy.reviews = reviewRows.repaired;
     const reviewsResult = dedupeBy(reviewRows, (review) => review.weekOf);
     skipped += reviewsResult.skipped;
 
-    const reviewDraftsResult = dedupeBy(
-      reviveRows(
-        p.reviewDrafts === undefined ? [] : p.reviewDrafts,
-        ReviewDraftSchema,
-        (row) => (hasValidDates(row, REVIEW_DRAFT_DATE_FIELDS) ? { ...row, updatedAt: reviveDate(row.updatedAt) } : null)
-      ),
-      (draft) => draft.weekOf
-    );
+    const reviewDraftsResult = dedupeBy(reviveRows(rowsOf('reviewDrafts'), ReviewDraftSchema, dated('reviewDrafts')), (draft) => draft.weekOf);
     skipped += reviewDraftsResult.skipped;
 
-    const streak = reviveStreak(p.streak);
-    const settings = reviveSettings(p.settings);
-    const llmSettings = reviveLLMSettings(p.llmSettings);
+    const streakRevived = reviveStreak(p.streak, backupTime);
+    const settingsRevived = reviveSettings(p.settings, backupTime);
+    const llmRevived = reviveLLMSettings(p.llmSettings, backupTime);
+    const streak = streakRevived.value;
+    const settings = settingsRevived.value;
+    const llmSettings = llmRevived.value;
+    for (const [key, revived] of [['streak', streakRevived], ['settings', settingsRevived], ['llmSettings', llmRevived]] as const) {
+      if (revived.repaired) repairedBy[key] = 1;
+    }
     // A single-row record that is in the file but unusable is skipped (and counted), not silently lost.
     for (const [carried, revived] of [[p.streak, streak], [p.settings, settings], [p.llmSettings, llmSettings]] as const) {
       if (carried != null && revived === null) skipped++;
@@ -470,7 +259,8 @@ export function parseEnvelope(json: string): ParseResult {
       ...(p.reviewDrafts !== undefined ? { reviewDrafts: reviewDraftsResult.unique as ReviewDraft[] } : {}),
       ...(leftOut ? { leftOut } : {}),
     };
-    return { ok: true, envelope, skipped, snapshotsDropped };
+    const repaired = Object.values(repairedBy).reduce((n, c) => n + c, 0);
+    return { ok: true, envelope, skipped, snapshotsDropped, repaired, repairedBy };
   } catch (e) {
     // Never echo the engine's message: for malformed JSON it quotes the start of the file.
     return { ok: false, error: e instanceof SyntaxError ? "This file isn't valid JSON." : 'This file could not be read.' };
@@ -507,42 +297,35 @@ function reviveLeftOut(value: unknown): LeftOutItem[] | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-function reviveStreak(value: unknown): Streak | null {
-  if (!value || typeof value !== 'object') return null;
-  const row = value as Record<string, unknown>;
-  const updatedAt = reviveDate(row.updatedAt);
-  if (!updatedAt) return null;
-  const parsed = StreakSchema.safeParse({ ...row, updatedAt });
-  return parsed.success ? parsed.data : null;
+interface Revived<T> {
+  value: T | null;
+  repaired: boolean;
 }
 
-function reviveSettings(value: unknown): Settings | null {
-  if (!value || typeof value !== 'object') return null;
-  const row = value as Record<string, unknown>;
-  const createdAt = reviveDate(row.createdAt) ?? new Date();
-  const updatedAt = reviveDate(row.updatedAt) ?? new Date();
-  const connectedAt = presentDate(row, 'googleCalendarConnectedAt');
-  if (row.googleCalendarConnectedAt != null && connectedAt.googleCalendarConnectedAt == null) return null;
-  const freezeUsedAt = presentDate(row, 'lastStreakFreezeUsedAt');
-  if (row.lastStreakFreezeUsedAt != null && freezeUsedAt.lastStreakFreezeUsedAt == null) return null;
-  const parsed = SettingsSchema.safeParse({
-    ...row,
-    createdAt,
-    updatedAt,
-    ...connectedAt,
-    ...freezeUsedAt,
-  });
-  return parsed.success ? (parsed.data as Settings) : null;
+function reviveStreak(value: unknown, backupTime: Date): Revived<Streak> {
+  if (!value || typeof value !== 'object') return { value: null, repaired: false };
+  const dated = reviveDates(value as Record<string, unknown>, DATE_SPECS.streak, backupTime);
+  if (!dated || dated.row.updatedAt === undefined) return { value: null, repaired: false };
+  const parsed = StreakSchema.safeParse(dated.row);
+  return parsed.success ? { value: parsed.data, repaired: dated.repaired.length > 0 } : { value: null, repaired: false };
 }
 
-function reviveLLMSettings(value: unknown): LLMSettings | null {
-  if (!value || typeof value !== 'object') return null;
-  const row = value as Record<string, unknown>;
-  const totalTokensResetAt = reviveDate(row.totalTokensResetAt);
-  const updatedAt = reviveDate(row.updatedAt);
-  if (!totalTokensResetAt || !updatedAt) return null;
-  const parsed = LLMSettingsSchema.safeParse({ ...row, totalTokensResetAt, updatedAt });
-  return parsed.success ? parsed.data : null;
+function reviveSettings(value: unknown, backupTime: Date): Revived<Settings> {
+  if (!value || typeof value !== 'object') return { value: null, repaired: false };
+  const dated = reviveDates(value as Record<string, unknown>, DATE_SPECS.settings, backupTime);
+  if (!dated) return { value: null, repaired: false };
+  // A settings row from before the stamps existed is given today's.
+  const row = { ...dated.row, createdAt: dated.row.createdAt ?? new Date(), updatedAt: dated.row.updatedAt ?? new Date() };
+  const parsed = SettingsSchema.safeParse(row);
+  return parsed.success ? { value: parsed.data as Settings, repaired: dated.repaired.length > 0 } : { value: null, repaired: false };
+}
+
+function reviveLLMSettings(value: unknown, backupTime: Date): Revived<LLMSettings> {
+  if (!value || typeof value !== 'object') return { value: null, repaired: false };
+  const dated = reviveDates(value as Record<string, unknown>, DATE_SPECS.llmSettings, backupTime);
+  if (!dated || dated.row.totalTokensResetAt === undefined || dated.row.updatedAt === undefined) return { value: null, repaired: false };
+  const parsed = LLMSettingsSchema.safeParse(dated.row);
+  return parsed.success ? { value: parsed.data, repaired: dated.repaired.length > 0 } : { value: null, repaired: false };
 }
 
 /**
