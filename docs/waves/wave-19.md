@@ -1,8 +1,8 @@
 # Wave 19 — UX, accessibility, performance
 
-**Status:** in progress · **PRs:** (1) the in-house a11y sweep and the fixes it found, (2) theming and
-high contrast, (3) command palette and cheat sheet, (4) performance on a 10k-task dataset, (5) empty
-states and first-run · **Roadmap:** Wave 19 · **Lane:** B
+**Status:** in progress · **PRs:** (1) the in-house a11y sweep and the fixes it found, (2) high
+contrast, (3) command palette and cheat sheet, (4) performance on a 10k-task dataset, (5) empty states
+and first-run · **Roadmap:** Wave 19 · **Lane:** B
 
 ## What shipped (part 1)
 
@@ -45,6 +45,33 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
   - **Reduced motion**: a `prefers-reduced-motion` media query in `globals.css` (no CSS animation,
     transition or smooth scrolling) and `MotionProvider` (`MotionConfig reducedMotion="user"`) in the
     root layout, so motion/react skips transform animations too.
+
+## What shipped (part 2)
+
+- **High-contrast mode** as an Appearance setting (`settings.highContrast`, off by default): applied as
+  `data-contrast="high"` next to `data-theme`, by the same inline script and `ThemeApplier` that apply
+  the theme, so there is no flash and no second source of truth. It works on top of the light or dark
+  theme and on the System theme, resolved through `prefers-color-scheme`.
+- The palette: black/white text and quiet text at **AAA (≥7:1)**, borders and accents at **AA
+  (≥4.5:1)** both as text and behind the button text, with each of the four accent hues in a shade
+  that clears those numbers on its surface.
+- **`settingsRepo.get()` reads first, and writes only when the row is missing.** A plain
+  read-then-write could put the defaults back over a setting written during the same first paint (the
+  new test starts several reads of a missing row and a write together, and the old code loses it), so
+  the creation is one transaction - but the common path is still a plain read, because a read that
+  always opened a read-write transaction cannot run inside a caller's read-only transaction and takes
+  a write lock on every screen. The transaction re-checks for the row before writing.
+- Screenshots at 390x844 of high contrast in light and dark: `/tmp/qa-w19-shots/` (`home-hc-light.png`,
+  `appearance-hc-light.png`, `home-hc-dark.png`, `appearance-hc-dark.png`). The accent swatches under
+  Appearance keep the four canonical hues (they identify the hue, not the effective shade).
+- Tests: a unit suite for the toggle (applies/removes the attribute from the stored row, the labelled
+  control saves, a backup round trip keeps it, a row from before the field imports cleanly), the
+  default-row race, `get()` inside a read-only transaction and `get()` not opening a read-write
+  transaction when the row exists, and a
+  sweep case over 24 combinations (OS light/dark × System/light/dark theme × four accents) asserting the
+  token ratios and the computed colours of a `text-accent` link and a primary button.
+- A note on the measurement itself: the page background is the `base` token; `body` is transparent, and
+  measuring against it compared every colour with black (found and fixed while writing the case).
 
 ## Decisions where the roadmap was silent
 

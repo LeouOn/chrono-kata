@@ -146,6 +146,12 @@ export const SettingsSchema = z.object({
   notificationsEnabled: z.boolean().optional(),
   theme: ThemeModeSchema.optional(),
   accentColor: AccentColorSchema.optional(),
+  /**
+   * High-contrast mode (roadmap W19): stronger text, borders and accent shades
+   * on top of the light or dark theme. Optional and non-indexed, so rows written
+   * before it existed stay valid and read as off.
+   */
+  highContrast: z.boolean().optional(),
   ratingStyle: RatingStyleSchema.optional(),
   confirmKataDelete: z.boolean().optional(),
   confirmSessionDelete: z.boolean().optional(),
@@ -192,6 +198,7 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'createdAt' | 'updatedAt'> = {
   notificationsEnabled: false,
   theme: 'system',
   accentColor: 'amber',
+  highContrast: false,
   ratingStyle: 'stars',
   confirmKataDelete: true,
   confirmSessionDelete: true,

@@ -24,14 +24,30 @@ export interface SettingsRepository {
 }
 
 export class DexieSettingsRepository implements SettingsRepository {
+  /**
+   * The stored row, creating the defaults on first read.
+   *
+   * The common path is a plain read, so it can run inside a caller's READ-ONLY
+   * transaction (the importer's merge/preview does exactly that) and never takes
+   * a write lock just to read a row that exists.
+   *
+   * Only when the row is missing does it open a read-write transaction, and it
+   * re-checks inside it: a plain read-then-write could put the defaults back over
+   * a setting another caller wrote in the same first-paint window (several
+   * queries ask at once, and a toggle pressed in that window was lost).
+   */
   async get(): Promise<Settings> {
     const db = getDb();
     const existing = await db.settings.get('singleton');
     if (existing) return existing;
-    const now = new Date();
-    const fresh: Settings = { ...DEFAULT_SETTINGS, createdAt: now, updatedAt: now };
-    await db.settings.put(fresh);
-    return fresh;
+    return db.transaction('rw', db.settings, async () => {
+      const again = await db.settings.get('singleton');
+      if (again) return again;
+      const now = new Date();
+      const fresh: Settings = { ...DEFAULT_SETTINGS, createdAt: now, updatedAt: now };
+      await db.settings.put(fresh);
+      return fresh;
+    });
   }
 
   async save(settings: Settings): Promise<void> {
