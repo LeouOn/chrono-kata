@@ -13,6 +13,7 @@ import { resolveAnchors, resolveWakingHours } from '@/lib/planning/resolve';
 import { anchorsWithinWindow } from '@/lib/planning/anchors';
 import { computeCapacity, type CapacityResult } from '@/lib/planning/capacity';
 import { rankPicks, type RankedPick } from '@/lib/planning/rank-picks';
+import { CADENCE_WINDOW_DAYS } from '@/lib/planning/cadence';
 import { wakingWindow } from '@/lib/planning/time';
 import { addDays } from '@/lib/pacing/days';
 import { toLocalDateString } from '@/lib/utils/date';
@@ -30,8 +31,6 @@ export interface DayPlanView {
   /** False while the task or plan query is still resolving (used to defer drafts). */
   isLoading: boolean;
 }
-
-const DAYS_IN_CADENCE_WINDOW = 7;
 
 /**
  * Everything the plan screen and the Today card need, computed once.
@@ -93,7 +92,7 @@ export function usePlanToday(dayKey?: string): DayPlanView {
   const picks = useMemo(() => {
     if (!enabled) return [];
     const cadenceDays = new Set<string>();
-    for (let offset = 0; offset < DAYS_IN_CADENCE_WINDOW; offset += 1) {
+    for (let offset = 0; offset < CADENCE_WINDOW_DAYS; offset += 1) {
       cadenceDays.add(addDays(today, -offset));
     }
     const recentSessions = sessions.filter((session) =>

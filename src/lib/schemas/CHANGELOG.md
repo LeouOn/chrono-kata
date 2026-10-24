@@ -36,6 +36,22 @@ stored only when the user explicitly opts in ("Remember this address", off by
 default). Optional and non-indexed, so Dexie stays on v7 and the backup
 envelope stays version 2 (optional field only).
 
+## 2026-10-24 — Project rhythm: block length and stall setting (roadmap W10 part 1)
+
+`project.ts` gains two optional, non-indexed fields, so Dexie stays on v7 and
+rows written before this wave remain valid (both accept `null` as "cleared"):
+
+- `cadenceBlockMin` — integer 5–240, the target length of one block ("2 blocks
+  a week, 45 min"). With it, cadence counts a session by its minutes (one
+  session never earns more than one block); without it, each session is one
+  block as before. Inert without `cadencePerWeek`.
+- `stallAfterDays` — integer 3–365, local days without work before the project
+  is offered a gentle revive. Absent means "derive it from the project's own
+  rhythm" (twice its usual gap, never under 7).
+
+Both are carried by the backup envelope (still `version: 2`) because import
+validates projects with `ProjectSchema`. See docs/waves/wave-10.md.
+
 ## 2026-10-23 — Planning settings: waking hours and anchors (roadmap W6 part 1)
 
 `settings.ts` gains optional `wakingHours` (`{ start, end }`, `HH:MM` 24-hour,

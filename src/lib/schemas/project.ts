@@ -14,6 +14,17 @@ const ProjectBaseSchema = z.object({
   status: ProjectStatusSchema,
   /** Target sessions per week; Wave 10's cadence debt uses this. */
   cadencePerWeek: z.number().int().min(1).max(7).nullable().optional(),
+  /**
+   * Wave 10: how long one block should be, in minutes ("2 blocks a week,
+   * 45 min"). With it, a session earns the share of a block its minutes cover.
+   * Inert without `cadencePerWeek`. Optional and not indexed (no Dexie bump).
+   */
+  cadenceBlockMin: z.number().int().min(5).max(240).nullable().optional(),
+  /**
+   * Wave 10: local days without work before the project is offered a gentle
+   * revive. Absent means "derive it from the project's own rhythm".
+   */
+  stallAfterDays: z.number().int().min(3).max(365).nullable().optional(),
   /** Latest denormalized next step ("after this, do X"). */
   breadcrumb: z.string().max(500).nullable().optional(),
   lastTouchedAt: z.date(),

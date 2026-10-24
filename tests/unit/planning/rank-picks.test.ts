@@ -337,3 +337,51 @@ describe('rankPicks project cap', () => {
     expect(picks).toHaveLength(MAX_PICKS);
   });
 });
+
+describe('rankPicks cadence: work done through tasks, and minutes-based rhythms', () => {
+  const cadenceReason = (reasons: string[]) => reasons.find((reason) => / wants \d+ /.test(reason));
+
+  it('counts a session spent on one of the project\'s tasks, as every Start button records it', () => {
+    const novel = project({ title: 'Novel', cadencePerWeek: 2 });
+    const t = task({ title: 'Write the scene', projectId: novel.id });
+    const viaTask = session({ taskId: t.id, projectId: null, startedAt: new Date(2026, 5, 14, 9, 0) });
+
+    const before = rankPicks({ ...baseInput, tasks: [t], projects: [novel] })[0]!;
+    const after = rankPicks({ ...baseInput, tasks: [t], projects: [novel], recentSessions: [viaTask] })[0]!;
+
+    expect(cadenceReason(before.reasons)).toBe('Novel wants 2 a week and has had 0 this week');
+    expect(cadenceReason(after.reasons)).toBe('Novel wants 2 a week and has had 1 this week');
+    expect(before.score - after.score).toBe(15);
+  });
+
+  it('is met once the week has had its sessions, and then adds nothing', () => {
+    const novel = project({ title: 'Novel', cadencePerWeek: 1 });
+    const t = task({ title: 'Write the scene', projectId: novel.id });
+    const done = session({ taskId: t.id, startedAt: new Date(2026, 5, 14, 9, 0) });
+    const pick = rankPicks({ ...baseInput, tasks: [t], projects: [novel], recentSessions: [done] })[0]!;
+    expect(cadenceReason(pick.reasons)).toBeUndefined();
+  });
+
+  it('weighs a short touch by its minutes when the project has a block length', () => {
+    const course = project({ title: 'Course', cadencePerWeek: 2, cadenceBlockMin: 45 });
+    const t = task({ title: 'Watch lesson 3', projectId: course.id });
+    const touch = session({ taskId: t.id, startedAt: new Date(2026, 5, 14, 9, 0), durationMinutes: 10 });
+    const full = session({ taskId: t.id, startedAt: new Date(2026, 5, 14, 9, 0), durationMinutes: 45 });
+
+    const afterTouch = rankPicks({ ...baseInput, tasks: [t], projects: [course], recentSessions: [touch] })[0]!;
+    expect(cadenceReason(afterTouch.reasons)).toBe('Course wants 2 blocks of 45 min a week and has had 10 min this week');
+    const afterFull = rankPicks({ ...baseInput, tasks: [t], projects: [course], recentSessions: [full] })[0]!;
+    expect(afterTouch.score - afterFull.score).toBe(15); // two blocks wanted vs one
+    expect(GUILT.test(afterTouch.reasons.join(' '))).toBe(false);
+  });
+
+  it('keeps the cadence points capped however big the debt', () => {
+    const wide = project({ title: 'Wide', cadencePerWeek: 7 });
+    const plain = project({ title: 'Plain' });
+    const a = task({ title: 'a', projectId: wide.id });
+    const b = task({ title: 'b', projectId: plain.id });
+    const [first, second] = rankPicks({ ...baseInput, tasks: [a, b], projects: [wide, plain] });
+    expect(first!.task.id).toBe(a.id);
+    expect(first!.score - second!.score).toBe(45);
+  });
+});
