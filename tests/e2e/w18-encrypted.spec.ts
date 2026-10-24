@@ -135,8 +135,14 @@ test('save encrypted with the box ticked, open it on a new device: same data, sa
   await b.getByRole('dialog').getByRole('button', { name: 'Replace everything' }).click();
   await expect(b.getByTestId('backup-outcome')).toContainText(/^Restored /);
 
-  // The wave's sentence, secrets included.
-  expect(await savePlain(b)).toEqual(plainA);
+  // The wave's sentence, secrets included. One line of the files' own "what is left out" list differs by
+  // design: device A was given AI providers marked as found from its environment, and those are never put in
+  // a file (the new device finds its own), so only A reports leaving them out.
+  const comparable = (file: Record<string, unknown>) => ({
+    ...file,
+    leftOut: (file.leftOut as { id: string }[]).filter((item) => item.id !== 'llmSettings.environmentProviders'),
+  });
+  expect(comparable(await savePlain(b))).toEqual(comparable(plainA));
   const encryptedB = await saveEncrypted(b, true);
   const openedA = await decryptBackup(encryptedA, PASS);
   const openedB = await decryptBackup(encryptedB, PASS);
@@ -145,11 +151,7 @@ test('save encrypted with the box ticked, open it on a new device: same data, sa
   expect(openedA.secrets?.icsSubscriptionUrl).toBe(SECRET.icsUrl);
   expect(Object.keys(openedA.secrets!.llmApiKeys).length).toBeGreaterThan(1);
   expect(openedB.secrets).toEqual(openedA.secrets);
-  const strip = (backup: unknown) => {
-    const copy = { ...(backup as Record<string, unknown>) };
-    delete copy.exportedAt;
-    return copy;
-  };
+  const strip = (backup: unknown) => comparable({ ...(backup as Record<string, unknown>), exportedAt: undefined });
   expect(strip(openedB.backup)).toEqual(strip(openedA.backup));
 });
 
