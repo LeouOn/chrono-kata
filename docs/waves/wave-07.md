@@ -141,34 +141,46 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
 ## Shipped (part 3 — lanes, editing, conflicts, replan)
 
 - **Overlapping blocks sit in side-by-side lanes** (`assignLanes` interval
-  colouring in `layout.ts`, unit-tested: no overlap, two/three simultaneous,
-  lane reuse, touching blocks, shuffle independence). The render test asserts
-  both blocks are visible, have different left offsets and are tappable; a
-  touch E2E taps the lower block, which used to be covered.
+  colouring; 4000-case oracle-style unit coverage plus tie-break by id). Both
+  blocks stay visible and tappable: a render test asserts different offsets and
+  taps both, and a `hasTouch` 390×844 E2E taps the lower block that used to be
+  covered.
 - **Pointer drag and resize**: one Pointer Events path for mouse and touch.
-  Moving a block body and dragging the top/bottom handles call `moveBlock` /
-  `resizeBlock` from the core (nearest snap, grid-safe edges, duration kept);
-  release commits, Escape or `pointercancel` writes nothing. A 5/15-minute snap
-  toggle is visible. Keyboard: Alt+Up/Down moves, Shift+Alt+Up/Down changes the
-  end; the tap-to-edit sheet still does everything, so drag is never the only
-  way.
-- **Conflicts** are named calmly ("One time overlap" / "Blocks share time
-  around 09:00–12:00"); nothing is auto-moved.
-- **Replan from now**: when focus blocks exist, the button becomes "Replan from
-  now" and calls `replanFromNow` — started blocks stay, future picks are
-  re-laid, overflow is shown before Apply ("N picks went back to your list")
-  and applied in ONE transaction (`commitLayout`: blocks + dayPlan picks +
-  task status `next`), so a failure rolls all of it back.
-- **Touch limits of the emulation**: the Playwright `hasTouch` run (390×844)
-  proves lane geometry, real tap targets on both overlapping blocks and on the
-  resize handles. It does NOT cover a real Android device: OS scroll handoff and
-  `pointercancel` during a body drag (body uses `touch-action: pan-y`, so a
-  vertical touch swipe scrolls rather than moving a block — moving on touch goes
-  through the sheet or keyboard), palm rejection, multi-touch, long-press
-  context menus, device pixel ratio/hit-slop, or native rendering performance.
-  Resize handles use `touch-action: none` and are the touch drag path.
+  Body drag moves, top/bottom handles resize through `moveBlock`/`resizeBlock`
+  only (nearest snap, grid edges, duration kept); release commits, **Escape
+  cancels a live drag** (window keydown listener while dragging), and
+  `pointercancel` clears the drag so a touch scroll never leaves a stale one.
+  The visual bars are slim; each handle's hit area is 44px tall and reaches
+  outside the block edge, so a 30-minute block (33px) keeps a tappable middle.
+  A 5/15 snap toggle drives proposal, drag and keyboard; keyboard Alt+Up/Down
+  moves and Shift+Alt+Up/Down changes the end. The tap-to-edit sheet remains a
+  complete alternative, and the first Enter after a pointer interaction is not
+  swallowed.
+- **Conflicts** name the actual shared interval ("These blocks share
+  10:00–11:00"), outline the blocks involved, and say "move it, shorten it, or
+  leave it as it is"; nothing is auto-moved.
+- **Replan from now** uses `replanFromNow` only when focus blocks overlap
+  TODAY's waking window (a tomorrow-only block does not relabel the button).
+  A confirmed DayPlan is what gets laid out, in its order, filtered to open
+  tasks; suggestions are used only when no plan exists. Overflow is previewed
+  ("will go back" with a plan, "did not fit today" without) and applied by
+  `commitLayout` in ONE transaction: focus blocks replaced (started and
+  non-focus blocks preserved), only overflow ids removed from an existing plan
+  (never creating one, never touching task status), with a calm confirmation
+  afterwards. Mutants killed include: suggestions instead of plan, commit
+  fabricating a plan, Escape disabled, small handle, union-span conflict text,
+  proposal ignoring the snap step, lanes tie-break, and the earlier lane/
+  keyboard/commit/conflict set.
 
 ## Known gaps
+
+- Moving a block by touch is not a drag: the body keeps `touch-action: pan-y`
+  so a vertical swipe scrolls the page; on a phone you move via the sheet or
+  keyboard, and resize by the handles (the tested touch path). Long-press to
+  drag is a follow-up.
+- Holding an arrow key repeats at the keyboard rate and each repeat writes;
+  there is no write throttling.
+- Week view is deferred.
 
 - The step is **5 or 15 minutes**: the grid is anchored at the Unix epoch, which
   equals the local clock grid for those steps in every real zone, but not for

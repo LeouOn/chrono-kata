@@ -49,8 +49,18 @@ describe('assignLanes', () => {
     expect(byId(backward)).toEqual(byId(forward));
   });
 
-  it('keeps touching blocks in one lane (gap-free is not overlap)', () => {
+  it('keeps touching blocks in one lane and one cluster (gap-free is not overlap)', () => {
     const result = assignLanes([block('a', 9, 10), block('b', 10, 11)]);
     expect(result.every((entry) => entry.lane === 0)).toBe(true);
+    expect(result.every((entry) => entry.laneCount === 1)).toBe(true);
+  });
+
+  it('breaks ties between identical intervals by id, independent of input order', () => {
+    const x = block('a', 9, 10);
+    const y = block('b', 9, 10);
+    const forward = assignLanes([x, y]);
+    const backward = assignLanes([y, x]);
+    const byId = (rows: typeof forward) => [...rows].sort((a, b) => a.id.localeCompare(b.id)).map((row) => [row.id, row.lane]);
+    expect(byId(backward)).toEqual(byId(forward));
   });
 });

@@ -34,6 +34,7 @@ export interface TimelineBlock {
   domainId?: string | null;
   lane?: number;
   laneCount?: number;
+  conflicting?: boolean;
 }
 
 interface Props {
@@ -72,8 +73,22 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
   const dragRef = useRef<DragState | null>(null);
   const suppressClickRef = useRef(false);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !dragRef.current) return;
+      event.preventDefault();
+      dragRef.current = null;
+      setDrag(null);
+    };
+    globalThis.addEventListener('keydown', onKey);
+    return () => globalThis.removeEventListener('keydown', onKey);
+  }, []);
+
   function begin(event: React.PointerEvent, entry: TimelineBlock, mode: DragState['mode']) {
     if (!onCommit || entry.kind === 'anchor') return;
+    // A stale suppress flag from the previous drag must not swallow this one's
+    // first keyboard Enter after a pointer interaction.
+    suppressClickRef.current = false;
     // No preventDefault here: on touch, canceling pointerdown also suppresses the
     // compatibility click, so a tap would not open the sheet. Movement is
     // prevented once a drag actually starts.
@@ -124,8 +139,11 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
     if (changed) void onCommit?.(current.entry, current.preview);
     // Let the compatibility click pass through (and be swallowed above) before
     // the sheet opens; otherwise that click lands on the new backdrop and
-    // closes it again.
+    // closes it again. Clear the flag anyway, so keyboard use is never masked.
     else globalThis.setTimeout(() => onSelect(current.entry), 0);
+    globalThis.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
   }
 
   function cancel() {
@@ -135,6 +153,9 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
 
   function keydown(event: React.KeyboardEvent, entry: TimelineBlock) {
     if (!onCommit || entry.kind === 'anchor') return;
+    // A stale suppress flag from the previous drag must not swallow this one's
+    // first keyboard Enter after a pointer interaction.
+    suppressClickRef.current = false;
     if (!event.altKey) return;
     const direction = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
     if (direction === 0) return;
@@ -212,7 +233,7 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
               onKeyDown={(event) => keydown(event, entry)}
               aria-label={`${entry.kind} block ${entry.title} ${clock(active.start)} to ${clock(active.end)}`}
               aria-describedby="timeline-hint"
-              className={`absolute overflow-hidden rounded-xl border px-2 py-1 text-left text-[11px] text-text min-h-11 ${className}`}
+              className={`absolute overflow-hidden rounded-xl border px-2 py-1 text-left text-[11px] text-text min-h-11 ${entry.conflicting ? 'ring-2 ring-hype/70' : ''} ${className}`}
               style={{
                 top: topPx,
                 height: heightPx,
@@ -235,15 +256,17 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
                   onPointerMove={move}
                   onPointerUp={finish}
                   onPointerCancel={cancel}
-                  className="absolute z-10 rounded-full bg-accent/70"
+                  className="absolute z-10 flex items-center justify-center bg-transparent"
                   style={{
                     left: `calc(${(lane / laneCount) * 100}% + 2px)`,
                     width: `calc(${100 / laneCount}% - 4px)`,
-                    top: Math.max(0, topPx - 3),
-                    height: 10,
+                    top: Math.max(0, topPx - 22),
+                    height: 44,
                     touchAction: 'none',
                   }}
-                />
+                >
+                  <span className="block h-1 w-full rounded-full bg-accent/70" aria-hidden="true" />
+                </button>
                 <button
                   type="button"
                   aria-label={`Resize end of ${entry.title}`}
@@ -251,15 +274,17 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
                   onPointerMove={move}
                   onPointerUp={finish}
                   onPointerCancel={cancel}
-                  className="absolute z-10 rounded-full bg-accent/70"
+                  className="absolute z-10 flex items-center justify-center bg-transparent"
                   style={{
                     left: `calc(${(lane / laneCount) * 100}% + 2px)`,
                     width: `calc(${100 / laneCount}% - 4px)`,
-                    top: Math.max(0, topPx + heightPx - 7),
-                    height: 10,
+                    top: Math.max(0, topPx + heightPx - 22),
+                    height: 44,
                     touchAction: 'none',
                   }}
-                />
+                >
+                  <span className="block h-1 w-full rounded-full bg-accent/70" aria-hidden="true" />
+                </button>
               </>
             ) : null}
             </React.Fragment>

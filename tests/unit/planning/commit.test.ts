@@ -16,25 +16,95 @@ beforeEach(async () => {
 });
 
 describe('commitLayout', () => {
-  it('puts overflow tasks back to next and writes the remaining picks in one transaction', async () => {
-    const t2 = await taskRepo.create({ title: 'overflow', status: 'scheduled', source: 'manual' });
-    await dayPlanRepo.upsert(DAY, { picks: [T1, t2.id], capacityMin: 120 });
+  it('keeps a confirmed plan untouched when no pick overflowed', async () => {
+    await dayPlanRepo.upsert(DAY, { picks: [T2], capacityMin: 120 });
+    await commitLayout({
+      dayKey: DAY,
+      window: WINDOW,
+      now: NOW,
+      blocks: [{ taskId: T2, start: new Date(2026, 5, 15, 11).getTime(), end: new Date(2026, 5, 15, 11, 30).getTime() }],
+    });
+    const plan = await dayPlanRepo.getByDate(DAY);
+    expect(plan?.picks).toEqual([T2]);
+    expect(plan?.capacityMin).toBe(120);
+  });
+
+  it('removes only overflow ids from a confirmed plan and keeps its order and fields', async () => {
+    await dayPlanRepo.upsert(DAY, { picks: [T1, T2], capacityMin: 90, shutdownNote: 'keep me' });
     await commitLayout({
       dayKey: DAY,
       window: WINDOW,
       now: NOW,
       blocks: [],
-      overflowTaskIds: [t2.id],
-      picks: [T1],
+      overflowTaskIds: [T2],
     });
     const plan = await dayPlanRepo.getByDate(DAY);
     expect(plan?.picks).toEqual([T1]);
-    expect((await taskRepo.getById(t2.id))?.status).toBe('next');
+    expect(plan?.capacityMin).toBe(90);
+    expect(plan?.shutdownNote).toBe('keep me');
   });
 
-  it('rolls back blocks, picks and task status together when a write fails', async () => {
-    const t2 = await taskRepo.create({ title: 'overflow', status: 'scheduled', source: 'manual' });
-    await dayPlanRepo.upsert(DAY, { picks: [T1, t2.id], capacityMin: 120 });
+  it('never fabricates a plan when none exists', async () => {
+    await commitLayout({
+      dayKey: DAY,
+      window: WINDOW,
+      now: NOW,
+      blocks: [],
+      overflowTaskIds: [T2],
+    });
+    expect(await dayPlanRepo.getByDate(DAY)).toBeUndefined();
+  });
+
+  it('leaves a done task in overflow exactly as it was and schema-valid', async () => {
+    const done = await taskRepo.create({ title: 'done', status: 'next', source: 'manual' });
+    await taskRepo.setStatus(done.id, 'done');
+    await commitLayout({
+      dayKey: DAY,
+      window: WINDOW,
+      now: NOW,
+      blocks: [],
+      overflowTaskIds: [done.id],
+    });
+    const after = await taskRepo.getById(done.id);
+    expect(after?.status).toBe('done');
+    expect(after?.doneAt).toBeInstanceOf(Date);
+    expect(after?.nextAction).toBe(done.nextAction);
+  });
+
+  it('deletes future focus blocks but keeps started blocks and non-focus blocks', async () => {
+    const started = await blockRepo.create({
+      start: new Date(2026, 5, 15, 9),
+      end: new Date(2026, 5, 15, 10),
+      kind: 'focus',
+      title: 'Focus',
+      taskId: T1,
+    });
+    const future = await blockRepo.create({
+      start: new Date(2026, 5, 15, 11),
+      end: new Date(2026, 5, 15, 12),
+      kind: 'focus',
+      title: 'Focus',
+      taskId: T1,
+    });
+    const fixed = await blockRepo.create({
+      start: new Date(2026, 5, 15, 13),
+      end: new Date(2026, 5, 15, 14),
+      kind: 'fixed',
+      title: 'Dentist',
+    });
+    await commitLayout({
+      dayKey: DAY,
+      window: WINDOW,
+      now: NOW,
+      blocks: [{ taskId: T2, start: new Date(2026, 5, 15, 15).getTime(), end: new Date(2026, 5, 15, 15, 30).getTime() }],
+    });
+    expect(await blockRepo.getById(started.id)).toBeTruthy();
+    expect(await blockRepo.getById(future.id)).toBeUndefined();
+    expect(await blockRepo.getById(fixed.id)).toBeTruthy();
+  });
+
+  it('rolls back blocks and plan together when a write fails', async () => {
+    await dayPlanRepo.upsert(DAY, { picks: [T1, T2], capacityMin: 120 });
     const existing = await blockRepo.create({
       start: new Date(2026, 5, 15, 11),
       end: new Date(2026, 5, 15, 12),
@@ -51,15 +121,13 @@ describe('commitLayout', () => {
           { taskId: T1, start: new Date(2026, 5, 15, 13).getTime(), end: new Date(2026, 5, 15, 14).getTime() },
           { taskId: T2, start: new Date(2026, 5, 15, 15).getTime(), end: new Date(2026, 5, 15, 14).getTime() },
         ],
-        overflowTaskIds: [t2.id],
-        picks: [T1],
+        overflowTaskIds: [T2],
       }),
     ).rejects.toThrow();
     const plan = await dayPlanRepo.getByDate(DAY);
-    expect(plan?.picks).toEqual([T1, t2.id]);
-    expect((await taskRepo.getById(t2.id))?.status).toBe('scheduled');
+    expect(plan?.picks).toEqual([T1, T2]);
+    expect((await blockRepo.getById(existing.id))?.start.getHours()).toBe(11);
     const db = await getDb();
     expect(await db.blocks.count()).toBe(1);
-    expect((await blockRepo.getById(existing.id))?.start.getHours()).toBe(11);
   });
 });

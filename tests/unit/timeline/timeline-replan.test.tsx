@@ -57,6 +57,62 @@ async function seedTwoPicks(t2Status: 'next' | 'scheduled' = 'next') {
   return { t1, t2, started, future };
 }
 
+describe('layout picks and the replan decision', () => {
+  it('lays out the confirmed plan, not the ranker suggestions', async () => {
+    const t1 = await taskRepo.create({ title: 'Morning work', status: 'next', source: 'manual', estimateMin: 30 });
+    const t2 = await taskRepo.create({ title: 'Afternoon work', status: 'next', source: 'manual', estimateMin: 30 });
+    await dayPlanRepo.upsert(TODAY, { picks: [t2.id], capacityMin: 120 });
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: /propose a layout/i }));
+    expect(await screen.findByText('Afternoon work')).toBeTruthy();
+    expect(screen.queryByText('Morning work')).toBeNull();
+    expect(t1.id).toBeTruthy();
+  });
+
+  it('keeps a confirmed plan unchanged when nothing overflows', async () => {
+    const t2 = await taskRepo.create({ title: 'Afternoon work', status: 'next', source: 'manual', estimateMin: 30 });
+    await dayPlanRepo.upsert(TODAY, { picks: [t2.id], capacityMin: 120 });
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: /propose a layout/i }));
+    expect(await screen.findByText('Afternoon work')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /apply this layout/i }));
+    await waitFor(async () => {
+      const plan = await dayPlanRepo.getByDate(TODAY);
+      expect(plan?.picks).toEqual([t2.id]);
+      expect(plan?.capacityMin).toBe(120);
+    });
+  });
+
+  it('restores the plain "does not fit" line on the propose path', async () => {
+    const t1 = await taskRepo.create({ title: 'Morning work', status: 'next', source: 'manual', estimateMin: 30 });
+    await dayPlanRepo.upsert(TODAY, { picks: [t1.id], capacityMin: 120 });
+    const now = FIXED_NOW.getTime();
+    const end = new Date(now);
+    end.setHours(23, 59, 0, 0);
+    await blockRepo.create({ start: new Date(now), end, kind: 'fixed', title: 'All day' });
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: /propose a layout/i }));
+    expect(await screen.findByText(/1 pick does not fit and will stay on your list/i)).toBeTruthy();
+  });
+
+  it('does not call a tomorrow-only focus block "Replan from now"', async () => {
+    const task = await taskRepo.create({ title: 'Tomorrow task', status: 'next', source: 'manual', estimateMin: 30 });
+    const tomorrow = new Date(FIXED_NOW);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    await blockRepo.create({
+      start: tomorrow,
+      end: new Date(tomorrow.getTime() + minutes(30)),
+      kind: 'focus',
+      title: 'Focus',
+      taskId: task.id,
+    });
+    renderScreen();
+    expect(await screen.findByRole('button', { name: /propose a layout/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /replan from now/i })).toBeNull();
+  });
+});
+
 describe('Replan from now', () => {
   it('keeps a started block, moves the future one, and names both before Apply', async () => {
     const seeded = await seedTwoPicks();
@@ -86,11 +142,12 @@ describe('Replan from now', () => {
     });
     renderScreen();
     fireEvent.click(await screen.findByRole('button', { name: /replan from now/i }));
-    expect(await screen.findByText(/1 pick went back to your list/i)).toBeTruthy();
+    expect(await screen.findByText(/1 pick will go back to your list/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /apply replan/i }));
     await waitFor(async () => {
       const plan = await dayPlanRepo.getByDate(TODAY);
       expect(plan?.picks).toEqual([seeded.t1.id]);
     });
+    expect(await screen.findByText(/Applied\. 1 pick is back on your list\./i)).toBeTruthy();
   });
 });

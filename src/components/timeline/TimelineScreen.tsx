@@ -44,7 +44,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [anchorNotice, setAnchorNotice] = useState(false);
   const [outsideNotice, setOutsideNotice] = useState<string | null>(null);
-  const commitRef = useRef(false);
+  const [applyNotice, setApplyNotice] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const applyingRef = useRef(false);
 
@@ -79,6 +79,13 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
       ),
     [entries, timeline.window],
   );
+  const conflictingEntries = useMemo(() => {
+    const keys = new Set<string>();
+    for (const conflict of conflicts) {
+      for (const block of conflict.blocks) keys.add(`${block.start}-${block.end}`);
+    }
+    return entries.map((entry) => ({ ...entry, conflicting: keys.has(`${entry.start}-${entry.end}`) }));
+  }, [entries, conflicts]);
   // Never hide data: commitments that sit outside the waking window belong to
   // this day but cannot be drawn on the timeline. They are listed below it.
   const outsideEntries = useMemo(
@@ -168,17 +175,17 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
     setError(null);
     try {
       const overflow = timeline.proposal.overflow;
-      const picks =
-        overflow.length > 0
-          ? timeline.pickIds.filter((id) => !overflow.includes(id))
-          : undefined;
       await applyLayout.mutateAsync({
         blocks: timeline.proposal.blocks,
         overflowTaskIds: overflow,
-        picks,
         now,
       });
       setPreview(false);
+      setApplyNotice(
+        overflow.length > 0
+          ? `Applied. ${overflow.length} pick${overflow.length === 1 ? ' is' : 's are'} back on your list.`
+          : 'Applied. Your day is updated.',
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not apply the layout.');
     } finally {
@@ -188,8 +195,6 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   }
 
   async function commitTimes(entry: TimelineBlock, next: { start: number; end: number }) {
-    if (commitRef.current) return;
-    commitRef.current = true;
     setError(null);
     try {
       if (entry.block) {
@@ -201,7 +206,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not move the block.');
     } finally {
-      commitRef.current = false;
+      /* nothing to release */
     }
   }
 
@@ -254,10 +259,17 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
                 ? `${timeline.proposal.blocks.length} block${timeline.proposal.blocks.length === 1 ? '' : 's'} will move after now${timeline.proposal.keptCount > 0 ? `; ${timeline.proposal.keptCount} already started and stay put` : ''}.`
                 : `${timeline.proposal.blocks.length} focus block${timeline.proposal.blocks.length === 1 ? '' : 's'} proposed for the rest of today.`}
           </p>
+          {!timeline.proposal.replanned && timeline.proposal.unplaced.length > 0 ? (
+            <p className="text-xs text-text-muted">
+              {timeline.proposal.unplaced.length} pick
+              {timeline.proposal.unplaced.length === 1 ? ' does' : 's do'} not fit and will stay on your list.
+            </p>
+          ) : null}
           {timeline.proposal.overflow.length > 0 ? (
             <p className="text-xs text-text-muted">
-              {timeline.proposal.overflow.length} pick
-              {timeline.proposal.overflow.length === 1 ? '' : 's'} went back to your list.
+              {timeline.hasPlan
+                ? `${timeline.proposal.overflow.length} pick${timeline.proposal.overflow.length === 1 ? '' : 's'} will go back to your list.`
+                : `${timeline.proposal.overflow.length} pick${timeline.proposal.overflow.length === 1 ? '' : 's'} did not fit today.`}
             </p>
           ) : null}
           <div className="flex gap-2 pt-1">
@@ -269,6 +281,12 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
             </Button>
           </div>
         </Card>
+      ) : null}
+
+      {applyNotice ? (
+        <p role="status" className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-text">
+          {applyNotice}
+        </p>
       ) : null}
 
       {outsideNotice ? (
@@ -306,21 +324,29 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
             {conflicts.length === 1 ? 'One time overlap' : `${conflicts.length} time overlaps`}
           </h2>
           <ul className="space-y-1">
-            {conflicts.map((conflict, index) => (
-              <li key={`${conflict.kind}-${index}`} className="text-xs text-text-muted">
-                {conflict.kind === 'overlap'
-                  ? `Blocks share time around ${clock(conflict.blocks[0]!.start)}–${clock(conflict.blocks[1]!.end)}.`
-                  : 'A block sits partly outside your waking hours.'}
-              </li>
-            ))}
+            {conflicts.map((conflict, index) => {
+              const [a, b] = conflict.blocks;
+              const sharedStart = a && b ? Math.max(a.start, b.start) : null;
+              const sharedEnd = a && b ? Math.min(a.end, b.end) : null;
+              return (
+                <li key={`${conflict.kind}-${index}`} className="text-xs text-text-muted">
+                  {conflict.kind === 'overlap' && sharedStart != null && sharedEnd != null
+                    ? `These blocks share ${clock(sharedStart)}–${clock(sharedEnd)}.`
+                    : 'A block sits partly outside your waking hours.'}
+                </li>
+              );
+            })}
           </ul>
+          <p className="text-[11px] text-text-muted">
+            Move it, shorten it, or leave it as it is — nothing changes on its own.
+          </p>
         </Card>
       ) : null}
 
       <Card>
         <Timeline
           window={timeline.window}
-          blocks={entries}
+          blocks={conflictingEntries}
           ghostBlocks={ghosts}
           now={now}
           onSelect={openBlock}

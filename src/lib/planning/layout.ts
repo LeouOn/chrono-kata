@@ -403,6 +403,11 @@ export function assignLanes<T extends Interval>(intervals: readonly T[]): (T & L
       if (byStart !== 0) return byStart;
       const byEnd = a.interval.end - b.interval.end;
       if (byEnd !== 0) return byEnd;
+      const aKey = (a.interval as { id?: unknown }).id;
+      const bKey = (b.interval as { id?: unknown }).id;
+      if (typeof aKey === 'string' && typeof bKey === 'string' && aKey !== bKey) {
+        return aKey.localeCompare(bKey);
+      }
       return a.index - b.index;
     });
 

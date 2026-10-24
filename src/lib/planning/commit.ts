@@ -10,15 +10,14 @@ export interface CommitLayoutInput {
   blocks: readonly ProposedBlock[];
   /** Picks that did not fit and go back to the list. */
   overflowTaskIds?: readonly string[];
-  /** The day's picks after the replan, written when overflow is returned. */
-  picks?: readonly string[];
 }
 
 /**
  * One transaction for applying a layout: replace the day's not-yet-started
- * focus blocks, put overflow picks back on the task list (status `next`,
- * everything else untouched) and, when overflow exists, write the day's picks
- * so those tasks stop being promised for today. A failure rolls all of it back.
+ * focus blocks and, when a confirmed day plan exists, remove overflow picks
+ * from it while keeping its order, capacity and every other field. It never
+ * creates a plan and never touches task status or finished work. A failure
+ * rolls all of it back.
  */
 export async function commitLayout(input: CommitLayoutInput): Promise<void> {
   const db = getDb();
@@ -26,7 +25,7 @@ export async function commitLayout(input: CommitLayoutInput): Promise<void> {
   const windowEnd = new Date(input.window.end);
   const now = new Date(input.now);
   const overflow = new Set(input.overflowTaskIds ?? []);
-  await db.transaction('rw', db.blocks, db.dayPlans, db.tasks, async () => {
+  await db.transaction('rw', db.blocks, db.dayPlans, async () => {
     const candidates = await db.blocks.where('start').below(windowEnd).toArray();
     for (const block of candidates) {
       if (block.kind !== 'focus') continue;
@@ -48,25 +47,13 @@ export async function commitLayout(input: CommitLayoutInput): Promise<void> {
       });
       await db.blocks.add(block);
     }
-    if (input.picks) {
+    if (overflow.size > 0) {
       const existing = await db.dayPlans.get(input.dayKey);
-      const picks = [...input.picks];
       if (existing) {
-        await db.dayPlans.put({ ...existing, picks, updatedAt: timestamp });
-      } else if (picks.length > 0) {
-        await db.dayPlans.put({
-          date: input.dayKey,
-          picks,
-          capacityMin: 0,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        });
-      }
-    }
-    for (const taskId of overflow) {
-      const task = await db.tasks.get(taskId);
-      if (task && task.status !== 'next') {
-        await db.tasks.put({ ...task, status: 'next', touchedAt: timestamp });
+        const picks = existing.picks.filter((id) => !overflow.has(id));
+        if (picks.length !== existing.picks.length) {
+          await db.dayPlans.put({ ...existing, picks, updatedAt: timestamp });
+        }
       }
     }
   });

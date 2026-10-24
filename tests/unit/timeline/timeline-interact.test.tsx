@@ -53,6 +53,84 @@ describe('timeline pointer editing', () => {
     expect(next.end).toBeGreaterThan(entry('a', 9, 10).end);
   });
 
+  it('previews while dragging, cancels on Escape after a real move, and restores the label', () => {
+    vi.useFakeTimers();
+    const onCommit = vi.fn();
+    const onSelect = vi.fn();
+    render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={onSelect} onCommit={onCommit} stepMin={15} />);
+    const block = screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i });
+    fireEvent.pointerDown(block, { clientY: 100 });
+    fireEvent.pointerMove(block, { clientY: 166 });
+    expect(screen.getByRole('button', { name: /fixed block a 10:00 to 11:00/i })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.pointerUp(block);
+    vi.runAllTimers();
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i })).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it('cancels on pointercancel and never commits later', () => {
+    const onCommit = vi.fn();
+    render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={15} />);
+    const block = screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i });
+    fireEvent.pointerDown(block, { clientY: 100 });
+    fireEvent.pointerMove(block, { clientY: 166 });
+    fireEvent.pointerCancel(block);
+    fireEvent.pointerUp(block);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('resizes only the start edge from the start handle', () => {
+    const onCommit = vi.fn();
+    render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={15} />);
+    const handle = screen.getByRole('button', { name: /resize start of a/i });
+    fireEvent.pointerDown(handle, { clientY: 100 });
+    fireEvent.pointerMove(handle, { clientY: 133 });
+    fireEvent.pointerUp(handle);
+    const next = onCommit.mock.calls[0]![1] as { start: number; end: number };
+    expect(next.end).toBe(entry('a', 9, 10).end);
+    expect(next.start).toBeGreaterThan(entry('a', 9, 10).start);
+  });
+
+  it('does nothing on plain arrows and keeps the start fixed when Shift resizes the end', () => {
+    const onCommit = vi.fn();
+    render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={15} />);
+    const block = screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i });
+    fireEvent.keyDown(block, { key: 'ArrowDown' });
+    expect(onCommit).not.toHaveBeenCalled();
+    fireEvent.keyDown(block, { key: 'ArrowDown', altKey: true, shiftKey: true });
+    const next = onCommit.mock.calls[0]![1] as { start: number; end: number };
+    expect(next.start).toBe(entry('a', 9, 10).start);
+    expect(next.end).toBe(entry('a', 9, 10).end + 15 * 60_000);
+  });
+
+  it('honours the chosen snap step for drags and keyboard', () => {
+    const onCommit = vi.fn();
+    const { rerender } = render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={5} />);
+    let block = screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i });
+    fireEvent.pointerDown(block, { clientY: 100 });
+    fireEvent.pointerMove(block, { clientY: 111 });
+    fireEvent.pointerUp(block);
+    expect((onCommit.mock.calls[0]![1] as { start: number }).start).toBe(entry('a', 9, 10).start + 10 * 60_000);
+    onCommit.mockClear();
+    rerender(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={15} />);
+    block = screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i });
+    fireEvent.pointerDown(block, { clientY: 100 });
+    fireEvent.pointerMove(block, { clientY: 111 });
+    fireEvent.pointerUp(block);
+    expect((onCommit.mock.calls[0]![1] as { start: number }).start).toBe(entry('a', 9, 10).start + 15 * 60_000);
+    onCommit.mockClear();
+    fireEvent.keyDown(block, { key: 'ArrowDown', altKey: true });
+    expect((onCommit.mock.calls[0]![1] as { start: number }).start).toBe(entry('a', 9, 10).start + 15 * 60_000);
+    onCommit.mockClear();
+    rerender(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={5} />);
+    block = screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i });
+    fireEvent.keyDown(block, { key: 'ArrowDown', altKey: true });
+    expect((onCommit.mock.calls[0]![1] as { start: number }).start).toBe(entry('a', 9, 10).start + 5 * 60_000);
+  });
+
   it('moves with Alt+ArrowDown and resizes with Shift+Alt+ArrowDown', () => {
     const onCommit = vi.fn();
     render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={15} />);
@@ -63,6 +141,18 @@ describe('timeline pointer editing', () => {
     fireEvent.keyDown(block, { key: 'ArrowDown', altKey: true, shiftKey: true });
     expect(onCommit).toHaveBeenCalledTimes(2);
     expect((onCommit.mock.calls[1]![1] as { end: number }).end).toBe(entry('a', 9, 10).end + 15 * 60_000);
+    expect((onCommit.mock.calls[1]![1] as { start: number }).start).toBe(entry('a', 9, 10).start);
+  });
+
+  it('never drags an anchor', () => {
+    const onCommit = vi.fn();
+    const anchor: TimelineBlock = { ...entry('anchor', 9, 10), kind: 'anchor' };
+    render(<Timeline window={dayWindow} blocks={[anchor]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} />);
+    const block = screen.getByRole('button', { name: /anchor block anchor 09:00 to 10:00/i });
+    fireEvent.pointerDown(block, { clientY: 100 });
+    fireEvent.pointerMove(block, { clientY: 200 });
+    fireEvent.pointerUp(block);
+    expect(onCommit).not.toHaveBeenCalled();
   });
 
   it('draws overlapping blocks side by side and both are tappable', () => {
