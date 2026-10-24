@@ -162,6 +162,12 @@ export function ProcessMode({ open, onClose }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
+      // A nested dialog (e.g. the Break-it-down sheet) owns the keyboard while
+      // it is open: triage hotkeys must not act on the task underneath it.
+      // Counting rendered dialogs is target-independent (works even if focus
+      // slipped to body) and covers any future nested dialog for free.
+      if (event.defaultPrevented) return;
+      if (document.querySelectorAll('[role="dialog"]').length > 1) return;
       const target = event.target as HTMLElement | null;
       const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
       if (step === 'choose') {

@@ -75,13 +75,13 @@ test('break it down: shows what leaves the device, then saves only what is picke
   await page.getByRole('button', { name: /Confirm and save/i }).click();
 
   // The picked step is a subtask in the inbox; the first action is the next action.
-  await expect(page.getByText('Turn off the water at the valve')).toBeVisible();
+  await expect(page.getByText('Turn off the water at the valve', { exact: true })).toBeVisible();
   await expect(page.getByText(/Pick up here:/)).toContainText('Find the hose washer tin');
   await page.screenshot({ path: '/tmp/qa-w3-shots/after-confirm.png' });
 
   // Survives a reload — saved through the repos, not component state.
   await page.reload();
-  await expect(page.getByText('Turn off the water at the valve')).toBeVisible();
+  await expect(page.getByText('Turn off the water at the valve', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 });
 
@@ -101,4 +101,51 @@ test('two invalid replies become a plain-text fallback with nothing saved', asyn
   await expect(page.getByTestId('fallback-text')).toBeVisible();
   await expect(page.getByRole('button', { name: /Confirm/i })).toHaveCount(0);
   expect(calls).toBe(2); // one repair round, then the fallback
+});
+
+test('triage hotkeys stay inert while the decompose sheet is open', async ({ page }) => {
+  await page.route('https://api.deepseek.com/chat/completions', (route) =>
+    route.fulfill({ json: { choices: [{ message: { content: VALID_DECOMPOSITION } }] } })
+  );
+  await enableTaskInbox(page);
+  await configureProvider(page);
+  await captureTask(page, 'Hotkey guard task');
+
+  await page.getByRole('button', { name: /^Process/ }).click();
+  // Open the nested sheet from inside the process dialog (the inbox row
+  // behind it has a button with the same name).
+  await page.getByRole('dialog').getByRole('button', { name: /Break down Hotkey guard task/i }).click();
+  await expect(page.getByTestId('wire-user')).toContainText('Hotkey guard task');
+  await page.getByRole('button', { name: /Send to deepseek/i }).click();
+  await expect(page.getByTestId('first-action')).toBeVisible();
+
+  // Every triage hotkey: the task underneath must not move.
+  for (const key of ['1', '2', '3', '4', '5', '6', 's']) {
+    await page.keyboard.press(key);
+  }
+  await expect(page.getByTestId('first-action')).toBeVisible(); // sheet still open with its result
+  await page.getByRole('button', { name: 'Save nothing' }).click();
+  await page.keyboard.press('Escape'); // close the sheet
+  await page.keyboard.press('Escape'); // close process mode
+  // Wait for the dialogs to finish exiting before counting rows.
+  await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+  // The task is still in the inbox, untouched by the hotkeys.
+  await expect(page.getByText('Hotkey guard task', { exact: true })).toBeVisible();
+});
+
+test('step rows meet the 44px touch target', async ({ page }) => {
+  await page.route('https://api.deepseek.com/chat/completions', (route) =>
+    route.fulfill({ json: { choices: [{ message: { content: VALID_DECOMPOSITION } }] } })
+  );
+  await enableTaskInbox(page);
+  await configureProvider(page);
+  await captureTask(page, 'Touch target task');
+  await page.getByRole('button', { name: /Break down Touch target task/i }).click();
+  await page.getByRole('button', { name: /Send to deepseek/i }).click();
+  await expect(page.getByTestId('first-action')).toBeVisible();
+  await page.getByText(/Steps \(2\)/).click();
+  const height = await page
+    .getByRole('checkbox', { name: /Turn off the water at the valve/i })
+    .evaluate((el) => (el.closest('label') as HTMLElement).offsetHeight);
+  expect(height).toBeGreaterThanOrEqual(44);
 });

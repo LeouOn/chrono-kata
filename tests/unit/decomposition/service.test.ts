@@ -197,7 +197,7 @@ describe('calmErrorCopy', () => {
       [new LLMException('x', LLMExceptionKind.Offline), 'You appear to be offline. The task keeps; try again when connected.'],
       [new LLMException('x', LLMExceptionKind.AuthFailed), 'The provider did not accept the key. Check it in LLM settings.'],
       [new LLMException('x', LLMExceptionKind.Provider), 'The provider could not be reached. Check the provider in LLM settings, then try again.'],
-      [new LLMException('boom', LLMExceptionKind.Unknown), 'Something came up before anything was sent or saved. You can try again.'],
+      [new LLMException('boom', LLMExceptionKind.Unknown), 'Nothing was saved. You can try again.'],
       [Object.assign(new Error('nope'), { name: 'TimeoutError' }), 'The provider did not answer in time. You can try again.'],
     ];
     for (const [error, expected] of cases) {

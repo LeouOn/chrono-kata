@@ -57,8 +57,30 @@
   double-send and double-Confirm in one `act()` write exactly once; nothing written before
   Confirm or on "Save nothing"; fallback has no Confirm; retry after error; unmount aborts the
   captured signal.
-- Mutants: 8/8 killed (confirm guard, in-flight guard, wire leak, unmount-abort removal,
-  parent/source drop, steps-default-open, calm-copy wording, repair-round removal).
+- Mutants: 20 attempted, 19 killed, 1 resolved by deletion (full ledger below).
+
+### Mutation ledger (fix push)
+
+First push, 8/8 killed: confirm-guard removal · in-flight-guard removal · wire-field
+leak · unmount-abort removal · subtask parent/source drop · steps-default-open ·
+calm-copy wording · repair-round removal.
+
+Review round (dev-lead found 5 survivors + new-fix mutants), all now killed:
+m2 Send-enabled-before-resolve → 'Send is disabled until the provider is resolved';
+m5 next-action-checkbox-ignored → toggle-OFF test waits for the subtask write first
+(deterministic ordering) then asserts the old next action;
+m8 close-disarms-confirm → the disarm was defense-in-depth with NO observable path
+(the guard resets in openFor, which is tested) — removed the dead line and the claim
+instead of keeping an unkillable mutant;
+m10 close-does-not-abort → 'closing the sheet aborts the in-flight call';
+m12 aborted-call-shows-error → hook-level renderHook test asserts error stays idle
+after a user cancel (component-level was unobservable: reopen clears error);
+B1 transaction-removed → apply.test rollback test; B1 guard-never-reset → retry
+must land the subtask (children === 1);
+B2 old-hotkey-handler → ProcessMode test (keys 1-6/s inert under the sheet) + E2E;
+B2 confirm-targets-live-prop → rerender-with-different-task test asserts run.taskId;
+R3 repair-line-missing; R5 stale-preview-on-reopen; R5 LAN-host-called-on-this-device
+→ 192.168.x provider test expects 'on your local network'.
 - E2E (`w3-decompose.spec.ts`, 390×844): provider mocked at the HTTP boundary — happy path
   with confirm + subtask visible after reload; two-invalid-replies fallback with exactly 2
   calls and no Confirm. Full Playwright suite ×2 exit 0. Screenshots in /tmp/qa-w3-shots/.

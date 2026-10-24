@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
-import { render, screen, act, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { render, renderHook, screen, act, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { resetDbForTesting } from '@/lib/db/db';
 import { taskRepo } from '@/lib/db/task.repo';
@@ -16,6 +16,7 @@ vi.mock('@/lib/decomposition/service', () => ({
 }));
 
 import { DecomposeSheet } from '@/components/tasks/DecomposeSheet';
+import { useDecomposition as useDecompositionRaw } from '@/hooks/useDecomposition';
 
 const VALID_RESULT = {
   result: {
@@ -60,6 +61,7 @@ let task: Task;
 beforeEach(async () => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   await resetDbForTesting();
   await llmSettingsRepo.addProvider('lmstudio', {
     baseUrl: 'http://localhost:1234/v1',
@@ -71,13 +73,21 @@ beforeEach(async () => {
   task = await taskRepo.create({ title: 'Fix the dripping hose' });
 });
 
-function ui() {
+function qcWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  return ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+}
+
+function ui(rerenderTask?: Task) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = render(
     <QueryClientProvider client={qc}>
-      <DecomposeSheet task={task} projectTitle="Garden revival" />
+      <DecomposeSheet task={rerenderTask ?? task} projectTitle="Garden revival" />
     </QueryClientProvider>
   );
+  return view;
 }
 
 describe('DecomposeSheet', () => {
@@ -233,4 +243,200 @@ describe('DecomposeSheet', () => {
     });
     // If the hook set state after unmount, React logs an error and this test fails.
   });
+
+  it('m2: Send is disabled until the provider is resolved', () => {
+    ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    // Before the preview resolves: generic label and disabled.
+    const send = screen.getByRole('button', { name: /Send to provider/i });
+    expect((send as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('m5: with the next-action toggle OFF, the old next action is kept', async () => {
+    runDecomposition.mockResolvedValue(VALID_RESULT);
+    await taskRepo.update(task.id, { nextAction: 'old next action' });
+    ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Send to lmstudio/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send to lmstudio/i }));
+    await waitFor(() => expect(screen.getByTestId('first-action')).toBeTruthy());
+    const toggle = screen.getByRole('checkbox', {
+      name: /Use the first move as this task's next action/i,
+    }) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    fireEvent.click(toggle); // OFF
+    // Pick a step: the apply writes update-then-creates, so waiting for the
+    // subtask makes the next-action read deterministic (not a pre-write race).
+    fireEvent.click(screen.getByText(/Steps \(3\)/));
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /Turn off the water/i })).toBeTruthy()
+    );
+    fireEvent.click(screen.getByRole('checkbox', { name: /Turn off the water/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and save/i }));
+    await waitFor(async () => expect((await taskRepo.children(task.id)).length).toBe(1));
+    expect((await taskRepo.getById(task.id))?.nextAction).toBe('old next action');
+  });
+
+  it('discloses the repair request before the first call', () => {
+    ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    expect(
+      screen.getByText(/one more request is sent with that reply/i)
+    ).toBeTruthy();
+  });
+
+  it('Confirm applies to the task the decomposition was generated for (run.taskId)', async () => {
+    runDecomposition.mockResolvedValue(VALID_RESULT);
+    const otherTask = await taskRepo.create({ title: 'A different task' });
+    const view = ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Send to lmstudio/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send to lmstudio/i }));
+    await waitFor(() => expect(screen.getByTestId('first-action')).toBeTruthy());
+    // The live prop now points at a different task before Confirm.
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <DecomposeSheet task={otherTask} />
+      </QueryClientProvider>
+    );
+    const updateSpy = vi.spyOn(taskRepo, 'update');
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and save/i }));
+    await waitFor(() => expect(updateSpy).toHaveBeenCalled());
+    // Written to the ORIGINAL task, not the new prop.
+    expect(updateSpy.mock.calls[0]![0]).toBe(task.id);
+  });
+
+  it('a failed apply surfaces calm copy and Confirm works again', async () => {
+    runDecomposition.mockResolvedValue(VALID_RESULT);
+    ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Send to lmstudio/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send to lmstudio/i }));
+    await waitFor(() => expect(screen.getByTestId('first-action')).toBeTruthy());
+    // Pick a step so the apply has a subtask to write, then make that
+    // write explode: the whole apply must roll back.
+    fireEvent.click(screen.getByText(/Steps \(3\)/));
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /Turn off the water/i })).toBeTruthy()
+    );
+    fireEvent.click(screen.getByRole('checkbox', { name: /Turn off the water/i }));
+    const createSpy = vi
+      .spyOn(taskRepo, 'create')
+      .mockImplementationOnce(() => Promise.reject(new Error('boom')));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and save/i }));
+    await waitFor(() => expect(screen.getByTestId('decompose-error')).toBeTruthy());
+    expect(screen.getByTestId('decompose-error').textContent).toContain(
+      'Nothing was saved. You can try again.'
+    );
+    // Retry: the guard was reset, the apply succeeds and the subtask lands.
+    createSpy.mockRestore();
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and save/i }));
+    await waitFor(async () => expect((await taskRepo.children(task.id)).length).toBe(1));
+  });
+
+  it('m8: cancelling after the result writes nothing, and a reopen can Confirm', async () => {
+    runDecomposition.mockResolvedValue(VALID_RESULT);
+    const createSpy = vi.spyOn(taskRepo, 'create');
+    ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Send to lmstudio/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send to lmstudio/i }));
+    await waitFor(() => expect(screen.getByTestId('first-action')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Save nothing' }));
+    expect(createSpy).not.toHaveBeenCalled();
+
+    // Reopen the same task, pick a step, Confirm: the guard was reset on open.
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Send to lmstudio/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send to lmstudio/i }));
+    await waitFor(() => expect(screen.getByTestId('first-action')).toBeTruthy());
+    fireEvent.click(screen.getByText(/Steps \(3\)/));
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /Turn off the water/i })).toBeTruthy()
+    );
+    fireEvent.click(screen.getByRole('checkbox', { name: /Turn off the water/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and save/i }));
+    await waitFor(() => expect(createSpy).toHaveBeenCalled());
+  });
+
+  it('m10/m12: closing the sheet aborts the in-flight call and stays silent on reopen', async () => {
+    let capturedSignal: AbortSignal | null = null;
+    runDecomposition.mockImplementation(
+      (_mode: unknown, _input: unknown, { signal }: { signal?: AbortSignal }) => {
+        capturedSignal = signal ?? null;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        });
+      }
+    );
+    ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Send to lmstudio/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send to lmstudio/i }));
+    await waitFor(() => expect(screen.getByTestId('decompose-running')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(capturedSignal?.aborted).toBe(true));
+    // Reopen: fresh privacy panel, no error from the cancelled call.
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    expect(screen.queryByTestId('decompose-error')).toBeNull();
+    expect(screen.getByTestId('wire-user')).toBeTruthy();
+  });
+
+  it('resets the provider preview on reopen (no stale destination)', async () => {
+    runDecomposition.mockResolvedValue(VALID_RESULT);
+    ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId('wire-provider').textContent).toContain('lmstudio')
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    // Fresh open shows the checking state first, not the previous destination.
+    expect(screen.getByTestId('wire-provider').textContent).toContain('Checking the provider');
+    await waitFor(() =>
+      expect(screen.getByTestId('wire-provider').textContent).toContain('lmstudio')
+    );
+  });
+
+  it('m12: a user-cancelled call never surfaces an error (hook-level)', async () => {
+    // Direct hook observation: the abort rejection must not set error state.
+    const { result } = renderHook(() => useDecompositionRaw(), { wrapper: qcWrapper() });
+    act(() => {
+      result.current.start({ title: 'T' }, 'break-it-down', 'irrelevant');
+    });
+    runDecomposition.mockImplementation(
+      (_mode: unknown, _input: unknown, { signal }: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        })
+    );
+    await act(async () => {
+      void result.current.send();
+    });
+    act(() => {
+      result.current.close(); // user cancels
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30)); // rejection lands
+    });
+    expect(result.current.error.kind).toBe('idle');
+  });
+
+  it('R5: a LAN-local provider says "on your local network", not "on this device"', async () => {
+    await llmSettingsRepo.addProvider('lanstudio', {
+      baseUrl: 'http://192.168.1.5:1234/v1',
+      apiKey: '',
+      model: 'qwen2.5-7b',
+      credentialSource: 'browser',
+    } as never);
+    await llmSettingsRepo.setActive('lanstudio');
+    ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId('wire-provider').textContent).toContain('on your local network')
+    );
+    expect(screen.getByTestId('wire-provider').textContent).not.toContain('on this device');
+  });
 });
+
+

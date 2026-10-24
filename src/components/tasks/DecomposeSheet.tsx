@@ -3,8 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { taskRepo } from '@/lib/db/task.repo';
-import { useDecomposition, useInvalidateTasks } from '@/hooks/useDecomposition';
+import { useDecomposition, useInvalidateTasks, decomposeErrorCopy } from '@/hooks/useDecomposition';
+import { confirmApply, ApplyTargetGoneError } from '@/lib/decomposition/apply';
 import {
   buildDecompositionSystemPrompt,
   buildDecompositionUserText,
@@ -13,7 +13,7 @@ import {
 import { DECOMPOSITION_FEATURE, type DecompositionMode } from '@/lib/decomposition/schema';
 import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { resolveProviderFor } from '@/lib/llm/llm-service';
-import { isLocalProvider } from '@/lib/llm/local-provider';
+import { isLocalProvider, isLoopbackBaseUrl } from '@/lib/llm/local-provider';
 import { LLMException } from '@/lib/llm/types';
 import type { Decomposition } from '@/lib/decomposition/schema';
 import type { Task } from '@/lib/schemas/task';
@@ -36,14 +36,13 @@ export function DecomposeSheet({ task, projectTitle, triggers = ['break-it-down'
   const invalidate = useInvalidateTasks();
   const [checkedSteps, setCheckedSteps] = useState<Set<number>>(new Set());
   const [useAsNextAction, setUseAsNextAction] = useState(true);
+  const [applyError, setApplyError] = useState<string | null>(null);
   const confirmGuardRef = useRef(false);
-
-  const taskRef = useRef(task);
-  taskRef.current = task;
 
   function openFor(mode: DecompositionMode) {
     setCheckedSteps(new Set());
     setUseAsNextAction(true);
+    setApplyError(null);
     confirmGuardRef.current = false;
     start(buildInput(task, projectTitle), mode, task.id);
   }
@@ -81,10 +80,7 @@ export function DecomposeSheet({ task, projectTitle, triggers = ['break-it-down'
 
       <Modal
         open={open}
-        onClose={() => {
-          confirmGuardRef.current = true; // a closed sheet confirms nothing
-          close();
-        }}
+        onClose={close}
         title={run.mode === 'this-feels-heavy' ? 'This feels heavy' : 'Break it down'}
       >
         <div className="space-y-4">
@@ -111,12 +107,23 @@ export function DecomposeSheet({ task, projectTitle, triggers = ['break-it-down'
               </div>
               <p className="text-sm text-text" data-testid="wire-provider">
                 {preview.state === 'ready'
-                  ? `Goes to ${preview.providerName} (${preview.model}) — ${preview.local ? 'on this device' : 'a remote provider'}.`
+                  ? `Goes to ${preview.providerName} (${preview.model}) — ${
+                      preview.local
+                        ? preview.loopback
+                          ? 'on this device'
+                          : 'on your local network'
+                        : 'a remote provider'
+                    }.`
                   : preview.message}
               </p>
-              {error.kind === 'error' && (
+              <p className="text-xs text-text-muted">
+                If the reply can’t be read, one more request is sent with that
+                reply so the model can fix it. Nothing else leaves the device.
+              </p>
+              {(decomposeErrorCopy(error, preview.state === 'ready' ? preview.providerName : undefined) ||
+                applyError) && (
                 <p role="alert" className="text-sm text-text" data-testid="decompose-error">
-                  {error.message}
+                  {applyError ?? decomposeErrorCopy(error, preview.state === 'ready' ? preview.providerName : undefined)}
                 </p>
               )}
               <div className="flex gap-2 justify-end pt-2">
@@ -135,9 +142,14 @@ export function DecomposeSheet({ task, projectTitle, triggers = ['break-it-down'
           )}
 
           {run.phase === 'running' && (
-            <p className="text-sm text-text-muted py-6 text-center" data-testid="decompose-running">
-              Asking…
-            </p>
+            <div className="space-y-3 py-6 text-center">
+              <p className="text-sm text-text-muted" data-testid="decompose-running">
+                Asking…
+              </p>
+              <Button variant="ghost" onClick={close}>
+                Cancel
+              </Button>
+            </div>
           )}
 
           {run.phase === 'done' && run.result && (
@@ -169,7 +181,7 @@ export function DecomposeSheet({ task, projectTitle, triggers = ['break-it-down'
                       <ul className="mt-2 space-y-2">
                         {decomposition.steps.map((step, i) => (
                           <li key={i}>
-                            <label className="flex items-start gap-2 text-sm text-text">
+                            <label className="flex items-start gap-2 text-sm text-text min-h-11 py-1.5">
                               <input
                                 type="checkbox"
                                 className="mt-0.5 size-6 shrink-0"
@@ -205,6 +217,12 @@ export function DecomposeSheet({ task, projectTitle, triggers = ['break-it-down'
                     Use the first move as this task’s next action
                   </label>
 
+                  {applyError && (
+                    <p role="alert" className="text-sm text-text" data-testid="decompose-error">
+                      {applyError}
+                    </p>
+                  )}
+
                   <div className="flex gap-2 justify-end">
                     <Button variant="ghost" onClick={close}>
                       Save nothing
@@ -212,18 +230,33 @@ export function DecomposeSheet({ task, projectTitle, triggers = ['break-it-down'
                     <Button
                       variant="primary"
                       aria-label="Confirm and save only the picked items"
+                      disabled={confirmGuardRef.current}
                       onClick={() => {
                         if (confirmGuardRef.current) return; // double-submit guard
                         confirmGuardRef.current = true;
-                        void confirmApply({
-                          task: taskRef.current,
+                        setApplyError(null);
+                        confirmApply({
+                          // The task the decomposition was generated FOR —
+                          // not whatever the live prop points at now.
+                          taskId: run.taskId,
                           decomposition,
                           checkedSteps: [...checkedSteps],
                           useAsNextAction,
-                        }).then(() => {
-                          invalidate();
-                          close();
-                        });
+                        })
+                          .then(() => {
+                            invalidate();
+                            close();
+                          })
+                          .catch((e) => {
+                            // Nothing was saved: the apply is one transaction.
+                            // Reset so Confirm can retry.
+                            confirmGuardRef.current = false;
+                            setApplyError(
+                              e instanceof ApplyTargetGoneError
+                                ? e.message
+                                : 'Nothing was saved. You can try again.'
+                            );
+                          });
                       }}
                     >
                       Confirm
@@ -285,7 +318,7 @@ function Section({ title, items }: { title: string; items: string[] }) {
 
 /** Which provider the call would use, resolved without sending anything. */
 type ProviderPreview =
-  | { state: 'ready'; providerName: string; model: string; local: boolean }
+  | { state: 'ready'; providerName: string; model: string; local: boolean; loopback: boolean }
   | { state: 'blocked' | 'unavailable'; message: string };
 
 function usePreviewProvider(active: boolean): ProviderPreview {
@@ -295,7 +328,12 @@ function usePreviewProvider(active: boolean): ProviderPreview {
   });
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      // A privacy panel must never show a stale destination from a previous
+      // open: reset while hidden, re-resolve on the next open.
+      setPreview({ state: 'unavailable', message: 'Checking the provider…' });
+      return;
+    }
     let cancelled = false;
     void (async () => {
       try {
@@ -307,6 +345,7 @@ function usePreviewProvider(active: boolean): ProviderPreview {
             providerName: config.providerName,
             model: config.model,
             local: isLocalProvider(config),
+            loopback: isLoopbackBaseUrl(config.baseUrl),
           });
         }
       } catch (e) {
@@ -324,30 +363,4 @@ function usePreviewProvider(active: boolean): ProviderPreview {
   return preview;
 }
 
-/** Apply what the user picked. Nothing is written before this runs. */
-export async function confirmApply(input: {
-  task: Task | null;
-  decomposition: Decomposition;
-  checkedSteps: number[];
-  useAsNextAction: boolean;
-}): Promise<void> {
-  const { task, decomposition, checkedSteps, useAsNextAction } = input;
-  if (!task) return;
-  if (useAsNextAction) {
-    await taskRepo.update(task.id, { nextAction: decomposition.firstAction });
-  }
-  const steps = decomposition.steps ?? [];
-  for (const i of checkedSteps) {
-    const step = steps[i];
-    if (!step) continue;
-    await taskRepo.create({
-      title: step.title,
-      parentId: task.id,
-      projectId: task.projectId ?? null,
-      domainId: task.domainId ?? null,
-      status: 'inbox',
-      source: 'ai',
-      estimateMin: step.minutes,
-    });
-  }
-}
+

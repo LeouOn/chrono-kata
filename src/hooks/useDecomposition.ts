@@ -2,13 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { runDecomposition, calmErrorCopy, type DecompositionCallResult } from '@/lib/decomposition/service';
+import {
+  runDecomposition,
+  calmErrorCopy,
+  type DecompositionCallResult,
+} from '@/lib/decomposition/service';
 import type { DecompositionTaskInput } from '@/lib/decomposition/prompt';
 import type { DecompositionMode } from '@/lib/decomposition/schema';
 
 export type DecomposePhase =
   | { kind: 'idle' }
-  | { kind: 'error'; message: string; retryable: boolean };
+  | { kind: 'error'; error: unknown; retryable: boolean };
+
+/** Render copy at display time, where the provider name is known. */
+export function decomposeErrorCopy(
+  phase: DecomposePhase,
+  providerName: string | undefined,
+): string | null {
+  if (phase.kind !== 'error') return null;
+  return calmErrorCopy(phase.error, providerName ?? 'The provider');
+}
 
 export interface DecomposeRunState {
   phase: 'privacy' | 'running' | 'done';
@@ -64,7 +77,7 @@ export function useDecomposition() {
       // Closed (or unmounted) while in flight: no error UI for a call the
       // user cancelled — whatever shape the rejection takes.
       if (controller.signal.aborted) return;
-      setError({ kind: 'error', message: calmErrorCopy(e, 'The provider'), retryable: true });
+      setError({ kind: 'error', error: e, retryable: true });
       setRun((r) => (r.phase === 'running' ? { ...r, phase: 'privacy' } : r));
     } finally {
       inFlightRef.current = false;

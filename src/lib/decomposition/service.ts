@@ -113,6 +113,6 @@ export function calmErrorCopy(error: unknown, providerName: string): string {
     case 'provider':
       return `${providerName} could not be reached. Check the provider in LLM settings, then try again.`;
     default:
-      return 'Something came up before anything was sent or saved. You can try again.';
+      return 'Nothing was saved. You can try again.';
   }
 }
