@@ -72,7 +72,10 @@ test('rejects a non-https address calmly and fetches nothing', async ({ page }) 
 
 test('every calendar control exposes an accessible name', async ({ page }) => {
   await enableTaskInbox(page);
-  const controls = page.locator('input, select, textarea, button');
+  // Scope to this wave's card: the wider settings page has a pre-existing
+  // unnamed accent INPUT (reported to the lead, not this wave's to fix).
+  const card = page.getByRole('heading', { name: 'Calendar' }).locator('..');
+  const controls = card.locator('input, select, textarea, button');
   const count = await controls.count();
   expect(count).toBeGreaterThan(0);
   for (let i = 0; i < count; i++) {
@@ -80,7 +83,9 @@ test('every calendar control exposes an accessible name', async ({ page }) => {
     const name =
       (await control.getAttribute('aria-label')) ??
       (await control.getAttribute('aria-labelledby')) ??
+      (await control.evaluate((el) => (el as HTMLInputElement).labels?.[0]?.textContent ?? null)) ??
       (await control.textContent());
-    expect(String(name ?? '').trim(), `control #${i} has no accessible name`).not.toBe('');
+    const tag = await control.evaluate((el) => `${el.tagName}#${el.id}.${el.className}`);
+    expect(String(name ?? '').trim(), `control #${i} (${tag}) has no accessible name`).not.toBe('');
   }
 });
