@@ -15,9 +15,12 @@ const STEP_MINUTES_MAX = 240;
 const MAX_STEPS = 7;
 const MAX_LIST_ITEMS = 8;
 const FIRST_ACTION_MAX_CHARS = 280;
+/** Step titles become Task titles on Confirm, and TaskSchema caps titles at 200 —
+ * the boundaries must agree so a schema-valid reply can never half-apply. */
+export const STEP_TITLE_MAX_CHARS = 200;
 
 const StepSchema = z.object({
-  title: z.string().min(1).max(FIRST_ACTION_MAX_CHARS),
+  title: z.string().min(1).max(STEP_TITLE_MAX_CHARS),
   minutes: z.number().int().min(MINUTES_MIN).max(STEP_MINUTES_MAX),
 });
 

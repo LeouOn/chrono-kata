@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { DecomposeSheet } from './DecomposeSheet';
 import { useToast } from '@/hooks/useToast';
 import { useInbox } from '@/hooks/useTasks';
 import { INBOX_OUTCOMES, outcomeForKey, type InboxOutcome } from '@/lib/tasks/outcomes';
@@ -161,6 +162,12 @@ export function ProcessMode({ open, onClose }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
+      // A nested dialog (e.g. the Break-it-down sheet) owns the keyboard while
+      // it is open: triage hotkeys must not act on the task underneath it.
+      // Counting rendered dialogs is target-independent (works even if focus
+      // slipped to body) and covers any future nested dialog for free.
+      if (event.defaultPrevented) return;
+      if (document.querySelectorAll('[role="dialog"]').length > 1) return;
       const target = event.target as HTMLElement | null;
       const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
       if (step === 'choose') {
@@ -226,6 +233,10 @@ export function ProcessMode({ open, onClose }: Props) {
             </div>
 
             {step === 'choose' ? (
+              <>
+              <div className="flex flex-wrap gap-1">
+                <DecomposeSheet task={current} triggers={['break-it-down', 'this-feels-heavy']} />
+              </div>
               <div className="grid grid-cols-2 gap-2" role="group" aria-label="Triage outcomes">
                 {INBOX_OUTCOMES.map((spec) => (
                   <Button
@@ -245,6 +256,7 @@ export function ProcessMode({ open, onClose }: Props) {
                   </Button>
                 ))}
               </div>
+              </>
             ) : null}
 
             {step === 'next-action' ? (

@@ -97,6 +97,20 @@ export function isLocalBaseUrl(baseUrl: string): boolean {
 }
 
 /**
+ * Loopback only — this machine, not another box on the LAN. Used by UI copy
+ * that must not claim "on this device" for a 192.168.x host.
+ */
+export function isLoopbackBaseUrl(baseUrl: string): boolean {
+  const raw = hostOf(baseUrl);
+  if (!raw) return false;
+  const host = withoutTrailingDot(raw);
+  if (LOOPBACK_HOSTS.has(host)) return true;
+  if (/^127\./.test(host)) return true;
+  const mapped = mappedIpv4(host);
+  return mapped != null && (LOOPBACK_HOSTS.has(mapped) || /^127\./.test(mapped));
+}
+
+/**
  * The one predicate: is this request going to stay on the user's machine or
  * network?
  *

@@ -268,3 +268,37 @@ describe('InboxLink (Home header entry point)', () => {
     expect(screen.getByText('2')).toBeInTheDocument();
   });
 });
+
+describe('ProcessMode hotkeys under a nested sheet', () => {
+  beforeEach(async () => {
+    await resetDbForTesting();
+    await seed('Under the sheet');
+  });
+
+  it('keys 1-6 and s leave every task unchanged while the decompose sheet is open', async () => {
+    const before = (await taskRepo.byStatus('inbox')).map((t) => [t.id, t.status]);
+    renderWithProviders(
+      <ProcessMode
+        open
+        onClose={() => {}}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Under the sheet')).toBeTruthy()
+    );
+    // Open the nested decompose sheet for the current item.
+    fireEvent.click(screen.getByRole('button', { name: /Break down Under the sheet/i }));
+    await waitFor(() =>
+      expect(document.querySelectorAll('[role="dialog"]').length).toBeGreaterThan(1)
+    );
+    // Every triage hotkey must be inert while the sheet is open.
+    for (const key of ['1', '2', '3', '4', '5', '6', 's']) {
+      fireEvent.keyDown(window, { key });
+    }
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    const after = (await taskRepo.byStatus('inbox')).map((t) => [t.id, t.status]);
+    expect(after).toEqual(before);
+  });
+});
