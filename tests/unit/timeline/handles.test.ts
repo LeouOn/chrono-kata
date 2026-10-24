@@ -15,6 +15,24 @@ describe('handleGeometry', () => {
     expect(geometry.end.height).toBeLessThanOrEqual(Math.floor(geometry.blockHeight / 3) + 22);
   });
 
+  it('uses the same rendered height for a 15-minute block', () => {
+    const block = { start: at(10), end: at(10) + 15 * 60_000 };
+    const geometry = handleGeometry(block, { fullWidth: true });
+    expect(geometry.blockHeight).toBe(24);
+    expect(geometry.end.top).toBe(16);
+    expect(geometry.start.top).toBe(-22);
+  });
+
+  it('does not grow outward on a side that has a neighbour, even at full width', () => {
+    const a = { start: at(13), end: at(14) };
+    const b = { start: at(14) + 5 * 60_000, end: at(15) + 5 * 60_000 };
+    const ga = handleGeometry(a, { ...laneNeighbours(a, [a, b]), fullWidth: true });
+    const gb = handleGeometry(b, { ...laneNeighbours(b, [a, b]), fullWidth: true });
+    expect(ga.end.top + ga.end.height).toBe(ga.blockHeight);
+    expect(Math.abs(gb.start.top)).toBe(0);
+    expect(gb.start.height).toBe(11);
+  });
+
   it('never overlaps the next block’s start handle when blocks are 5 minutes apart', () => {
     const a = { start: at(13), end: at(14), lane: 0 };
     const b = { start: at(14) + 5 * 60_000, end: at(15) + 5 * 60_000, lane: 0 };

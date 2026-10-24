@@ -150,11 +150,14 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   only (nearest snap, grid edges, duration kept); release commits, **Escape
   cancels a live drag** (window keydown listener while dragging), and
   `pointercancel` clears the drag so a touch scroll never leaves a stale one.
-  The visual bars are slim; each handle's hit area reaches outward at most half
-  the gap to its neighbour and inward at most a third of the block, so a
-  30-minute block (33px) keeps an 11px movable middle and adjacent blocks never
-  steal each other's edge. Blocks are drawn at their true height (no min-height
-  stretching); the handle target grows outward instead.
+  The visual bars are slim; each handle's hit area grows inward at most a third
+  of the block, so a 30-minute block keeps an 11px movable middle, and grows
+  outward only on a full-lane edge with no neighbour. In a normal day an edge
+  touching a neighbouring block therefore has an **11px** target; only an
+  isolated edge reaches 33px (22 outward + 11 inward). A full 44px target is a
+  follow-up (selected-block handles); on a phone the edit sheet and Alt+arrows
+  are the precise path. Blocks render at their true height (one shared
+  rendered-height helper, 15-minute blocks included).
   A 5/15 snap toggle drives proposal, drag and keyboard; keyboard Alt+Up/Down
   moves and Shift+Alt+Up/Down changes the end. The tap-to-edit sheet remains a
   complete alternative, and the first Enter after a pointer interaction is not

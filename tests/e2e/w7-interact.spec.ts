@@ -54,6 +54,16 @@ test('mouse drag stores the moved times, and Escape cancels without writing', as
   await page.mouse.up();
   // Escape-then-release must not open the sheet on the cancelled drag.
   await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // A human does not release within the same millisecond.
+  const slow = await boxCentered(page, page.getByRole('button', { name: /fixed block Late 13:00 to 14:00/i }));
+  await page.mouse.move(slow!.x + slow!.width / 2, slow!.y + slow!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(slow!.x + slow!.width / 2, slow!.y + slow!.height / 2 + 66, { steps: 6 });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await page.mouse.up();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('button', { name: /fixed block Late 13:00 to 14:00/i })).toBeVisible();
 
@@ -131,8 +141,7 @@ test('touch resize works from a point outside a 30-minute block, and its middle 
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(page.getByRole('button', { name: /fixed block Short 12:00 to 13:00/i })).toBeVisible();
 
-  const box = await page.getByRole('button', { name: /fixed block Short/i }).boundingBox();
-  await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.getByRole('button', { name: /fixed block Short 12:00 to 13:00/i }).tap();
   await expect(page.getByRole('dialog', { name: 'Edit block' })).toBeVisible();
   await expect(page.getByLabel('Title')).toHaveValue('Short');
 });

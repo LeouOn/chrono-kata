@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Block } from '@/lib/schemas/block';
 import type { AnchorInterval as DatedAnchor } from '@/lib/planning/anchors';
 import { moveBlock, resizeBlock, type Interval } from '@/lib/planning/layout';
-import { handleGeometry, laneNeighbours, PX_PER_MIN } from '@/lib/timeline/handles';
+import { handleGeometry, laneNeighbours, PX_PER_MIN, renderedHeightPx } from '@/lib/timeline/handles';
 
 const MIN = 60_000;
 
@@ -72,6 +72,7 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const suppressClickRef = useRef(false);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -79,12 +80,10 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
       event.preventDefault();
       dragRef.current = null;
       setDrag(null);
-      // The pointerup after Escape still produces a click; swallow that click
-      // so the edit sheet does not open on the cancelled drag.
-      suppressClickRef.current = true;
-      globalThis.setTimeout(() => {
-        suppressClickRef.current = false;
-      }, 0);
+      // The pointerup after Escape (which may come seconds later) still
+      // produces a click; finish() arms the suppression at release time so the
+      // edit sheet does not open on the cancelled drag.
+      cancelledRef.current = true;
     };
     globalThis.addEventListener('keydown', onKey);
     return () => globalThis.removeEventListener('keydown', onKey);
@@ -95,6 +94,7 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
     // A stale suppress flag from the previous drag must not swallow this one's
     // first keyboard Enter after a pointer interaction.
     suppressClickRef.current = false;
+    cancelledRef.current = false;
     // No preventDefault here: on touch, canceling pointerdown also suppresses the
     // compatibility click, so a tap would not open the sheet. Movement is
     // prevented once a drag actually starts.
@@ -135,7 +135,16 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
 
   function finish(event: React.PointerEvent) {
     const current = dragRef.current;
-    if (!current) return;
+    if (!current) {
+      if (!cancelledRef.current) return;
+      // The drag was cancelled, but this release still synthesises a click.
+      cancelledRef.current = false;
+      suppressClickRef.current = true;
+      globalThis.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+      return;
+    }
     (event.currentTarget as Element).releasePointerCapture?.(event.pointerId);
     dragRef.current = null;
     setDrag(null);
@@ -154,6 +163,7 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
 
   function cancel() {
     dragRef.current = null;
+    cancelledRef.current = true;
     setDrag(null);
   }
 
@@ -162,6 +172,7 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
     // A stale suppress flag from the previous drag must not swallow this one's
     // first keyboard Enter after a pointer interaction.
     suppressClickRef.current = false;
+    cancelledRef.current = false;
     if (!event.altKey) return;
     const direction = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
     if (direction === 0) return;
@@ -212,7 +223,7 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
         {blocks.map((entry) => {
           const active = drag && drag.entry.id === entry.id ? drag.preview : entry;
           const topPx = top(active.start);
-          const heightPx = Math.max(18, top(active.end) - topPx);
+          const heightPx = renderedHeightPx(active.end - active.start);
           const lane = entry.lane ?? 0;
           const laneCount = Math.max(1, entry.laneCount ?? 1);
           const geometry = handleGeometry(entry, { ...laneNeighbours(entry, blocks), fullWidth: laneCount === 1 });
