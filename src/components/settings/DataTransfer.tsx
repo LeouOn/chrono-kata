@@ -8,6 +8,10 @@ import { useToast } from '@/hooks/useToast';
 import { collectAll, downloadExport } from '@/lib/data-transfer/export';
 import { parseEnvelope, replaceAll } from '@/lib/data-transfer/import';
 import { useQueryClient } from '@tanstack/react-query';
+import { useFlag } from '@/hooks/useFlags';
+import { refuseIfTooLarge } from '@/lib/data-transfer/guard';
+import { leftOutLine, refusalMessage } from '@/lib/data-transfer/preview';
+import { ImportPreview, type ParsedBackup } from './ImportPreview';
 import type { ExportEnvelope } from '@/lib/data-transfer/types';
 
 export function DataTransfer() {
@@ -19,6 +23,10 @@ export function DataTransfer() {
   const [pendingSkipped, setPendingSkipped] = useState(0);
   const [pendingSnapshotsDropped, setPendingSnapshotsDropped] = useState(0);
   const [storagePersistent, setStoragePersistent] = useState<boolean | null>(null);
+  // Wave 18 part 2 (behind `taskInbox`): a preview with merge or replace instead of the one-line dialog.
+  const enhanced = useFlag('taskInbox');
+  const [backup, setBackup] = useState<ParsedBackup | null>(null);
+  const [outcome, setOutcome] = useState<{ kind: 'refused' | 'done' | 'saved'; text: string } | null>(null);
 
   useEffect(() => {
     if (!navigator.storage?.persisted) return;
@@ -30,6 +38,10 @@ export function DataTransfer() {
       const envelope = await collectAll();
       downloadExport(envelope);
       toast.show(`Exported ${envelope.sessions.length} sessions`, 'success');
+      if (enhanced) {
+        const left = leftOutLine(envelope.leftOut);
+        setOutcome({ kind: 'saved', text: `Saved ${envelope.sessions.length} session${envelope.sessions.length === 1 ? '' : 's'} and the rest of your data.${left ? ` ${left}` : ''}` });
+      }
     } catch (e) {
       toast.show(`Export failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
     }
@@ -38,6 +50,11 @@ export function DataTransfer() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (enhanced) {
+      handleEnhancedFile(file);
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const result = parseEnvelope(String(reader.result));
@@ -57,6 +74,33 @@ export function DataTransfer() {
     reader.readAsText(file);
     // Reset input so same file can be re-selected
     e.target.value = '';
+  }
+
+  function handleEnhancedFile(file: File) {
+    setBackup(null);
+    setOutcome(null);
+    const tooLarge = refuseIfTooLarge(file.size);
+    if (!tooLarge.ok) {
+      setOutcome({ kind: 'refused', text: refusalMessage(tooLarge.error) });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = parseEnvelope(String(reader.result));
+      if (!result.ok) {
+        setOutcome({ kind: 'refused', text: refusalMessage(result.error) });
+        return;
+      }
+      setBackup(result);
+    };
+    reader.onerror = () => setOutcome({ kind: 'refused', text: refusalMessage('This file could not be read.') });
+    reader.readAsText(file);
+  }
+
+  function importDone(text: string) {
+    setBackup(null);
+    setOutcome({ kind: 'done', text });
+    qc.invalidateQueries();
   }
 
   async function confirmImport() {
@@ -93,11 +137,19 @@ export function DataTransfer() {
           Storage: {storagePersistent ? 'persistent' : 'may be cleared by the browser'}
         </p>
       )}
-      <p className="text-text-muted text-sm mb-4">
-        Export everything (sessions, reflections, kata presets, coach threads, settings) as JSON. API keys are stripped from exports for safety.
-        Importing replaces ALL local data — existing API keys are preserved when the import file has empty key fields.
-        Any queued calendar-sync ops are also wiped (they&apos;re device-specific).
-      </p>
+      {enhanced ? (
+        <p className="text-text-muted text-sm mb-4">
+          Export everything you have saved as one JSON file. Your API keys, Google Calendar sign-in and private calendar link are not
+          included: they stay on this device. Importing shows you what will change first, and you choose whether to add only what is
+          missing or to replace everything.
+        </p>
+      ) : (
+        <p className="text-text-muted text-sm mb-4">
+          Export everything (sessions, reflections, kata presets, coach threads, settings) as JSON. API keys are stripped from exports for safety.
+          Importing replaces ALL local data — existing API keys are preserved when the import file has empty key fields.
+          Any queued calendar-sync ops are also wiped (they&apos;re device-specific).
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button variant="ghost" onClick={handleExport}>Export JSON</Button>
         <Button variant="ghost" onClick={() => fileInputRef.current?.click()}>Import JSON…</Button>
@@ -110,8 +162,15 @@ export function DataTransfer() {
         />
       </div>
 
+      {enhanced && outcome && (
+        <p role="status" className="mt-3 text-sm text-text" data-testid="backup-outcome">
+          {outcome.text}
+        </p>
+      )}
+      {enhanced && backup && <ImportPreview backup={backup} onDone={importDone} onCancel={() => setBackup(null)} />}
+
       <ConfirmDialog
-        open={!!pendingImport}
+        open={!enhanced && !!pendingImport}
         title="Replace all data?"
         message={
           pendingImport

@@ -106,3 +106,36 @@ export function mergeResultSentence(report: MergeReport): string {
   }
   return sentence;
 }
+
+/** After a replace: what was restored. */
+export function replaceResultSentence(rows: PreviewRow[]): string {
+  const restored = summarise(rows.filter((r) => r.inFile !== null), (r) => r.inFile ?? 0);
+  return restored ? `Restored ${restored} from the file.` : 'The file had nothing to restore.';
+}
+
+/** Records that were kept although a date in them could not be read. Empty when there were none. */
+export function repairedLine(repairedBy: Readonly<Record<string, number>>): string {
+  const nouns = new Map<string, { singular: string; plural: string }>(COLLECTIONS.map((c) => [c.key, c]));
+  for (const s of SINGLETONS) nouns.set(s.key, { singular: `${s.label} record`, plural: `${s.label} records` });
+  const parts = Object.entries(repairedBy)
+    .filter(([, n]) => n > 0)
+    .map(([key, n]) => countOf(n, nouns.get(key) ?? { singular: 'record', plural: 'records' }));
+  if (parts.length === 0) return '';
+  const total = Object.values(repairedBy).reduce((a, b) => a + b, 0);
+  return `${total.toLocaleString('en-US')} ${total === 1 ? 'record had' : 'records had'} a date that could not be read, so ${total === 1 ? 'it comes' : 'they come'} back without it: ${joinWords(parts)}.`;
+}
+
+/** Records in the file that could not be used at all. Empty when there were none. */
+export function skippedLine(skipped: number): string {
+  if (skipped <= 0) return '';
+  return `${skipped.toLocaleString('en-US')} ${skipped === 1 ? 'record' : 'records'} in the file could not be read, so ${skipped === 1 ? 'it is' : 'they are'} skipped.`;
+}
+
+/** A refused file, in words a person can use. Always ends by saying nothing was changed. */
+export function refusalMessage(error: string): string {
+  let reason: string;
+  if (/^Unsupported version/.test(error)) reason = "This backup was made by a version of the app that this one does not know.";
+  else if (/^(Not a JSON object|Missing or invalid sessions|Invalid [A-Za-z]+: expected an array)/.test(error)) reason = "This file doesn't look like a Chrono Kata backup.";
+  else reason = error;
+  return `${reason} Nothing on this device was changed.`;
+}
