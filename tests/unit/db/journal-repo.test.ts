@@ -154,6 +154,159 @@ describe('journalRepo', () => {
     expect(DayPlanSchema.safeParse(saved).success).toBe(true);
   });
 
+  it('a later note-only shutdown keeps the recorded decisions (P1)', async () => {
+    const a = await taskRepo.create({ title: 'A: fix the hose', status: 'next' });
+    const b = await taskRepo.create({ title: 'B: write the report', status: 'next' });
+    await dayPlanRepo.upsert(DAY, { picks: [a.id, b.id], capacityMin: 180 });
+
+    await journalRepo.applyShutdown({
+      date: DAY,
+      decisions: [
+        { taskId: a.id, outcome: 'done' },
+        { taskId: b.id, outcome: 'back' },
+      ],
+      now: new Date('2026-06-15T21:00:00'),
+    });
+
+    const afterNote = await journalRepo.applyShutdown({
+      date: DAY,
+      decisions: [],
+      shutdownNote: 'Quiet evening.',
+      now: new Date('2026-06-15T22:00:00'),
+    });
+
+    expect(afterNote.picksDone).toEqual([a.id]);
+    expect(afterNote.picksBack).toEqual([b.id]);
+    expect(afterNote.shutdownNote).toBe('Quiet evening.');
+    expect((await taskRepo.getById(a.id))?.status).toBe('done');
+    expect((await taskRepo.getById(b.id))?.status).toBe('next');
+  });
+
+  it('a later call naming only one task keeps the other decision (P2)', async () => {
+    const a = await taskRepo.create({ title: 'A: fix the hose', status: 'next' });
+    const b = await taskRepo.create({ title: 'B: write the report', status: 'next' });
+    await dayPlanRepo.upsert(DAY, { picks: [a.id, b.id], capacityMin: 180 });
+    await journalRepo.applyShutdown({
+      date: DAY,
+      decisions: [
+        { taskId: a.id, outcome: 'done' },
+        { taskId: b.id, outcome: 'back' },
+      ],
+      now: new Date('2026-06-15T21:00:00'),
+    });
+
+    const afterOne = await journalRepo.applyShutdown({
+      date: DAY,
+      decisions: [{ taskId: b.id, outcome: 'done' }],
+      now: new Date('2026-06-15T22:00:00'),
+    });
+
+    expect(afterOne.picksDone).toEqual([a.id, b.id].sort());
+    expect(afterOne.picksBack).toEqual([]);
+  });
+
+  it('deleting one task drops only that id, even from a later note-only call (P3)', async () => {
+    const a = await taskRepo.create({ title: 'A: fix the hose', status: 'next' });
+    const b = await taskRepo.create({ title: 'B: write the report', status: 'next' });
+    await dayPlanRepo.upsert(DAY, { picks: [a.id, b.id], capacityMin: 180 });
+    await journalRepo.applyShutdown({
+      date: DAY,
+      decisions: [
+        { taskId: a.id, outcome: 'done' },
+        { taskId: b.id, outcome: 'back' },
+      ],
+      now: new Date('2026-06-15T21:00:00'),
+    });
+
+    await taskRepo.delete(a.id);
+    const afterDelete = await journalRepo.applyShutdown({
+      date: DAY,
+      decisions: [],
+      shutdownNote: 'A is gone.',
+      now: new Date('2026-06-15T22:00:00'),
+    });
+
+    expect(afterDelete.picksDone ?? []).not.toContain(a.id);
+    expect(afterDelete.picksBack).toEqual([b.id]);
+  });
+
+  it('keeps the record consistent across random sequences through the repository (oracle)', async () => {
+    let state = 13572468;
+    const random = () => {
+      state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return state / 2_147_483_648;
+    };
+
+    const created = await Promise.all(
+      ['A', 'B', 'C', 'D', 'E'].map((name, index) =>
+        taskRepo.create({ title: `Task ${name}`, status: index === 0 ? 'scheduled' : 'next' }),
+      ),
+    );
+    await dayPlanRepo.upsert(DAY, { picks: created.map((task) => task.id), capacityMin: 240 });
+
+    /** What the record should be: the last outcome of each surviving task. */
+    const model = new Map<string, 'done' | 'back'>();
+    const deleted = new Set<string>();
+    let now = new Date('2026-06-15T21:00:00').getTime();
+
+    for (let call = 0; call < 14; call += 1) {
+      now += 60_000;
+      // Occasionally delete a task between calls.
+      if (random() < 0.25) {
+        const live = created.filter((task) => !deleted.has(task.id));
+        if (live.length > 2) {
+          const victim = live[Math.floor(random() * live.length)]!;
+          await taskRepo.delete(victim.id);
+          deleted.add(victim.id);
+          model.delete(victim.id);
+        }
+      }
+
+      const live = created.filter((task) => !deleted.has(task.id));
+      const decisions = live
+        .filter(() => random() < 0.5)
+        .map((task) => ({ taskId: task.id, outcome: (random() < 0.5 ? 'done' : 'back') as 'done' | 'back' }));
+      const input = {
+        date: DAY,
+        decisions,
+        ...(random() < 0.3 ? { shutdownNote: `note ${call}` } : {}),
+        now: new Date(now),
+      };
+      const saved = await journalRepo.applyShutdown(input);
+      for (const decision of decisions) model.set(decision.taskId, decision.outcome);
+
+      // 1. The record is the model: the last outcome per surviving task.
+      const expectedDone = [...model.entries()].filter(([, outcome]) => outcome === 'done').map(([id]) => id).sort();
+      const expectedBack = [...model.entries()].filter(([, outcome]) => outcome === 'back').map(([id]) => id).sort();
+      expect(saved.picksDone ?? []).toEqual(expectedDone);
+      expect(saved.picksBack ?? []).toEqual(expectedBack);
+
+      // 2. No id in both lists, and every recorded id still has a task row.
+      expect((saved.picksDone ?? []).filter((id) => (saved.picksBack ?? []).includes(id))).toEqual([]);
+      for (const id of [...(saved.picksDone ?? []), ...(saved.picksBack ?? [])]) {
+        expect(deleted.has(id), `recorded a deleted task ${id}`).toBe(false);
+      }
+
+      // 3. Task status invariants.
+      for (const id of saved.picksDone ?? []) {
+        const task = await taskRepo.getById(id);
+        expect(task?.status).toBe('done');
+      }
+      for (const id of saved.picksBack ?? []) {
+        const task = await taskRepo.getById(id);
+        expect(task?.status).toBe('next');
+        expect(task?.deferUntil ?? null).toBeNull();
+      }
+
+      // 4. Repeating the same call writes nothing at all.
+      const stored = await journalRepo.findByDate(DAY);
+      const repeat = await journalRepo.applyShutdown({ ...input, now: new Date(now + 30_000) });
+      const afterRepeat = await journalRepo.findByDate(DAY);
+      expect(afterRepeat).toEqual(stored);
+      expect(repeat.updatedAt.getTime()).toBe(saved.updatedAt.getTime());
+    }
+  });
+
   it('refuses an invalid day key instead of writing a row nothing can read', async () => {
     await expect(journalRepo.findByDate('15/06/2026')).rejects.toThrow();
     await expect(journalRepo.saveJournal('2026-06-31', 'x')).rejects.toThrow();

@@ -75,7 +75,18 @@ export class DexieJournalRepository implements JournalRepository {
     const db = getDb();
     return db.transaction('rw', db.dayPlans, db.tasks, async () => {
       const existing = (await db.dayPlans.get(date)) ?? null;
-      const taskIds = [...new Set(input.decisions.map((decision) => decision.taskId))];
+      // Load the tasks this call decides AND every task the stored record
+      // already names. The merge in planShutdown drops an id whose task row is
+      // gone, so handing it only this call's tasks would make every previously
+      // recorded id look deleted and erase the record.
+      const taskIds = [
+        ...new Set([
+          ...input.decisions.map((decision) => decision.taskId),
+          ...(existing?.picksDone ?? []),
+          ...(existing?.picksBack ?? []),
+          ...(existing?.picks ?? []),
+        ]),
+      ];
       const tasks = (await db.tasks.bulkGet(taskIds)).filter(
         (task): task is NonNullable<typeof task> => task !== undefined,
       );

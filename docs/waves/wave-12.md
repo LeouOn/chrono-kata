@@ -43,7 +43,11 @@ journal/shutdown UI, then export and search · **Roadmap:** Wave 12 · **Lane:**
   call starts from the stored `picksDone`/`picksBack`, applies its own decisions
   (a task moves between the lists, never sits in both) and drops only ids whose
   task no longer exists. A note-only call therefore cannot erase what the person
-  already recorded.
+  already recorded. The repository loads the tasks this call decides AND every
+  task the stored record names, so a stored id is dropped only when its row is
+  really gone — loading just the decided tasks made every other recorded id look
+  deleted (found by the lead's probe through the real repo, not by the pure
+  tests).
 
 ## Decisions where the roadmap was silent
 
@@ -101,12 +105,19 @@ journal/shutdown UI, then export and search · **Roadmap:** Wave 12 · **Lane:**
   `picksDone` id is a `done` task and every `picksBack` id a `next` task with no
   stale defer day, that repeating a call reports no change and writes no new
   timestamp, and that only a deleted task can leave the record.
-- `tests/unit/db/journal-repo.test.ts` (10): null for a missing day; journal save
+- `tests/unit/db/journal-repo.test.ts` (14): null for a missing day; journal save
   creates/updates and keeps `picks`/`createdAt`; oversized text refused without a
   write; a shutdown writes tasks and the day together; the second identical
   shutdown does not rewrite the row; **rollback proof** (a failing task write
   leaves the day and the task as they were); a deleted task skipped; a shutdown
-  on a day with no plan; an impossible day key refused.
+  on a day with no plan; an impossible day key refused; the three record probes
+  through the real repository (note-only call keeps both decisions; a later
+  one-task call keeps the other; deleting one task drops only that id); and an
+  oracle over 14 random calls THROUGH the repository — random decision subsets,
+  note edits, task deletions between calls and repeated calls — checking the
+  record against a model kept in the test after every call, the task
+  status/defer invariants, and that a repeated call leaves the row and its
+  timestamp untouched.
 - Mutation list (mutant → killing test): domains placeholder not substituted →
   template render test; unknown placeholders stripped → "leaves unknown
   placeholders"; long text truncated → "refuses text that is longer"; empty
