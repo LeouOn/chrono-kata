@@ -45,7 +45,9 @@ describe('useReviewSummary', () => {
   it('prepares a preview without notes and sends nothing until confirm', async () => {
     const { result } = renderHook(() => useReviewSummary());
 
-    act(() => result.current.prepare(SESSIONS));
+    await act(async () => {
+      await result.current.prepare(SESSIONS);
+    });
     expect(result.current.state.phase).toBe('privacy');
     if (result.current.state.phase !== 'privacy') throw new Error('expected privacy');
     expect(result.current.state.request.userText).not.toContain('private note');
@@ -78,7 +80,9 @@ describe('useReviewSummary', () => {
 
   it('two confirms in one act() send one request', async () => {
     const { result } = renderHook(() => useReviewSummary());
-    act(() => result.current.prepare(SESSIONS));
+    await act(async () => {
+      await result.current.prepare(SESSIONS);
+    });
     generate.mockResolvedValue({ observations: [], question: '', promptTokens: 1, completionTokens: 1 });
 
     await act(async () => {
@@ -92,7 +96,9 @@ describe('useReviewSummary', () => {
 
   it('a failed send returns to the disclosure with the error and can be retried', async () => {
     const { result } = renderHook(() => useReviewSummary());
-    act(() => result.current.prepare(SESSIONS));
+    await act(async () => {
+      await result.current.prepare(SESSIONS);
+    });
     generate.mockRejectedValueOnce(new Error('private mode is on'));
 
     await act(async () => {
@@ -110,7 +116,9 @@ describe('useReviewSummary', () => {
 
   it('closing aborts an in-flight request and shows no error', async () => {
     const { result } = renderHook(() => useReviewSummary());
-    act(() => result.current.prepare(SESSIONS));
+    await act(async () => {
+      await result.current.prepare(SESSIONS);
+    });
     let rejectWith: (error: unknown) => void = () => {};
     generate.mockImplementationOnce(
       (input: { signal?: AbortSignal }) =>

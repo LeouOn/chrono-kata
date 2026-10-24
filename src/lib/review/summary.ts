@@ -1,5 +1,7 @@
 import { buildWeeklyReflectionUserText } from '@/lib/llm/prompt-builders';
+import { getCoachSystemPrompt } from '@/lib/coaches';
 import { NOTES_MAX } from './limits';
+import type { CoachPersonality } from '@/lib/schemas/coach-personality';
 import type { Session } from '@/lib/schemas/session';
 
 /**
@@ -24,6 +26,14 @@ export interface ReviewSummaryRequest {
   sessions: Session[];
   /** Exactly the user-side text that leaves the device. */
   userText: string;
+  /** The coach whose instruction is sent; resolved once, at preview time. */
+  personality: CoachPersonality;
+  /**
+   * Exactly the system text that leaves the device. It is the shared coach
+   * instruction with NO personalisation: this surface never sends the user's
+   * display name, so "shown == sent" also holds for the system message.
+   */
+  systemPrompt: string;
 }
 
 /** Strip the fields the summary does not need from a session copy. */
@@ -39,9 +49,19 @@ export function scrubSessionForSummary(session: Session): Session {
  * SAME scrubbed sessions, so the preview shown to the user cannot drift from
  * what is transmitted.
  */
-export function buildReviewSummaryRequest(sessions: readonly Session[]): ReviewSummaryRequest {
+export function buildReviewSummaryRequest(
+  sessions: readonly Session[],
+  options: { personality: CoachPersonality },
+): ReviewSummaryRequest {
   const scrubbed = sessions.map(scrubSessionForSummary);
-  return { sessions: scrubbed, userText: buildWeeklyReflectionUserText(scrubbed) };
+  return {
+    sessions: scrubbed,
+    userText: buildWeeklyReflectionUserText(scrubbed),
+    personality: options.personality,
+    // No `personalizeSystemPrompt`: the name is not part of this surface, and
+    // the generation call is given exactly this string.
+    systemPrompt: getCoachSystemPrompt(options.personality),
+  };
 }
 
 export interface ReviewSummaryText {

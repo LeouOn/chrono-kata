@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildReviewSummaryRequest, scrubSessionForSummary, summaryToNotes } from '@/lib/review/summary';
 import { buildWeeklyReflectionUserText } from '@/lib/llm/prompt-builders';
+import { getCoachSystemPrompt } from '@/lib/coaches';
 import { NOTES_MAX } from '@/lib/review/limits';
 import type { Session } from '@/lib/schemas/session';
 
@@ -39,8 +40,16 @@ describe('what leaves the device', () => {
     expect((scrubbed as Record<string, unknown>).note).toBeUndefined();
   });
 
+  it('carries the coach instruction it will send, with no personalisation', () => {
+    const request = buildReviewSummaryRequest(WEEK_SESSIONS, { personality: 'zen' });
+    expect(request.personality).toBe('zen');
+    expect(request.systemPrompt).toBe(getCoachSystemPrompt('zen'));
+    // No name is part of this surface, so no personalisation line can appear.
+    expect(request.systemPrompt).not.toContain("The user's name is");
+  });
+
   it('shows exactly the text the generation call sends, built from the same scrubbed rows', () => {
-    const request = buildReviewSummaryRequest(WEEK_SESSIONS);
+    const request = buildReviewSummaryRequest(WEEK_SESSIONS, { personality: 'zen' });
     expect(request.sessions).toHaveLength(2);
     expect(request.userText).toBe(buildWeeklyReflectionUserText(request.sessions));
     expect(request.userText).not.toContain('a private note');
@@ -52,7 +61,7 @@ describe('what leaves the device', () => {
   });
 
   it('does not mutate the sessions it previews', () => {
-    const request = buildReviewSummaryRequest(WEEK_SESSIONS);
+    const request = buildReviewSummaryRequest(WEEK_SESSIONS, { personality: 'zen' });
     expect(WEEK_SESSIONS[0]?.note).toBe('a private note about my position sizing and losses');
     expect(request.sessions[0]).not.toBe(WEEK_SESSIONS[0]);
   });

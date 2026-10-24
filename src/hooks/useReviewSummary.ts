@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { generateWeeklyReflection } from '@/lib/llm/llm-service';
+import { DEFAULT_SETTINGS } from '@/lib/schemas/settings';
 import {
   buildReviewSummaryRequest,
   type ReviewSummaryRequest,
@@ -45,9 +46,23 @@ export function useReviewSummary() {
     };
   }, []);
 
-  /** Build the request; nothing leaves the device until confirm(). */
-  const prepare = useCallback((sessions: readonly Session[]) => {
-    setState({ phase: 'privacy', request: buildReviewSummaryRequest(sessions) });
+  /**
+   * Build the request; nothing leaves the device until confirm().
+   *
+   * The coach is resolved HERE, once, and travels inside the request, so the
+   * system text the panel shows is the system text the call sends. Changing the
+   * coach between opening the panel and pressing Send cannot swap it underneath
+   * the user.
+   */
+  const prepare = useCallback(async (sessions: readonly Session[]) => {
+    // The settings row is created on first read; if it cannot be read, the
+    // default coach keeps the surface working and the panel still shows the
+    // exact text that would be sent.
+    const personality = await settingsRepo
+      .get()
+      .then((settings) => settings.selectedCoachPersonality)
+      .catch(() => DEFAULT_SETTINGS.selectedCoachPersonality);
+    setState({ phase: 'privacy', request: buildReviewSummaryRequest(sessions, { personality }) });
   }, []);
 
   const confirm = useCallback(async () => {
@@ -60,11 +75,13 @@ export function useReviewSummary() {
     abortRef.current = controller;
     setState({ phase: 'running', request });
     try {
-      const [appSettings, llmSettings] = await Promise.all([settingsRepo.get(), llmSettingsRepo.get()]);
+      // Only the provider is resolved at send time (the preview resolves it the
+      // same way). The coach, the sessions and both texts come from the request
+      // the user was shown; no display name is sent from this surface.
+      const llmSettings = await llmSettingsRepo.get();
       const result = await generateWeeklyReflection({
         sessions: request.sessions,
-        personality: appSettings.selectedCoachPersonality,
-        displayName: appSettings.displayName,
+        personality: request.personality,
         llmSettings,
         signal: controller.signal,
       });

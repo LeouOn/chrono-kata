@@ -36,7 +36,9 @@ export function ReviewSummary({ sessions, notes, onNotesChange }: Props) {
 
   function openPanel() {
     setAdded(null);
-    prepare(sessions);
+    // prepare() resolves the coach once and builds both wire texts; nothing is
+    // sent by it. The panel shows a short "Preparing" state until it lands.
+    void prepare(sessions);
     setOpen(true);
   }
 
@@ -74,17 +76,37 @@ export function ReviewSummary({ sessions, notes, onNotesChange }: Props) {
             <p className="text-sm text-text-muted">No sessions this week, so there is nothing to summarise.</p>
           ) : null}
 
+          {state.phase === 'idle' && sessions.length > 0 ? (
+            <p role="status" className="text-sm text-text-muted">
+              Preparing the summary request…
+            </p>
+          ) : null}
+
           {(state.phase === 'privacy' || state.phase === 'error') && sessions.length > 0 ? (
             <>
               <p className="text-sm text-text">
-                This sends this week&apos;s sessions to a language model and nothing else. Session notes are left out
-                — only the date, activity, length and rating of each session travel.
+                This sends this week&apos;s sessions — their date, activity, length and rating — plus the shared coach
+                instruction shown below. No names, no session notes, no task titles.
               </p>
               <div className="rounded-xl border border-border bg-surface-2 p-3">
                 <p className="mb-1 text-xs text-text-muted">Exactly what leaves the device:</p>
-                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs text-text">
+                <pre
+                  data-testid="wire-user"
+                  className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs text-text"
+                >
                   {state.request.userText}
                 </pre>
+                <details className="mt-2">
+                  <summary className="flex min-h-11 cursor-pointer items-center text-xs text-text-muted">
+                    Also sent: the coach instruction
+                  </summary>
+                  <pre
+                    data-testid="wire-system"
+                    className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs text-text-muted"
+                  >
+                    {state.request.systemPrompt}
+                  </pre>
+                </details>
               </div>
               <p className="text-sm text-text">{previewDestination(preview)}</p>
               {preview.state === 'blocked' ? (

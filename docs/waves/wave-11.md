@@ -105,15 +105,21 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
   reflection** (`generateWeeklyReflection`, `buildWeeklyReflectionUserText`)
   rather than adding a second summarizer, and it reuses the decomposition
   sheet's disclosure contract through the now-shared `useProviderPreview`.
-- **The disclosure is exact**: before anything is sent the panel names the
-  destination (provider, model, and whether that is this device, the local
-  network, or remote) and shows the precise user text that would leave. That
-  text is produced by the same builder from the same scrubbed rows the call
-  receives (`buildReviewSummaryRequest`), so the preview cannot drift.
+- **The disclosure is exact, both messages**: before anything is sent the panel
+  names the destination (provider, model, and whether that is this device, the
+  local network, or remote) and shows the precise user text AND the shared coach
+  instruction that would leave (the instruction is collapsed, like the
+  decomposition sheet's). The request is built once, at preview time, and carries
+  the coach and both texts; the send uses those values, so changing the coach or
+  the display name between opening and pressing Send cannot swap the text
+  underneath the user. No display name is sent from this surface at all.
 - **Aggregates only**: each session's `note` is removed before the text is built.
   Task and project titles are never part of a session row, so they cannot leak;
   the practice vocabulary (activity label, length, rating) is what the summary
   is about. Private mode blocks the send and says what is allowed instead.
+  A wire test runs the REAL generation call over a stubbed HTTP boundary and
+  compares the two outgoing messages with the two texts the panel shows, with a
+  display name set and a session note marker that must appear nowhere.
 - **Nothing is saved without an explicit press**: the reply (observations + one
   question) is shown, and "Add to my notes" is a second action that appends below
   the user's writing. At the notes bound the **summary** is trimmed, never the
@@ -245,9 +251,18 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
 - `tests/unit/review/ReviewSummary.test.tsx` (5): exact wire text shown and
   nothing sent; one send, result shown, notes untouched until asked; private mode
   disables send; failure then retry; empty week.
+- `tests/unit/review/review-summary-wire.test.ts` (1): the real
+  `generateWeeklyReflection` over a stubbed fetch; the system and user messages
+  equal the panel's two texts byte for byte, and the note marker and display
+  name appear nowhere. Mutants: put the note back, send the name again, re-read
+  the coach at send time - all red.
 - `tests/e2e/w11-review.spec.ts`: a browser case opens the panel on step 6, sees
   the exact wire text for the seeded week, finds Send disabled with no provider,
-  leaves it, and still finishes with notes untouched.
+  leaves it, and still finishes with notes untouched; a second case configures a
+  provider, asserts zero requests before Send, records the POST body and compares
+  its two messages with the two `pre` texts byte for byte (no note marker, no
+  display name), and a third turns private mode on and sees Send disabled with
+  zero requests.
 - Mutants killed: keep session notes, cut the notes instead of the summary,
   preview drift, no in-flight guard, auto-apply the summary, ignore the provider
   preview.

@@ -60,6 +60,39 @@ async function seedReviewData(page: Page) {
     return count > 0;
   });
   await openDb(page);
+  // The settings row is created on the app's first read; give it a display name
+  // so the "no name leaves the device" assertion can fail if one is sent.
+  await page.waitForFunction(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('chrono-kata');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const row = await new Promise<Record<string, unknown> | undefined>((resolve) => {
+      const request = db.transaction('settings', 'readonly').objectStore('settings').get('singleton');
+      request.onsuccess = () => resolve(request.result as Record<string, unknown> | undefined);
+    });
+    db.close();
+    return row !== undefined;
+  });
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('chrono-kata');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const row = await new Promise<Record<string, unknown>>((resolve) => {
+      const request = db.transaction('settings', 'readonly').objectStore('settings').get('singleton');
+      request.onsuccess = () => resolve(request.result as Record<string, unknown>);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('settings', 'readwrite');
+      tx.objectStore('settings').put({ ...row, displayName: 'Ada Lovelace' });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  });
   await page.evaluate(
     async ({ waitingTask, inboxTask, project, session }) => {
       const db = (window as unknown as { __reviewDb: IDBDatabase }).__reviewDb;
@@ -106,6 +139,7 @@ async function seedReviewData(page: Page) {
         durationMinutes: 30,
         rating: 4,
         activityLabel: 'Trading journal',
+        note: 'PRIVATE-NOTE-MARKER-98765',
         taskId: waitingTask,
         outcome: 'done',
         createdAt: startedAt,
@@ -313,7 +347,7 @@ test('the optional summary shows exactly what would leave the device and sends n
   await expect(page.getByText('Step 6 of 6: Shape next week')).toBeVisible();
 
   await page.getByRole('button', { name: 'Get a summary' }).click();
-  const wire = page.locator('pre');
+  const wire = page.getByTestId('wire-user');
   await expect(wire).toContainText('Total sessions: 1');
   // A session note would be the one thing that must never travel; the seeded
   // session has none, so check the scrubbed fields are what is shown.
@@ -331,6 +365,105 @@ test('the optional summary shows exactly what would leave the device and sends n
   await expect(page.getByRole('heading', { name: 'Review saved' })).toBeVisible();
   const reviews = await readAll(page, 'reviews');
   expect(String(reviews[0]?.notes)).toBe('No AI needed this week.');
+});
+
+/** Configure a remote provider the way a phone user would (w3's pattern). */
+async function configureProvider(page: Page) {
+  await page.route('**/api/local-ai', (route) => route.fulfill({ json: { providers: {} } }));
+  await page.goto('/llm');
+  const card = page.getByText('deepseek', { exact: true }).locator('..').locator('..').locator('..');
+  await card.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByLabel('API key', { exact: true }).fill('e2e-key');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(card.getByText('Active', { exact: true })).toBeVisible();
+}
+
+test('sending the summary transmits exactly the two texts the panel shows', async ({ page }) => {
+  const bodies: { messages: { role: string; content: string }[] }[] = [];
+  await page.route('https://api.deepseek.com/chat/completions', (route) => {
+    bodies.push(JSON.parse(String(route.request().postData() ?? '{}')));
+    return route.fulfill({
+      json: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                observations: ['Trading got the week.', 'Practice stalled once.'],
+                question: 'What would make practice easy to start?',
+              }),
+            },
+          },
+        ],
+      },
+    });
+  });
+  await configureProvider(page);
+  await openReview(page);
+  for (let i = 0; i < 5; i += 1) await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByText('Step 6 of 6: Shape next week')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Get a summary' }).click();
+  const wireUser = page.getByTestId('wire-user');
+  const wireSystem = page.getByTestId('wire-system');
+  await expect(wireUser).toContainText('Total sessions: 1');
+  // Nothing is sent just by opening the panel, and the note never appears.
+  expect(bodies).toHaveLength(0);
+  await expect(wireUser).not.toContainText('PRIVATE-NOTE-MARKER-98765');
+  await page.getByText('Also sent: the coach instruction').click();
+  const shownSystem = await wireSystem.textContent();
+  const shownUser = await wireUser.textContent();
+  expect(shownSystem).toBeTruthy();
+  expect(shownUser).toBeTruthy();
+
+  await page.getByRole('button', { name: /^Send to deepseek$/ }).click();
+  // Assert after the reply has arrived, not on the click's next frame.
+  await expect(page.getByText('Trading got the week.')).toBeVisible();
+
+  expect(bodies).toHaveLength(1);
+  // Byte for byte: the system and user messages are the two texts on screen.
+  expect(bodies[0]!.messages).toEqual([
+    { role: 'system', content: shownSystem },
+    { role: 'user', content: shownUser },
+  ]);
+  const wire = JSON.stringify(bodies[0]);
+  expect(wire).not.toContain('PRIVATE-NOTE-MARKER-98765');
+  expect(wire).not.toContain('Ada Lovelace');
+  expect(wire).not.toContain("The user's name is");
+  await page.screenshot({ path: '/tmp/qa-w11-shots/summary-sent.png', fullPage: true });
+});
+
+test('private mode disables the summary send and sends nothing', async ({ page }) => {
+  const bodies: unknown[] = [];
+  await page.route('https://api.deepseek.com/chat/completions', (route) => {
+    bodies.push(JSON.parse(String(route.request().postData() ?? '{}')));
+    return route.fulfill({ json: { choices: [{ message: { content: '{}' } }] } });
+  });
+  await configureProvider(page);
+  // Turn private mode on through the settings row, as the switch does.
+  await openDb(page);
+  await page.evaluate(async () => {
+    const db = (window as unknown as { __reviewDb: IDBDatabase }).__reviewDb;
+    const row = await new Promise<Record<string, unknown>>((resolve) => {
+      const request = db.transaction('settings', 'readonly').objectStore('settings').get('singleton');
+      request.onsuccess = () => resolve(request.result as Record<string, unknown>);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('settings', 'readwrite');
+      const flags = (row.flags ?? {}) as Record<string, boolean>;
+      tx.objectStore('settings').put({ ...row, flags: { ...flags, privateMode: true } });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  });
+
+  await openReview(page);
+  for (let i = 0; i < 5; i += 1) await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('button', { name: 'Get a summary' }).click();
+  await expect(page.getByText(/only a provider on this device/)).toBeVisible();
+  const send = page.getByRole('button', { name: /^Send to provider$/ });
+  await expect(send).toBeDisabled();
+  expect(bodies).toHaveLength(0);
 });
 
 test('an unfinished review from an earlier week asks before it takes over', async ({ page }) => {
