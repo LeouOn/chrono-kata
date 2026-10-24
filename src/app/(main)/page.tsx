@@ -19,6 +19,7 @@ import { SessionForm } from '@/components/session/SessionForm';
 import { MorningCheckIn } from '@/components/checkin/MorningCheckIn';
 import { InboxLink } from '@/components/tasks/InboxLink';
 import { TodayPlanCard } from '@/components/planning/TodayPlanCard';
+import { ReviewLink } from '@/components/review/ReviewLink';
 import { SessionCard } from '@/components/session/SessionCard';
 import { toLocalDateString } from '@/lib/utils/date';
 import type { SessionInput } from '@/lib/schemas/session';
@@ -89,6 +90,8 @@ export default function HomePage() {
       <MorningCheckIn />
 
       <TodayPlanCard />
+
+      <ReviewLink />
 
       {TODAY_HABITS_ENABLED ? <TodayHabits /> : null}
 
