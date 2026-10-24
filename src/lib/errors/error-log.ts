@@ -3,10 +3,13 @@
  * log lives in localStorage and never leaves the device except when the
  * user explicitly exports it.
  *
- * Privacy rule: an entry records ONLY the error's name, message (trimmed),
- * stack (trimmed), the route it happened on, and a timestamp. User text can
- * reach an error message only by interpolation; every message is truncated
- * hard and marked, so no long user text is ever stored.
+ * Privacy: nothing leaves the device unless the user exports the log. An
+ * entry holds the error's name, message, stack, the route it happened on
+ * (pathname only, never the query) and a timestamp. Message and stack are
+ * TRUNCATED, not redacted: a short message that interpolates the user's own
+ * text (a task title, say) is stored whole and is not flagged. So an entry can
+ * contain short fragments of the user's own text. The Settings card says so
+ * next to Export. A message cut at 200 characters is flagged "trimmed".
  *
  * Robustness rule: localStorage can throw or be unavailable (private
  * windows, quota). Every operation is wrapped: the app must work perfectly
@@ -25,7 +28,7 @@ export interface ErrorLogEntry {
   route: string;
   name: string;
   message: string;
-  /** True when the message was truncated (it may have contained user text). */
+  /** True when the message was cut at the limit. A short message is stored whole, flagged or not. */
   messageTruncated: boolean;
   stack: string;
 }
@@ -35,7 +38,7 @@ function trim(text: string, max: number): { text: string; truncated: boolean } {
   return { text: `${text.slice(0, max)}…`, truncated: true };
 }
 
-/** Build a scrubbed entry. Pure; exported for tests. */
+/** Build a bounded entry (truncated, not redacted). Pure; exported for tests. */
 export function scrubError(error: unknown, route: string, at: number = Date.now()): ErrorLogEntry {
   const name = error instanceof Error ? error.name : typeof error;
   const rawMessage =

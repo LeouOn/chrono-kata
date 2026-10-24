@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -21,6 +21,7 @@ export function ErrorLogSettings() {
   const [entries, setEntries] = useState<ReturnType<typeof getErrorLog> | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [exportNote, setExportNote] = useState<string | null>(null);
+  const exportNoteId = useId();
 
   if (!enabled) return null;
 
@@ -101,7 +102,13 @@ export function ErrorLogSettings() {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Button variant="ghost" className="min-h-11" onClick={() => void exportLog()} disabled={shown.length === 0}>
+        <Button
+          variant="ghost"
+          className="min-h-11"
+          onClick={() => void exportLog()}
+          disabled={shown.length === 0}
+          aria-describedby={shown.length === 0 ? undefined : exportNoteId}
+        >
           Export
         </Button>
         <Button variant="ghost" className="min-h-11" onClick={refresh}>
@@ -116,6 +123,11 @@ export function ErrorLogSettings() {
           Clear
         </Button>
       </div>
+      {shown.length > 0 && (
+        <p id={exportNoteId} className="text-xs text-text-muted">
+          Entries can include short fragments of your own text. Read them before you share the file.
+        </p>
+      )}
       {exportNote && (
         <p role="status" className="text-xs text-text-muted">
           {exportNote}
