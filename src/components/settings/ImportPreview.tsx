@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { makeCopy } from '@/lib/copies/copies';
 import { COLLECTIONS, countOf, joinWords } from '@/lib/data-transfer/collections';
 import { replaceAll } from '@/lib/data-transfer/import';
 import { applyMerge, planMerge, type MergeReport } from '@/lib/data-transfer/merge';
@@ -61,6 +62,8 @@ export function ImportPreview({ backup, onDone, onCancel }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // Set when the safety copy that comes first could not be made: nothing is imported until the person says so.
+  const [noSafetyCopy, setNoSafetyCopy] = useState<{ why: string; mode: Mode } | null>(null);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -92,11 +95,21 @@ export function ImportPreview({ backup, onDone, onCancel }: Props) {
     );
   }
 
-  async function run(chosen: Mode) {
+  async function run(chosen: Mode, options: { withoutSafetyCopy?: boolean } = {}) {
     if (busy) return;
     setBusy(true);
     setProblem(null);
+    setNoSafetyCopy(null);
     try {
+      // A copy of what is here goes first, so a bad import can be undone from the list of copies. If it
+      // cannot be made, nothing is imported until the person chooses to go on without it.
+      if (!options.withoutSafetyCopy) {
+        const made = await makeCopy('before-import');
+        if (!made.ok) {
+          setNoSafetyCopy({ why: made.message, mode: chosen });
+          return;
+        }
+      }
       if (chosen === 'merge') {
         const report = await applyMerge(envelope);
         onDone(mergeResultSentence(report));
@@ -154,6 +167,17 @@ export function ImportPreview({ backup, onDone, onCancel }: Props) {
         <p role="alert" className="text-sm text-text">
           {problem}
         </p>
+      )}
+      {noSafetyCopy && (
+        <div role="alert" className="space-y-2 text-sm text-text">
+          <p>
+            A copy of what is on this device could not be made first ({noSafetyCopy.why}), so nothing was imported. You can go on without that
+            copy.
+          </p>
+          <Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => void run(noSafetyCopy.mode, { withoutSafetyCopy: true })}>
+            Import without a safety copy
+          </Button>
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">

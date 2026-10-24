@@ -5,11 +5,14 @@ import Dexie from 'dexie';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useFlag } from '@/hooks/useFlags';
 import { useSettings } from '@/hooks/useSettings';
 import { getDb } from '@/lib/db/db';
+import { deleteAllCopies } from '@/lib/copies/copies-db';
 
 export function ClearDataSettings() {
   const { settings } = useSettings();
+  const copiesOn = useFlag('taskInbox');
   const [open, setOpen] = useState(false);
   const [wiping, setWiping] = useState(false);
 
@@ -18,6 +21,8 @@ export function ClearDataSettings() {
     try {
       getDb().close();
       await Dexie.delete('chrono-kata');
+      // The automatic copies hold the same data. "Clear all data" that left them behind would not be.
+      await deleteAllCopies();
     } finally {
       window.location.reload();
     }
@@ -45,7 +50,7 @@ export function ClearDataSettings() {
         {wiping ? 'Wiping…' : 'Clear all data'}
       </Button>
       <p className="text-text-muted text-xs mt-2">
-        Wipes IndexedDB and reloads. Cannot be undone.
+        {copiesOn ? 'Wipes IndexedDB, including the automatic copies on this device, and reloads. Cannot be undone.' : 'Wipes IndexedDB and reloads. Cannot be undone.'}
       </p>
       <ConfirmDialog
         open={open}

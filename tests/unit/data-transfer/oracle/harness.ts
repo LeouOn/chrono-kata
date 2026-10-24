@@ -117,3 +117,27 @@ export function backupTextOf(data: Dataset, tweak: (file: Record<string, unknown
   tweak(copy);
   return JSON.stringify(copy);
 }
+
+
+/**
+ * What a restore of a PLAIN backup gives, relative to the seeded device: the secrets rule applied. Used by
+ * the tests that make a copy and put it back. (Environment providers and waiting calendar updates are in
+ * neither kind of backup; the API keys, sign-in and calendar link are only in an encrypted one.)
+ */
+export function expectedAfterPlainRestore(data: Dataset): Dataset {
+  const out: Dataset = {};
+  for (const [table, rows] of Object.entries(data)) {
+    if (table === 'pendingCalendarOps' || table === 'tokens') continue;
+    out[table] = rows.map((row) => ({ ...row }));
+  }
+  const llm = out.llmSettings![0]! as { providers: Record<string, { apiKey: string; credentialSource?: string }> };
+  llm.providers = Object.fromEntries(
+    Object.entries(llm.providers)
+      .filter(([, entry]) => entry.credentialSource !== 'environment')
+      .map(([name, entry]) => [name, { ...entry, apiKey: '' }]),
+  );
+  const settings = out.settings![0]!;
+  if (typeof settings.icsSubscriptionUrl === 'string') delete settings.icsSubscriptionUrl;
+  if (settings.googleCalendarConnectedAt != null) settings.googleCalendarConnectedAt = null;
+  return out;
+}
