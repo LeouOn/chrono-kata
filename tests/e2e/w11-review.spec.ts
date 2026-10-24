@@ -240,6 +240,9 @@ test('projects step saves a breadcrumb and pausing is a status change, not a del
   for (let i = 0; i < 2; i += 1) await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByText('Step 3 of 6: Projects')).toBeVisible();
 
+  // The row's "days since" is days since the project last had WORK, not since
+  // its row was edited (the shared untouched rule).
+  await expect(page.getByText(/last work|work today|work yesterday/)).toBeVisible();
   const breadcrumb = page.getByLabel(/After this, the next step for “Rebuild the portfolio”/);
   await breadcrumb.fill('draft the case study outline');
   await page.getByRole('button', { name: /^Save next step:/ }).click();

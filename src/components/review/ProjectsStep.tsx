@@ -16,12 +16,18 @@ interface Props {
   onSave: (projectId: string, patch: Partial<ProjectInput>, decision: ProjectDecision) => Promise<void>;
 }
 
-function weeksAgo(days: number): string {
-  if (days <= 0) return 'touched today';
-  if (days === 1) return 'touched yesterday';
-  if (days < 7) return `touched ${days} days ago`;
+/**
+ * `daysSinceTouched` counts days since the project last had WORK — a session on
+ * it or on one of its tasks, a task of it finished, or its own last touch (the
+ * shared rule in `planning/untouched.ts`). The label says "work", not "touch",
+ * so it cannot be read as "since I edited the project row".
+ */
+function lastWorkLabel(days: number): string {
+  if (days <= 0) return 'work today';
+  if (days === 1) return 'work yesterday';
+  if (days < 7) return `last work ${days} days ago`;
   const weeks = Math.floor(days / 7);
-  return weeks === 1 ? 'last touched a week ago' : `last touched ${weeks} weeks ago`;
+  return weeks === 1 ? 'last work a week ago' : `last work ${weeks} weeks ago`;
 }
 
 /**
@@ -68,7 +74,7 @@ export function ProjectsStep({ projects, weekByProject, decisions, busy, onSave 
               {sessionsThisWeek === 0
                 ? 'No sessions this week'
                 : `${sessionsThisWeek} session${sessionsThisWeek === 1 ? '' : 's'} this week`}
-              {week ? ` · ${weeksAgo(week.daysSinceTouched)}` : null}
+              {week ? ` · ${lastWorkLabel(week.daysSinceTouched)}` : null}
               {project.cadencePerWeek != null
                 ? ` · rhythm ${project.cadencePerWeek} a week${debt > 0 ? `, ${debt} to go` : ', kept'}`
                 : ' · no rhythm set'}
