@@ -39,24 +39,48 @@ export function ShutdownCard({ dayKey, plan, tasks, domains, domainChecks }: Pro
   const [firstAction, setFirstAction] = useState(plan?.firstActionTomorrow ?? '');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
   const guardRef = useRef(false);
 
   const picks = plan?.picks ?? [];
   const taskById = new Map(tasks.map((task) => [task.id, task] as const));
   const closed = plan?.shutdownAt != null;
 
-  // Seed the choices from what is stored, so reopening the screen shows the
-  // decisions that were already made rather than a blank slate.
-  useEffect(() => {
+  // Seed from the stored row when the DAY changes, when the card is pristine
+  // (nothing unsaved) and the row changed underneath, or right after this card's
+  // own save. Never while there are unsaved edits: saving the journal in the card
+  // above settles the same day's cache, and re-seeding then would wipe what the
+  // person is typing here.
+  const seedKeyOf = (row: DayPlan | null | undefined): string =>
+    `${dayKey}|${row?.shutdownAt?.getTime() ?? ''}|${(row?.picksDone ?? []).join(',')}|${(row?.picksBack ?? []).join(',')}|${row?.shutdownNote ?? ''}|${row?.firstActionTomorrow ?? ''}`;
+  const seedFrom = (row: DayPlan | null | undefined) => {
     const seeded: Record<string, ShutdownOutcome | undefined> = {};
-    for (const taskId of picks) seeded[taskId] = outcomeOf(plan, taskId) ?? undefined;
+    for (const taskId of row?.picks ?? []) seeded[taskId] = outcomeOf(row, taskId) ?? undefined;
     setChoices(seeded);
-    setNote(plan?.shutdownNote ?? '');
-    setFirstAction(plan?.firstActionTomorrow ?? '');
-  }, [plan, picks.join(',')]);
+    setNote(row?.shutdownNote ?? '');
+    setFirstAction(row?.firstActionTomorrow ?? '');
+  };
+  const lastSeedKey = useRef('');
+  useEffect(() => {
+    const key = seedKeyOf(plan);
+    if (lastSeedKey.current === key) return;
+    const dayChanged = lastSeedKey.current.split('|')[0] !== dayKey;
+    if (!dayChanged && dirty) return;
+    lastSeedKey.current = key;
+    seedFrom(plan);
+    setDirty(false);
+  }, [dayKey, plan, dirty]);
 
   function choose(taskId: string, outcome: ShutdownOutcome) {
-    setChoices((current) => ({ ...current, [taskId]: current[taskId] === outcome ? undefined : outcome }));
+    setDirty(true);
+    setChoices((current) => {
+      // A stored choice is a pair of radio buttons, not a toggle: pressing the
+      // pressed one does nothing, so the button never shows "off" while the
+      // stored record still says "back" (the merge keeps omitted decisions).
+      const effective = current[taskId] ?? (taskById.get(taskId)?.status === 'done' ? 'done' : undefined);
+      if (effective === outcome) return current;
+      return { ...current, [taskId]: outcome };
+    });
     setStatus(null);
   }
 
@@ -139,7 +163,10 @@ export function ShutdownCard({ dayKey, plan, tasks, domains, domainChecks }: Pro
           value={note}
           maxLength={SHUTDOWN_NOTE_MAX}
           rows={3}
-          onChange={(event) => setNote(event.target.value.slice(0, SHUTDOWN_NOTE_MAX))}
+          onChange={(event) => {
+            setDirty(true);
+            setNote(event.target.value.slice(0, SHUTDOWN_NOTE_MAX));
+          }}
           className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-3 text-text"
         />
         <p className="text-right text-[11px] text-text-muted">
@@ -155,7 +182,10 @@ export function ShutdownCard({ dayKey, plan, tasks, domains, domainChecks }: Pro
           id="first-action"
           value={firstAction}
           maxLength={FIRST_ACTION_MAX}
-          onChange={(event) => setFirstAction(event.target.value.slice(0, FIRST_ACTION_MAX))}
+          onChange={(event) => {
+            setDirty(true);
+            setFirstAction(event.target.value.slice(0, FIRST_ACTION_MAX));
+          }}
           className="mt-1 w-full min-h-11 rounded-xl border border-border bg-surface px-3 py-3 text-text"
           placeholder="One line: the first small step tomorrow"
         />

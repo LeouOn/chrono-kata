@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { JournalScreen } from '@/components/journal/JournalScreen';
+import { useJournalWrites } from '@/hooks/useJournal';
 import { JournalLink } from '@/components/journal/JournalLink';
 import { ToastProvider } from '@/components/ui/Toast';
 import { resetDbForTesting, getDb } from '@/lib/db/db';
@@ -41,6 +42,19 @@ function renderScreen(dateParam: string | null = null) {
         <JournalScreen dateParam={dateParam} />
       </ToastProvider>
     </QueryClientProvider>,
+  );
+}
+
+/** A stand-in for another surface (or tab) that writes the same day. */
+function OtherSurface({ dayKey, note }: { dayKey: string; note: string }) {
+  const { applyShutdown } = useJournalWrites();
+  return (
+    <button
+      type="button"
+      onClick={() => applyShutdown.mutate({ date: dayKey, decisions: [], shutdownNote: note })}
+    >
+      other surface
+    </button>
   );
 }
 
@@ -174,6 +188,154 @@ describe('JournalScreen', () => {
       expect(stored.displayName).toBe('Ada');
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Template saved on this device.');
+  });
+
+  it('keeps unsaved shutdown typing and choices when the journal is saved', async () => {
+    const finished = await taskRepo.create({ title: 'Fix the hose', status: 'next' });
+    await dayPlanRepo.upsert(TODAY, { picks: [finished.id], capacityMin: 180 });
+    renderScreen();
+
+    // Type into the shutdown card and press a choice, but save nothing there yet.
+    fireEvent.change(await screen.findByLabelText('Shutdown note'), {
+      target: { value: 'typed but not saved' },
+    });
+    fireEvent.change(screen.getByLabelText(/Tomorrow's first move/), {
+      target: { value: 'call the plumber' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Done: “Fix the hose”$/ }));
+
+    // Save the journal above: the day's row changes underneath the shutdown card.
+    fireEvent.change(screen.getByLabelText('What happened today'), { target: { value: 'Journal text.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save journal' }));
+    await waitFor(async () => expect((await journalRepo.findByDate(TODAY))?.journal).toBe('Journal text.'));
+
+    expect((screen.getByLabelText('Shutdown note') as HTMLTextAreaElement).value).toBe('typed but not saved');
+    expect((screen.getByLabelText(/Tomorrow's first move/) as HTMLInputElement).value).toBe('call the plumber');
+    expect(screen.getByRole('button', { name: /^Done: “Fix the hose”$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('does not overwrite unsaved shutdown typing when the row changes elsewhere', async () => {
+    const finished = await taskRepo.create({ title: 'Fix the hose', status: 'next' });
+    await dayPlanRepo.upsert(TODAY, { picks: [finished.id], capacityMin: 180 });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <JournalScreen dateParam={null} />
+          <OtherSurface dayKey={TODAY} note="from the other tab" />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.change(await screen.findByLabelText('Shutdown note'), {
+      target: { value: 'typing here, not saved' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'other surface' }));
+    await waitFor(async () => expect((await journalRepo.findByDate(TODAY))?.shutdownNote).toBe('from the other tab'));
+
+    // The person's unsaved words win while they are typing.
+    expect((screen.getByLabelText('Shutdown note') as HTMLTextAreaElement).value).toBe(
+      'typing here, not saved',
+    );
+  });
+
+  it('picks up a change made elsewhere while the card is pristine', async () => {
+    await dayPlanRepo.upsert(TODAY, { picks: [], capacityMin: 180 });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <JournalScreen dateParam={null} />
+          <OtherSurface dayKey={TODAY} note="from the other tab" />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    await screen.findByLabelText('Shutdown note');
+    fireEvent.click(screen.getByRole('button', { name: 'other surface' }));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Shutdown note') as HTMLTextAreaElement).value).toBe('from the other tab'),
+    );
+  });
+
+  it('re-seeds from the stored row after its own save', async () => {
+    const finished = await taskRepo.create({ title: 'Fix the hose', status: 'next' });
+    await dayPlanRepo.upsert(TODAY, { picks: [finished.id], capacityMin: 180 });
+    renderScreen();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Done: “Fix the hose”$/ }));
+    fireEvent.change(screen.getByLabelText('Shutdown note'), { target: { value: 'Saved note.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Close the day' }));
+    await screen.findByRole('status');
+
+    // The card now shows the stored row: the same choices and the saved note.
+    expect((screen.getByLabelText('Shutdown note') as HTMLTextAreaElement).value).toBe('Saved note.');
+    expect(screen.getByRole('button', { name: /^Done: “Fix the hose”$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeTruthy();
+  });
+
+  it('pressing a stored choice again does nothing, and switching works both ways', async () => {
+    const finished = await taskRepo.create({ title: 'Fix the hose', status: 'next' });
+    await dayPlanRepo.upsert(TODAY, { picks: [finished.id], capacityMin: 180 });
+    renderScreen();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Back on the list: “Fix the hose”$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close the day' }));
+    await screen.findByRole('status');
+    const storedAfterClose = await journalRepo.findByDate(TODAY);
+    expect(storedAfterClose?.picksBack).toEqual([finished.id]);
+
+    // Pressing the pressed choice again must not show it as off.
+    fireEvent.click(screen.getByRole('button', { name: /^Back on the list: “Fix the hose”$/ }));
+    expect(screen.getByRole('button', { name: /^Back on the list: “Fix the hose”$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    // Saving changes with no change writes nothing at all.
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(async () => {
+      const stored = await journalRepo.findByDate(TODAY);
+      expect(stored?.updatedAt.getTime()).toBe(storedAfterClose?.updatedAt.getTime());
+      expect(stored?.picksBack).toEqual([finished.id]);
+    });
+
+    // Switching to Done moves it between the lists.
+    fireEvent.click(screen.getByRole('button', { name: /^Done: “Fix the hose”$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(async () => {
+      const stored = await journalRepo.findByDate(TODAY);
+      expect(stored?.picksDone).toEqual([finished.id]);
+      expect(stored?.picksBack).toEqual([]);
+    });
+  });
+
+  it('says the day is opening instead of claiming it has no picks on first paint', async () => {
+    const finished = await taskRepo.create({ title: 'Fix the hose', status: 'next' });
+    await dayPlanRepo.upsert(TODAY, { picks: [finished.id], capacityMin: 180 });
+
+    // Hold the day read so the first paint is observable.
+    const real = journalRepo.findByDate.bind(journalRepo);
+    let release: (() => void) | null = null;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(journalRepo, 'findByDate').mockImplementation(async (day: string) => {
+      await gate;
+      return real(day);
+    });
+
+    renderScreen();
+    expect(await screen.findByText('Opening the day…')).toBeTruthy();
+    expect(screen.queryByText(/No picks for this day/)).toBeNull();
+
+    release!();
+    await waitFor(() => expect(screen.getByText('Fix the hose')).toBeTruthy());
   });
 
   it('shows each day its own entry and saves them without touching each other (multi-day)', async () => {

@@ -82,29 +82,35 @@ export function JournalScreen({ dateParam }: Props) {
       </header>
 
       {isLoading ? (
-        <p role="status" className="text-sm text-text-muted">
-          Opening the day…
-        </p>
-      ) : (
         <Card>
-          <JournalEntryCard
-            dayKey={dayKey}
-            plan={plan ?? null}
-            domains={orderedDomains}
-            savedTemplate={settings?.journalTemplate}
-          />
+          <p role="status" className="text-sm text-text-muted">
+            Opening the day…
+          </p>
         </Card>
-      )}
+      ) : (
+        <>
+          <Card>
+            <JournalEntryCard
+              dayKey={dayKey}
+              plan={plan ?? null}
+              domains={orderedDomains}
+              savedTemplate={settings?.journalTemplate}
+            />
+          </Card>
 
-      <Card>
-        <ShutdownCard
-          dayKey={dayKey}
-          plan={plan ?? null}
-          tasks={tasks}
-          domains={orderedDomains}
-          domainChecks={plan?.domainChecks ?? {}}
-        />
-      </Card>
+          <Card>
+            {/* Only after the row has loaded: before that, "no picks" would be
+                a claim about a day nothing has read yet. */}
+            <ShutdownCard
+              dayKey={dayKey}
+              plan={plan ?? null}
+              tasks={tasks}
+              domains={orderedDomains}
+              domainChecks={plan?.domainChecks ?? {}}
+            />
+          </Card>
+        </>
+      )}
 
       <Card>
         <JournalTemplateCard />
