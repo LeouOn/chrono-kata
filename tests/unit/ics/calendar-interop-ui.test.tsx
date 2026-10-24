@@ -462,7 +462,8 @@ describe('CalendarInteropSettings — the importer window reaches the reconciler
     await waitFor(() => expect(screen.getByText(/1 new ·/)).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /Save 1 block/ }));
     await waitFor(() => expect(applySpy).toHaveBeenCalledTimes(1));
-    const written = applySpy.mock.calls[0]![0] as { id: string; start: Date }[];
+    // The repository takes a readonly array, so the assertion reads it as one.
+    const written = applySpy.mock.calls[0]![0] as readonly { id: string; start: Date }[];
     const rows = await blockRepo.getAll();
     // The historic row is untouched and distinct from the new one.
     expect(rows).toHaveLength(2);
