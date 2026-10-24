@@ -9,6 +9,17 @@ import { collectAll } from '@/lib/data-transfer/export';
 import { parseEnvelope } from '@/lib/data-transfer/import';
 import { PlanningSettings } from '@/components/settings/PlanningSettings';
 
+/** Collect the toasts a component dispatches, the way ToastProvider listens. */
+function collectToasts(): { events: { message: string; variant?: string }[]; stop: () => void } {
+  const events: { message: string; variant?: string }[] = [];
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<{ message?: string; variant?: string }>).detail;
+    if (detail?.message) events.push({ message: detail.message, variant: detail.variant });
+  };
+  window.addEventListener('chrono-kata-toast', handler);
+  return { events, stop: () => window.removeEventListener('chrono-kata-toast', handler) };
+}
+
 beforeEach(async () => {
   await resetDbForTesting();
 });
@@ -108,6 +119,7 @@ describe('PlanningSettings', () => {
   it('never writes an invalid waking-hours row when the field is cleared', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     const patch = vi.spyOn(settingsRepo, 'patchWith');
+    const toasts = collectToasts();
     renderWithProviders(<PlanningSettings />);
 
     const start = await screen.findByLabelText('Awake from');
@@ -128,7 +140,24 @@ describe('PlanningSettings', () => {
     const stored = await settingsRepo.get();
     expect(stored.wakingHours).toEqual({ start: '08:00', end: '22:00' });
     expect(SettingsSchema.safeParse(stored).success).toBe(true);
+    // A field being cleared to retype it is not an error: no red toast.
+    expect(toasts.events).toEqual([]);
+    toasts.stop();
     patch.mockRestore();
+  });
+
+  it('still reports a real save failure', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const toasts = collectToasts();
+    vi.spyOn(settingsRepo, 'patchWith').mockRejectedValueOnce(new Error('storage is unavailable'));
+    renderWithProviders(<PlanningSettings />);
+
+    fireEvent.change(await screen.findByLabelText('Awake from'), { target: { value: '08:00' } });
+
+    await waitFor(() => expect(toasts.events).toHaveLength(1));
+    expect(toasts.events[0]).toEqual({ message: 'storage is unavailable', variant: 'error' });
+    expect((await settingsRepo.get()).wakingHours?.start).toBe('07:00');
+    toasts.stop();
   });
 
   it('keeps the settings row valid after every interaction', async () => {

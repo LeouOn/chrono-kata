@@ -37,6 +37,18 @@ function minutesOf(clock: string): number {
  * recurring protected windows ("anchors"). Optional fields, saved through the
  * settings repository, so backups already round-trip them.
  */
+/**
+ * The waking-hours inputs fire with '' every time somebody clears one to retype
+ * it. That is an incomplete edit, not a failure: it must abort the write quietly
+ * (no red toast), unlike a real storage error.
+ */
+export class IncompleteWakingHours extends Error {
+  constructor() {
+    super('Waking hours need a valid start and end time.');
+    this.name = 'IncompleteWakingHours';
+  }
+}
+
 export function PlanningSettings() {
   const enabled = useFlag('taskInbox');
   const { settings, updateSettings, updateSettingsWith } = useSettings();
@@ -66,10 +78,13 @@ export function PlanningSettings() {
       await updateSettingsWith((current) => {
         const next = { ...resolveWakingHours(current), ...change };
         const parsed = WakingHoursSchema.safeParse(next);
-        if (!parsed.success) throw new Error('Waking hours need a valid start and end time.');
+        if (!parsed.success) throw new IncompleteWakingHours();
         return { wakingHours: parsed.data };
       });
     } catch (error) {
+      // A cleared field is an edit in progress: the transaction aborted, so
+      // nothing was written, and the user does not need an error for it.
+      if (error instanceof IncompleteWakingHours) return;
       dispatchToast(error instanceof Error ? error.message : 'Could not save waking hours', 'error');
     }
   }
