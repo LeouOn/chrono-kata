@@ -306,7 +306,7 @@ a first version can rank on due date + energy only, and say so.
 **Status:** partial — parts 1–2 shipped: the pure layout core (snap/move/resize,
 deterministic proposal, replan-from-now, conflict detection, invariants over 7 zones) and the
 `/timeline` day view with fixed-commitment CRUD, apply-proposal and Today Now/Next. Drag/resize,
-conflict and replan UI remain (PR 3, which must also lane overlapping blocks so the covered one is tappable) · **Size:** L · **Lanes:** B · **Depends on:** W1 (Block),
+drag/resize, lane rendering, conflict and replan UI shipped in PR 3; week view deferred · **Size:** L · **Lanes:** B · **Depends on:** W1 (Block),
 W6 (picks)
 
 **Evidence**

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui/Toast';
 import { resetDbForTesting, getDb } from '@/lib/db/db';
 
-const now = Date.now();
+let now = Date.now();
 const proposed = [
   { taskId: '11111111-1111-4111-8111-111111111111', start: now + 3_600_000, end: now + 5_400_000 },
   { taskId: '22222222-2222-4222-8222-222222222222', start: now + 7_200_000, end: now + 9_000_000 },
@@ -22,8 +22,10 @@ vi.mock('@/hooks/useTimeline', async (importOriginal) => ({
     blocks: [],
     fixedBlocks: [],
     focusBlocks: [],
+    focusInWindow: [],
     anchors: [],
-    proposal: { blocks: proposed, unplaced: [] },
+    proposal: { blocks: proposed, unplaced: [], replanned: false, overflow: [], keptCount: 0 },
+    pickIds: [],
   }),
 }));
 vi.mock('@/hooks/useSettings', () => ({ useSettings: () => ({ settings: null }) }));
@@ -42,6 +44,33 @@ beforeEach(async () => {
 afterEach(cleanup);
 
 describe('applying a proposal', () => {
+  it('passes the preview now to the commit so the right blocks count as started', async () => {
+    const { blockRepo } = await import('@/lib/db/block.repo');
+    const realNow = Date.now();
+    now = realNow + 60 * 60_000;
+    const startedByPreview = await blockRepo.create({
+      start: new Date(realNow + 30 * 60_000),
+      end: new Date(realNow + 60 * 60_000),
+      kind: 'focus',
+      title: 'Focus',
+      taskId: proposed[0]!.taskId,
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <TimelineScreen />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /propose a layout/i }));
+    fireEvent.click(screen.getByRole('button', { name: /apply this layout/i }));
+    await waitFor(async () => {
+      expect(await blockRepo.getById(startedByPreview.id)).toBeTruthy();
+    });
+    now = realNow;
+  });
+
   it('writes the proposal once even when Apply is clicked twice in one act', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(

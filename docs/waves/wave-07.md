@@ -138,7 +138,55 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   dependency-free; PR 3 adds pointer drag/resize on the same geometry and a
   keyboard/tap path for every move.
 
+## Shipped (part 3 — lanes, editing, conflicts, replan)
+
+- **Overlapping blocks sit in side-by-side lanes** (`assignLanes` interval
+  colouring; 4000-case oracle-style unit coverage plus tie-break by id). Both
+  blocks stay visible and tappable: a render test asserts different offsets and
+  taps both, and a `hasTouch` 390×844 E2E taps the lower block that used to be
+  covered.
+- **Pointer drag and resize**: one Pointer Events path for mouse and touch.
+  Body drag moves, top/bottom handles resize through `moveBlock`/`resizeBlock`
+  only (nearest snap, grid edges, duration kept); release commits, **Escape
+  cancels a live drag** (window keydown listener while dragging), and
+  `pointercancel` clears the drag so a touch scroll never leaves a stale one.
+  The visual bars are slim; each handle's hit area grows inward at most a third
+  of the block, so a 30-minute block keeps an 11px movable middle, and grows
+  outward only on a full-lane edge with no neighbour. In a normal day an edge
+  touching a neighbouring block therefore has an **11px** target; only an
+  isolated edge reaches 33px (22 outward + 11 inward). A full 44px target is a
+  follow-up (selected-block handles); on a phone the edit sheet and Alt+arrows
+  are the precise path. Blocks render at their true height (one shared
+  rendered-height helper, 15-minute blocks included).
+  A 5/15 snap toggle drives proposal, drag and keyboard; keyboard Alt+Up/Down
+  moves and Shift+Alt+Up/Down changes the end. The tap-to-edit sheet remains a
+  complete alternative, and the first Enter after a pointer interaction is not
+  swallowed.
+- **Conflicts** name the actual shared interval ("These blocks share
+  10:00–11:00"), outline the blocks involved, and say "move it, shorten it, or
+  leave it as it is"; nothing is auto-moved.
+- **Replan from now** uses `replanFromNow` only when focus blocks overlap
+  TODAY's waking window (a tomorrow-only block does not relabel the button).
+  A confirmed DayPlan is what gets laid out, in its order, filtered to open
+  tasks; suggestions are used only when no plan exists. Overflow is previewed
+  ("will go back" with a plan, "did not fit today" without) and applied by
+  `commitLayout` in ONE transaction: focus blocks replaced (started and
+  non-focus blocks preserved), only overflow ids removed from an existing plan
+  (never creating one, never touching task status), with a calm confirmation
+  afterwards; the notice clears on the next sheet/drag. Mutants killed include: suggestions instead of plan, commit
+  fabricating a plan, Escape disabled, small handle, union-span conflict text,
+  proposal ignoring the snap step, lanes tie-break, and the earlier lane/
+  keyboard/commit/conflict set.
+
 ## Known gaps
+
+- Moving a block by touch is not a drag: the body keeps `touch-action: pan-y`
+  so a vertical swipe scrolls the page; on a phone you move via the sheet or
+  keyboard, and resize by the handles (the tested touch path). Long-press to
+  drag is a follow-up.
+- Holding an arrow key repeats at the keyboard rate and each repeat writes;
+  there is no write throttling.
+- Week view is deferred.
 
 - The step is **5 or 15 minutes**: the grid is anchored at the Unix epoch, which
   equals the local clock grid for those steps in every real zone, but not for
@@ -148,15 +196,6 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   (v1 behaviour).
 - The 5-minute gap is enforced between proposed blocks and after kept blocks,
   not next to fixed commitments or anchors. By design.
-- **Propose after the morning blocks have happened lays the same picks
-  again** later in the day (3 morning + 3 afternoon blocks for 3 tasks). PR 3's
-  Replan button must call `replanFromNow`, and plain Propose should use the same
-  rule when focus blocks already exist.
-- **Overlapping blocks are drawn on top of each other** (all full-width), so
-  the covered block cannot be tapped. PR 2 lets a commitment be added over a
-  focus block, so this is reachable today. **PR 3 must lay overlaps out in
-  side-by-side lanes (interval-graph colouring in `layout.ts`, unit-tested) and
-  add the conflict UI.**
 
 ## Not in this part
 

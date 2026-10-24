@@ -377,3 +377,69 @@ export function detectConflicts(blocks: readonly Interval[], window: LayoutWindo
   }
   return conflicts;
 }
+
+export interface LaneAssignment {
+  /** Zero-based lane; lane 0 is the left-most column. */
+  lane: number;
+  laneCount: number;
+}
+
+/**
+ * Side-by-side lanes for overlapping blocks (roadmap W7 PR 3). Plain interval
+ * graph colouring: sort by start (then end), give each interval the first lane
+ * whose last block ends before it starts, and record the cluster size so equal
+ * lanes can share the width. Overlapping blocks are today stacked on top of
+ * each other, which makes the covered one untappable — this is the geometry
+ * the timeline needs to draw them next to each other.
+ *
+ * Input order does not affect the result: lanes are assigned by time, with
+ * duration/id as tie-breakers.
+ */
+export function assignLanes<T extends Interval>(intervals: readonly T[]): (T & LaneAssignment)[] {
+  const ordered = [...intervals]
+    .map((interval, index) => ({ interval, index }))
+    .sort((a, b) => {
+      const byStart = a.interval.start - b.interval.start;
+      if (byStart !== 0) return byStart;
+      const byEnd = a.interval.end - b.interval.end;
+      if (byEnd !== 0) return byEnd;
+      const aKey = (a.interval as { id?: unknown }).id;
+      const bKey = (b.interval as { id?: unknown }).id;
+      if (typeof aKey === 'string' && typeof bKey === 'string' && aKey !== bKey) {
+        return aKey.localeCompare(bKey);
+      }
+      return a.index - b.index;
+    });
+
+  const laneEnds: number[] = [];
+  const placed: { value: T; lane: number; endsAt: number }[] = [];
+  for (const { interval } of ordered) {
+    let lane = laneEnds.findIndex((end) => end <= interval.start);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(interval.end);
+    } else {
+      laneEnds[lane] = interval.end;
+    }
+    placed.push({ value: interval, lane, endsAt: interval.end });
+  }
+
+  // Lane count is the size of the overlapping cluster each block belongs to.
+  const clusters: { start: number; end: number; count: number; lanes: Set<number> }[] = [];
+  for (const item of [...placed].sort((a, b) => a.value.start - b.value.start)) {
+    let cluster = clusters[clusters.length - 1];
+    if (!cluster || item.value.start >= cluster.end) {
+      cluster = { start: item.value.start, end: item.value.end, count: 0, lanes: new Set() };
+      clusters.push(cluster);
+    } else {
+      cluster.end = Math.max(cluster.end, item.value.end);
+    }
+    cluster.lanes.add(item.lane);
+    cluster.count = cluster.lanes.size;
+  }
+
+  return placed.map((item) => {
+    const cluster = clusters.find((entry) => item.value.start < entry.end && item.value.end > entry.start)!;
+    return { ...item.value, lane: item.lane, laneCount: cluster.count };
+  });
+}

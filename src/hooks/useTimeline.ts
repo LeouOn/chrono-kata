@@ -5,13 +5,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { blockRepo } from '@/lib/db/block.repo';
 import { useFlag } from '@/hooks/useFlags';
 import { usePlanToday } from '@/hooks/usePlanning';
+import { useTasks } from '@/hooks/useTasks';
 import { resolveAnchors, resolveWakingHours } from '@/lib/planning/resolve';
 import { anchorsWithinWindow } from '@/lib/planning/anchors';
 import type { AnchorInterval as DatedAnchor } from '@/lib/planning/anchors';
 import { localDayStart, wakingWindow, localWallClockToEpoch } from '@/lib/planning/time';
 import { toLocalDateString } from '@/lib/utils/date';
 import { addDays } from '@/lib/pacing/days';
-import { proposeLayout, type Interval, type ProposedBlock } from '@/lib/planning/layout';
+import { proposeLayout, replanFromNow, type Interval, type ProposedBlock } from '@/lib/planning/layout';
+import { useNow } from '@/hooks/useNow';
+import { commitLayout } from '@/lib/planning/commit';
+import { layoutPickIds } from '@/lib/planning/layout-picks';
 import type { Block, BlockInput } from '@/lib/schemas/block';
 import type { Settings, WakingHours } from '@/lib/schemas/settings';
 
@@ -26,7 +30,18 @@ export interface TimelineView {
   fixedBlocks: Block[];
   focusBlocks: Block[];
   anchors: DatedAnchor[];
-  proposal: { blocks: ProposedBlock[]; unplaced: { id: string; estimateMin?: number | null }[] } | null;
+  hasPlan: boolean;
+  focusInWindow: Block[];
+  proposal: {
+    blocks: ProposedBlock[];
+    unplaced: { id: string; estimateMin?: number | null }[];
+    /** Replan re-lays only picks whose block had not started. */
+    replanned: boolean;
+    /** Task ids that did not fit and go back to the list. */
+    overflow: string[];
+    keptCount: number;
+  } | null;
+  pickIds: string[];
 }
 
 /** Blocks that overlap a day's waking window (any kind). Flag-gated. */
@@ -53,7 +68,7 @@ export function outsideWindowBlocks(blocks: readonly Block[], dayKey: string, wi
 }
 
 /** Everything the timeline renders for one day. */
-export function useTimeline(dayKey: string, settings: Settings | null | undefined): TimelineView {
+export function useTimeline(dayKey: string, settings: Settings | null | undefined, stepMin = TIMELINE_STEP_MIN): TimelineView {
   const enabled = useFlag('taskInbox');
   const wakingHours = useMemo(() => resolveWakingHours(settings), [settings]);
   const anchorDefs = useMemo(() => resolveAnchors(settings), [settings]);
@@ -61,28 +76,77 @@ export function useTimeline(dayKey: string, settings: Settings | null | undefine
   const anchors = useMemo(() => anchorsWithinWindow(anchorDefs, dayKey, window), [anchorDefs, dayKey, window]);
   const blocksQuery = useDayBlocks(dayKey);
   const plan = usePlanToday(dayKey);
+  const tasksQuery = useTasks({ enabled });
+  const now = useNow();
 
   const blocks = blocksQuery.data ?? [];
   const fixedBlocks = blocks.filter((block) => block.kind === 'fixed');
   const focusBlocks = blocks.filter((block) => block.kind === 'focus');
+  const focusInWindow = focusBlocks.filter(
+    (block) => block.start.getTime() < window.end && block.end.getTime() > window.start,
+  );
 
+  const taskById = useMemo(() => new Map((tasksQuery.data ?? []).map((task) => [task.id, task] as const)), [tasksQuery.data]);
+  const statusById = useMemo(
+    () => new Map((tasksQuery.data ?? []).map((task) => [task.id, task.status] as const)),
+    [tasksQuery.data],
+  );
+  const pickIds = useMemo(
+    () =>
+      layoutPickIds({
+        dayPlanPicks: plan.dayPlan?.picks ?? null,
+        suggestedIds: plan.picks.map((pick) => pick.task.id),
+        statusById,
+      }),
+    [plan.dayPlan, plan.picks, statusById],
+  );
   const proposal = useMemo(() => {
     if (!enabled || !plan.enabled) return null;
-    return proposeLayout({
-      picks: plan.picks.map((pick) => ({
-        id: pick.task.id,
-        estimateMin: pick.task.estimateMin ?? null,
-        energy: pick.task.energy ?? null,
-        domainId: pick.task.domainId ?? null,
-        createdAt: pick.task.createdAt,
+    const layoutTasks = pickIds
+      .map((id) => taskById.get(id))
+      .filter((task): task is NonNullable<typeof task> => task !== undefined);
+    const base = {
+      picks: layoutTasks.map((task) => ({
+        id: task.id,
+        estimateMin: task.estimateMin ?? null,
+        energy: task.energy ?? null,
+        domainId: task.domainId ?? null,
+        createdAt: task.createdAt,
       })),
       window,
       fixedBlocks: fixedBlocks.map((block) => ({ start: block.start.getTime(), end: block.end.getTime() })),
       anchors: anchors.map((anchor) => ({ start: anchor.start.getTime(), end: anchor.end.getTime(), domainId: anchor.domainId })),
-      now: Date.now(),
-      stepMin: TIMELINE_STEP_MIN,
-    });
-  }, [enabled, plan.enabled, plan.picks, window, fixedBlocks, anchors]);
+      now,
+      stepMin,
+    };
+    // With focus blocks already on the agenda, "propose" means replan from now:
+    // picks whose block started stay put, so the same work is never re-laid.
+    if (focusInWindow.length > 0) {
+      const result = replanFromNow({
+        ...base,
+        existingFocusBlocks: focusInWindow.map((block) => ({
+          start: block.start.getTime(),
+          end: block.end.getTime(),
+          taskId: block.taskId ?? null,
+        })),
+      });
+      return {
+        blocks: result.relaid,
+        unplaced: result.overflow.map((pick) => ({ id: pick.id, estimateMin: pick.estimateMin ?? null })),
+        replanned: true,
+        overflow: result.overflow.map((pick) => pick.id),
+        keptCount: result.kept.length,
+      };
+    }
+    const result = proposeLayout(base);
+    return {
+      blocks: result.blocks,
+      unplaced: result.unplaced.map((pick) => ({ id: pick.id, estimateMin: pick.estimateMin ?? null })),
+      replanned: false,
+      overflow: [],
+      keptCount: 0,
+    };
+  }, [enabled, plan.enabled, pickIds, taskById, window, fixedBlocks, anchors, focusInWindow, now, stepMin]);
 
   return {
     enabled,
@@ -92,8 +156,11 @@ export function useTimeline(dayKey: string, settings: Settings | null | undefine
     blocks,
     fixedBlocks,
     focusBlocks,
+    focusInWindow,
     anchors,
-    proposal: proposal ? { blocks: proposal.blocks, unplaced: proposal.unplaced } : null,
+    hasPlan: Boolean(plan.dayPlan),
+    proposal,
+    pickIds,
   };
 }
 
@@ -131,9 +198,19 @@ export function useFixedBlockMutations(dayKey: string) {
 export function useApplyLayout(dayKey: string, wakingHours: WakingHours) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ blocks }: { blocks: ProposedBlock[] }) => {
+    mutationFn: async (input: {
+      blocks: ProposedBlock[];
+      overflowTaskIds?: string[];
+      now?: number;
+    }) => {
       const window = wakingWindow(dayKey, wakingHours);
-      await blockRepo.replaceFutureFocus({ start: new Date(window.start), end: new Date(window.end) }, new Date(), blocks);
+      await commitLayout({
+        dayKey,
+        window,
+        now: input.now ?? Date.now(),
+        blocks: input.blocks,
+        overflowTaskIds: input.overflowTaskIds,
+      });
     },
     onSuccess: () => {
       invalidate(qc, dayKey);
