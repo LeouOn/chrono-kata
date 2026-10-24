@@ -71,12 +71,38 @@
   --color-accent-hover: #8db97a;
 }
 :root[data-accent="magenta"] {
-  --color-accent: #d94977;
-  --color-accent-hover: #e85d8a;
+  /* #d94977 fell to 4.36:1 on the dark card surface; one shade lighter clears
+     AA as text while keeping the hue. */
+  --color-accent: #e05a86;
+  --color-accent-hover: #e8709a;
 }
 :root[data-accent="cyan"] {
   --color-accent: #4ba3c7;
   --color-accent-hover: #5fb5d8;
+}
+
+/* ============================================================
+   LIGHT-THEME ACCENT OVERRIDES
+   The bright accents are tuned for a dark surface. On the light base they fall
+   to 1.9:1 as text and as the text behind a button, so the light theme uses a
+   darker variant of the same hue: it keeps the meaning (still amber, sage,
+   magenta, cyan) and clears AA 4.5:1 both as text and behind the button text.
+   ============================================================ */
+:root[data-theme="light"][data-accent="amber"] {
+  --color-accent: #9a5a00;
+  --color-accent-hover: #a86100;
+}
+:root[data-theme="light"][data-accent="sage"] {
+  --color-accent: #456d34;
+  --color-accent-hover: #4f7a3c;
+}
+:root[data-theme="light"][data-accent="magenta"] {
+  --color-accent: #a8264e;
+  --color-accent-hover: #b02a52;
+}
+:root[data-theme="light"][data-accent="cyan"] {
+  --color-accent: #1f6f8f;
+  --color-accent-hover: #247a9c;
 }
 
 /* Personality colors stay constant across themes */
@@ -108,6 +134,25 @@
     --color-text: #f5f0e8;
     --color-text-muted: #a89e94;
     --color-border: #2d2925;
+  }
+}
+
+/* ============================================================
+   REDUCED MOTION (roadmap Wave 19)
+   The person asked the system for less motion: no CSS animation, no
+   transitions, no smooth scrolling. motion/react is covered separately by
+   MotionConfig reducedMotion="user" in the layout.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
   }
 }
 

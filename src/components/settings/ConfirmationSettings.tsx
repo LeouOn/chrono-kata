@@ -43,7 +43,7 @@ export function ConfirmationSettings() {
         {rows.map(({ label, checked, onChange }) => (
           <label
             key={label}
-            className="flex items-center justify-between cursor-pointer"
+            className="flex min-h-11 items-center justify-between cursor-pointer"
           >
             <span className="text-sm text-text">{label}</span>
             <input

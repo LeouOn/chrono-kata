@@ -68,21 +68,21 @@ export function ProviderList({
                 {isConfigured && !isActive && (
                   <button
                     onClick={() => onSelect(name)}
-                    className="text-xs text-accent px-3 py-1.5 rounded-full hover:bg-surface-2"
+                    className="min-h-11 text-xs text-accent px-3 py-1.5 rounded-full hover:bg-surface-2"
                   >
                     Set active
                   </button>
                 )}
                 <button
                   onClick={() => onConfigure(name)}
-                  className="text-xs text-text-muted px-3 py-1.5 rounded-full hover:bg-surface-2"
+                  className="min-h-11 text-xs text-text-muted px-3 py-1.5 rounded-full hover:bg-surface-2"
                 >
                   {isConfigured ? 'Edit' : 'Add'}
                 </button>
                 {isConfigured && (
                   <button
                     onClick={() => onRemove(name)}
-                    className="text-xs text-hype px-2 py-1.5 rounded-full hover:bg-surface-2"
+                    className="min-h-11 text-xs text-hype px-2 py-1.5 rounded-full hover:bg-surface-2"
                   >
                     Remove
                   </button>

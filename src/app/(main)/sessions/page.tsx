@@ -27,7 +27,7 @@ export default function SessionsPage() {
         <h1 className="font-serif text-2xl">Sessions</h1>
         <button
           onClick={() => setFormOpen(true)}
-          className="bg-accent text-base px-4 py-2 rounded-full text-sm font-medium"
+          className="min-h-11 bg-accent text-base px-4 py-2 rounded-full text-sm font-medium"
         >
           + New
         </button>

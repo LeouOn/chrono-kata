@@ -97,6 +97,7 @@ export function YearlyConsistencyHeatmap({ sessions }: Props) {
                     type="button"
                     onClick={() => setHoveredDay(day)}
                     onMouseEnter={() => setHoveredDay(day)}
+                    data-a11y-exempt="dense-grid"
                     className={`w-full aspect-square rounded-[3px] transition-all hover:scale-125 hover:z-10 ${
                       INTENSITY_COLORS[day.intensity]
                     }`}

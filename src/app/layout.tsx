@@ -5,6 +5,7 @@ import { ToastProvider } from '@/components/ui/Toast';
 import { THEME_INLINE_SCRIPT } from '@/components/system/ThemeScript';
 import { ThemeApplier } from '@/components/system/ThemeApplier';
 import { PlatformRuntime } from '@/components/system/PlatformRuntime';
+import { MotionProvider } from '@/components/system/MotionProvider';
 
 export const metadata: Metadata = {
   title: 'chrono-kata',
@@ -36,11 +37,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <QueryProvider>
+          <MotionProvider>
           <ToastProvider>
             <ThemeApplier />
             <PlatformRuntime />
-            {children}
+            {/* One <main> landmark for the whole app: the screens render their
+                own sections inside it, so a page never has zero or two. */}
+            <main>{children}</main>
           </ToastProvider>
+          </MotionProvider>
         </QueryProvider>
       </body>
     </html>

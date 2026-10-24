@@ -198,19 +198,19 @@ export function HabitSettings() {
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
-              <button type="button" onClick={() => void handleMove(idx, 'up')} disabled={idx === 0} className="p-1 text-text-muted hover:text-text disabled:opacity-20" title="Move up">
+              <button type="button" onClick={() => void handleMove(idx, 'up')} disabled={idx === 0} className="min-h-11 min-w-11 p-1 text-text-muted hover:text-text disabled:opacity-20" title="Move up">
                 <ArrowUp size={14} />
               </button>
-              <button type="button" onClick={() => void handleMove(idx, 'down')} disabled={idx === active.length - 1} className="p-1 text-text-muted hover:text-text disabled:opacity-20" title="Move down">
+              <button type="button" onClick={() => void handleMove(idx, 'down')} disabled={idx === active.length - 1} className="min-h-11 min-w-11 p-1 text-text-muted hover:text-text disabled:opacity-20" title="Move down">
                 <ArrowDown size={14} />
               </button>
-              <button type="button" onClick={() => openEdit(h)} className="p-1 text-text-muted hover:text-text" title="Edit habit">
+              <button type="button" onClick={() => openEdit(h)} className="min-h-11 min-w-11 p-1 text-text-muted hover:text-text" title="Edit habit">
                 <Edit2 size={14} />
               </button>
-              <button type="button" onClick={() => void setHabitArchived({ id: h.id, archived: true })} className="p-1 text-text-muted hover:text-accent" title="Archive habit (keeps history)">
+              <button type="button" onClick={() => void setHabitArchived({ id: h.id, archived: true })} className="min-h-11 min-w-11 p-1 text-text-muted hover:text-accent" title="Archive habit (keeps history)">
                 <Archive size={14} />
               </button>
-              <button type="button" onClick={() => setDeleteTarget(h)} className="p-1 text-text-muted hover:text-hype" title="Delete habit">
+              <button type="button" onClick={() => setDeleteTarget(h)} className="min-h-11 min-w-11 p-1 text-text-muted hover:text-hype" title="Delete habit">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -229,10 +229,10 @@ export function HabitSettings() {
                   <div className="text-sm text-text truncate">{h.name}</div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button type="button" onClick={() => void setHabitArchived({ id: h.id, archived: false })} className="p-1 text-text-muted hover:text-text" title="Restore habit">
+                  <button type="button" onClick={() => void setHabitArchived({ id: h.id, archived: false })} className="min-h-11 min-w-11 p-1 text-text-muted hover:text-text" title="Restore habit">
                     <ArchiveRestore size={14} />
                   </button>
-                  <button type="button" onClick={() => setDeleteTarget(h)} className="p-1 text-text-muted hover:text-hype" title="Delete habit">
+                  <button type="button" onClick={() => setDeleteTarget(h)} className="min-h-11 min-w-11 p-1 text-text-muted hover:text-hype" title="Delete habit">
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -369,7 +369,7 @@ export function HabitSettings() {
                       onClick={() =>
                         setWeekdays((prev) => (on ? prev.filter((x) => x !== d.id) : [...prev, d.id]))
                       }
-                      className={`py-2 rounded-xl font-semibold transition-colors ${
+                      className={`min-h-11 min-w-11 py-2 rounded-xl font-semibold transition-colors ${
                         on ? 'bg-accent text-base' : 'bg-surface-2 text-text-muted'
                       }`}
                     >

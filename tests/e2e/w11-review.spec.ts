@@ -336,7 +336,8 @@ test('finishing writes the review, its intentions and the snapshot, and clears t
 
   // A saved review does not leave a "resume" affordance behind.
   await page.goto('/');
-  await expect(page.getByRole('link', { name: 'Start your weekly review' })).toBeVisible();
+  // The link is named by its visible text (label-in-name), not by an aria-label.
+  await expect(page.getByRole('link', { name: /^weekly review/i })).toBeVisible();
 });
 
 test('the optional summary shows exactly what would leave the device and sends nothing by itself', async ({

@@ -34,7 +34,13 @@ export function RatingTrends({ sessions }: Props) {
       {points.length === 0 ? (
         <p className="text-text-muted text-sm py-8 text-center">No rated sessions in the last 30 days.</p>
       ) : (
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="xMidYMid meet">
+        <svg
+        role="img"
+        aria-label="Rating trend over the selected period"
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full"
+        preserveAspectRatio="xMidYMid meet"
+      >
           {/* Grid lines for ratings 1, 3, 5 */}
           {[1, 3, 5].map((r) => {
             const y = padding + (1 - (r - 1) / 4) * chartHeight;

@@ -56,7 +56,7 @@ actually exists.
 | W16 | Notifications and nudges | partial | M | C | 5 reminder kinds, quiet hours, snooze |
 | W17 | Android-native polish | partial | M | C/D | widget, ongoing notification, share sheet |
 | W18 | Backup, export, optional sync | partial (part 1 of 4) | M | A/C | import preview + merge/replace UI, encrypted backup, rotation, sync decision |
-| W19 | UX, accessibility, performance | partial | M | B | palette, a11y gaps, perf budget |
+| W19 | UX, accessibility, performance | partial (part 1 of 5) | M | B | palette, high contrast, perf budget, first-run |
 | W20 | Hardening and release | partial | L | D | loop e2e, error boundary, integrity checker |
 
 ---
@@ -698,7 +698,8 @@ migrate on import. Decide whether the round trip is identity or "migrated identi
 
 ## W19 — UX, accessibility, performance
 
-**Status:** partial · **Size:** M · **Lanes:** B · **Depends on:** W1 (data volume for perf)
+**Status:** partial (part 1 shipped 2026-10-24: the in-house a11y sweep and the fixes it found) ·
+**Size:** M · **Lanes:** B · **Depends on:** W1 (data volume for perf)
 
 **Evidence**
 - Exists: theming — `settings.theme` (`system|light|dark`), `accentColor`, `ratingStyle`
@@ -708,6 +709,10 @@ migrate on import. Decide whether the round trip is identity or "migrated identi
   scroll lock, `aria-hidden` and focus restore; `ConfirmDialog.tsx`, `Toast.tsx` exist.
 - Exists: onboarding — `src/app/onboarding/page.tsx` + `src/components/onboarding/PersonalityPicker.tsx`
   (personality only), PWA install prompt, FAB, tab bar, confirmation settings.
+- Shipped (part 1): `tests/e2e/w19-a11y-sweep.spec.ts` — names/label-in-name, 44px targets, landmarks,
+  heading order, icon names, visible focus, reduced motion and theme-token contrast in the browser;
+  plus the fixes it found (`<main>`, the Home links' naming, chart SVG labels, target sizes across
+  settings/insights/LLM/sessions, light-theme accent variants, reduced-motion CSS + MotionConfig).
 - Missing: command palette — `grep -rInE "palette|Ctrl\+K|metaKey && .*'k'" src tests` → **0 hits**.
 - Missing: keyboard-shortcut cheat sheet, high-contrast mode.
 - Missing: reduced-motion support — `grep -rIn "prefers-reduced-motion|useReducedMotion" src` → **0 hits**,

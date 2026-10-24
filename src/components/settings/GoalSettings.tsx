@@ -75,7 +75,7 @@ export function GoalSettings() {
                 key={mins}
                 type="button"
                 onClick={() => void updateSettings({ dailyGoalMinutes: mins })}
-                className={`py-1.5 rounded-xl font-medium transition-colors ${
+                className={`min-h-11 min-w-11 py-1.5 rounded-xl font-medium transition-colors ${
                   dailyGoal === mins
                     ? 'bg-accent text-base'
                     : 'bg-surface-2 text-text-muted hover:text-text'
@@ -99,7 +99,7 @@ export function GoalSettings() {
                 key={days}
                 type="button"
                 onClick={() => void updateSettings({ weeklyGoalDays: days })}
-                className={`py-1 rounded-xl font-medium transition-colors ${
+                className={`min-h-11 min-w-11 py-1 rounded-xl font-medium transition-colors ${
                   weeklyGoal === days
                     ? 'bg-accent text-base'
                     : 'bg-surface-2 text-text-muted hover:text-text'
@@ -130,7 +130,7 @@ export function GoalSettings() {
                   key={d.id}
                   type="button"
                   onClick={() => toggleRestDay(d.id)}
-                  className={`py-2 rounded-xl font-semibold transition-all ${
+                  className={`min-h-11 min-w-11 py-2 rounded-xl font-semibold transition-all ${
                     active
                       ? 'bg-accent text-base scale-105 shadow-sm'
                       : 'bg-surface-2 text-text-muted hover:text-text'
@@ -146,7 +146,7 @@ export function GoalSettings() {
 
         {/* Recovery Mode */}
         <div>
-          <label className="flex items-center justify-between cursor-pointer mb-1">
+          <label className="flex min-h-11 items-center justify-between cursor-pointer mb-1">
             <span className="text-text font-medium">Recovery Mode</span>
             <input
               type="checkbox"
@@ -170,7 +170,7 @@ export function GoalSettings() {
                     key={t}
                     type="button"
                     onClick={() => updateRecovery({ lowEnergyRestThreshold: t })}
-                    className={`py-1.5 rounded-xl font-medium transition-colors ${
+                    className={`min-h-11 min-w-11 py-1.5 rounded-xl font-medium transition-colors ${
                       lowEnergyThreshold === t
                         ? 'bg-accent text-base'
                         : 'bg-surface-2 text-text-muted hover:text-text'
