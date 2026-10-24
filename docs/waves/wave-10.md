@@ -51,6 +51,17 @@ Not built, on purpose: no setting for the three days or for turning the offer of
 (the preview flag is the off switch), no notification, and no offer for paused,
 finished or let-go projects.
 
+## Known property of the W9 launcher (found in W10 part 3, not fixed)
+
+The session form's "Working on" picker lists only **active** projects, but the form keeps the
+`projectId` it was opened with in its state (from `initialLink`). For a project that is not active
+the select therefore shows "No link" while the state is still linked, so the person sees a plain
+practice session that is in fact linked. W10 works around it (the ten-minute button exists for
+active projects only, and the paused page says where "Make active again" is), and the tests drive
+the real form to pin the select's value (`tests/unit/projects/minimum-session-link.test.tsx`).
+It is a follow-up for whoever next touches `SessionLauncher` / `SessionForm`: either list the linked
+project in the picker whatever its status, or drop the link from state when the picker cannot show it.
+
 ## Part 2: the project list and the project page (behind `taskInbox`, default OFF)
 
 Two static routes (the Android build is a static export, so no dynamic segments):

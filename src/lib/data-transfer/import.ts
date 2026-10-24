@@ -1,6 +1,5 @@
-import { type ZodType } from 'zod';
+import { z, type ZodType } from 'zod';
 import { getDb } from '@/lib/db/db';
-import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { SessionSchema, type Session } from '@/lib/schemas/session';
 import { ReflectionSchema, type Reflection } from '@/lib/schemas/reflection';
 import { StreakSchema, type Streak } from '@/lib/schemas/streak';
@@ -19,7 +18,7 @@ import { DayPlanSchema, type DayPlan } from '@/lib/schemas/day-plan';
 import { EstimateSchema, type Estimate } from '@/lib/schemas/estimate';
 import { ReviewSchema, ReviewDraftSchema, type Review, type ReviewDraft } from '@/lib/schemas/review';
 import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
-import type { ExportEnvelope, ExportEnvelopeV2 } from './types';
+import { LeftOutItemSchema, type ExportEnvelope, type ExportEnvelopeV2, type LeftOutItem } from './types';
 import { migrateEnvelope } from './migrate';
 
 export type ParseResult =
@@ -50,6 +49,14 @@ function reviveDate(value: unknown): Date | null {
 function reviveNullableDate(value: unknown): Date | null | undefined {
   if (value == null) return value === null ? null : undefined;
   return reviveDate(value);
+}
+
+/**
+ * `{ [key]: Date | null }` for a date field the row has, `{}` for one it does not: a field that was
+ * absent stays absent and `null` stays `null`, so a restored row is the row that was backed up.
+ */
+function presentDate(row: Record<string, unknown>, key: string): Record<string, Date | null> {
+  return row[key] === undefined ? {} : { [key]: reviveDate(row[key]) };
 }
 
 function hasValidDates(row: Record<string, unknown>, fields: string[]): boolean {
@@ -151,7 +158,7 @@ const DOMAIN_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const PROJECT_DATE_FIELDS = ['lastTouchedAt', 'createdAt', 'updatedAt', 'breadcrumbAt'];
 const TASK_DATE_FIELDS = ['dueAt', 'deferUntil', 'createdAt', 'touchedAt', 'doneAt'];
 const BLOCK_DATE_FIELDS = ['start', 'end', 'createdAt', 'updatedAt'];
-const DAY_PLAN_DATE_FIELDS = ['createdAt', 'updatedAt'];
+const DAY_PLAN_DATE_FIELDS = ['shutdownAt', 'createdAt', 'updatedAt'];
 const ESTIMATE_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const REVIEW_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const REVIEW_DRAFT_DATE_FIELDS = ['updatedAt'];
@@ -187,7 +194,7 @@ export function parseEnvelope(json: string): ParseResult {
             ? {
                 ...row,
                 startedAt: reviveDate(row.startedAt),
-                endedAt: reviveNullableDate(row.endedAt) ?? null,
+                ...presentDate(row, 'endedAt'),
                 createdAt: reviveDate(row.createdAt),
                 updatedAt: reviveDate(row.updatedAt),
               }
@@ -270,7 +277,7 @@ export function parseEnvelope(json: string): ParseResult {
           hasValidDates(row, HABIT_DATE_FIELDS)
             ? {
                 ...row,
-                archivedAt: reviveNullableDate(row.archivedAt) ?? null,
+                ...presentDate(row, 'archivedAt'),
                 createdAt: reviveDate(row.createdAt),
                 updatedAt: reviveDate(row.updatedAt),
               }
@@ -381,7 +388,7 @@ export function parseEnvelope(json: string): ParseResult {
         DayPlanSchema,
         (row) =>
           hasValidDates(row, DAY_PLAN_DATE_FIELDS)
-            ? { ...row, createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
+            ? { ...row, ...presentDate(row, 'shutdownAt'), createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
             : null
       ),
       (d) => d.date
@@ -418,6 +425,11 @@ export function parseEnvelope(json: string): ParseResult {
     const streak = reviveStreak(p.streak);
     const settings = reviveSettings(p.settings);
     const llmSettings = reviveLLMSettings(p.llmSettings);
+    // A single-row record that is in the file but unusable is skipped (and counted), not silently lost.
+    for (const [carried, revived] of [[p.streak, streak], [p.settings, settings], [p.llmSettings, llmSettings]] as const) {
+      if (carried != null && revived === null) skipped++;
+    }
+    const leftOut = reviveLeftOut(p.leftOut);
 
     const envelope: ExportEnvelopeV2 = {
       version: 2,
@@ -449,6 +461,7 @@ export function parseEnvelope(json: string): ParseResult {
       ...(p.estimates !== undefined ? { estimates: estimatesResult.unique as Estimate[] } : {}),
       ...(p.reviews !== undefined ? { reviews: reviewsResult.unique as Review[] } : {}),
       ...(p.reviewDrafts !== undefined ? { reviewDrafts: reviewDraftsResult.unique as ReviewDraft[] } : {}),
+      ...(leftOut ? { leftOut } : {}),
     };
     return { ok: true, envelope, skipped, snapshotsDropped };
   } catch (e) {
@@ -481,6 +494,11 @@ function dedupeBy<T>(
   return { unique, skipped };
 }
 
+function reviveLeftOut(value: unknown): LeftOutItem[] | undefined {
+  const parsed = z.array(LeftOutItemSchema).max(50).safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
 function reviveStreak(value: unknown): Streak | null {
   if (!value || typeof value !== 'object') return null;
   const row = value as Record<string, unknown>;
@@ -495,22 +513,16 @@ function reviveSettings(value: unknown): Settings | null {
   const row = value as Record<string, unknown>;
   const createdAt = reviveDate(row.createdAt) ?? new Date();
   const updatedAt = reviveDate(row.updatedAt) ?? new Date();
-  const connectedAt =
-    row.googleCalendarConnectedAt == null
-      ? null
-      : reviveDate(row.googleCalendarConnectedAt);
-  if (row.googleCalendarConnectedAt != null && connectedAt == null) return null;
-  const freezeUsedAt =
-    row.lastStreakFreezeUsedAt == null
-      ? null
-      : reviveDate(row.lastStreakFreezeUsedAt);
-  if (row.lastStreakFreezeUsedAt != null && freezeUsedAt == null) return null;
+  const connectedAt = presentDate(row, 'googleCalendarConnectedAt');
+  if (row.googleCalendarConnectedAt != null && connectedAt.googleCalendarConnectedAt == null) return null;
+  const freezeUsedAt = presentDate(row, 'lastStreakFreezeUsedAt');
+  if (row.lastStreakFreezeUsedAt != null && freezeUsedAt.lastStreakFreezeUsedAt == null) return null;
   const parsed = SettingsSchema.safeParse({
     ...row,
     createdAt,
     updatedAt,
-    googleCalendarConnectedAt: connectedAt,
-    lastStreakFreezeUsedAt: freezeUsedAt,
+    ...connectedAt,
+    ...freezeUsedAt,
   });
   return parsed.success ? (parsed.data as Settings) : null;
 }
@@ -526,24 +538,24 @@ function reviveLLMSettings(value: unknown): LLMSettings | null {
 }
 
 /**
- * DANGEROUS: wipes ALL data and restores from envelope. Existing API keys
- * are preserved when imported entries have empty apiKey fields (since export
- * strips keys for safety). Legacy files without kataTemplates/conversations/
- * habits/checkIns leave those tables untouched.
+ * DANGEROUS: replaces the data in the backup. Sessions and reflections are always replaced; every
+ * other collection is replaced only when the backup carries it (legacy files leave local data alone).
+ *
+ * SECRETS stay on the device (docs/waves/wave-18.md). A plain backup never holds them, so a restore
+ * must not take them away either: Google sign-in tokens are kept, an API key is kept for each provider
+ * the backup names without one, and the private calendar-feed URL is kept when the backup has none.
+ * The "Google Calendar connected" mark is cleared when this device has no sign-in to go with it.
+ *
+ * A singleton the backup does not carry (or that failed validation on the way in) is left as it is
+ * on the device, never wiped.
  */
 export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
   const db = getDb();
 
-  // Capture existing API keys before wipe (so we can restore them after).
-  const existingLLM = await llmSettingsRepo.get();
-  const existingKeys = new Map<string, string>();
-  for (const [name, cfg] of Object.entries(existingLLM.providers)) {
-    if (cfg.apiKey) existingKeys.set(name, cfg.apiKey);
-  }
-
   // Wipe and restore atomically: if any restore step throws (e.g. a
   // constraint violation), the transaction rolls back and the previous
-  // data survives.
+  // data survives. The device's own secrets are read INSIDE the transaction,
+  // so what is kept is what is there at the moment of the write.
   await db.transaction(
     'rw',
     [
@@ -570,15 +582,19 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
       db.reviewDrafts,
     ],
     async () => {
-      await Promise.all([
-        db.sessions.clear(),
-        db.reflections.clear(),
-        db.streak.clear(),
-        db.settings.clear(),
-        db.llmSettings.clear(),
-        db.pendingCalendarOps.clear(),
-        db.tokens.clear(),
+      const [existingLLM, existingSettings, googleToken] = await Promise.all([
+        db.llmSettings.get('singleton'),
+        db.settings.get('singleton'),
+        db.tokens.get('google'),
       ]);
+      const existingKeys = new Map<string, string>();
+      for (const [name, cfg] of Object.entries(existingLLM?.providers ?? {})) {
+        if (cfg.apiKey) existingKeys.set(name, cfg.apiKey);
+      }
+
+      // Calendar updates waiting to be sent belong to the sessions being replaced. (The Google
+      // sign-in in `tokens` is NOT cleared: it is this device's, not the backup's.)
+      await Promise.all([db.sessions.clear(), db.reflections.clear(), db.pendingCalendarOps.clear()]);
 
       if (envelope.sessions.length > 0) {
         await db.sessions.bulkAdd(envelope.sessions);
@@ -593,7 +609,14 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
       }
 
       if (envelope.settings) {
-        await db.settings.put(envelope.settings);
+        const settings: Settings = { ...envelope.settings };
+        // The private calendar link stays on this device when the backup (rightly) has none.
+        if (!settings.icsSubscriptionUrl && existingSettings?.icsSubscriptionUrl) {
+          settings.icsSubscriptionUrl = existingSettings.icsSubscriptionUrl;
+        }
+        // "Connected" is only true where the sign-in is.
+        if (settings.googleCalendarConnectedAt && !googleToken) settings.googleCalendarConnectedAt = null;
+        await db.settings.put(settings);
       }
 
       // Preserve existing API keys where envelope has empty.
@@ -703,9 +726,10 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
     }
   );
 
-  // Reconcile session-derived habit logs with the final sessions × habits
-  // (covers replaced sessions, skipped invalid rows, and legacy files).
-  await rebuildSessionHabitLogs();
+  // Session-derived habit logs: a backup that carries habit logs already holds the logs the app made,
+  // with their ids and times, so they are restored exactly as they were. Only a backup WITHOUT them
+  // (a legacy file) has them derived again from the sessions and habits that are now here.
+  if (envelope.habitLogs === undefined) await rebuildSessionHabitLogs();
 }
 
 // Type re-exports for compatibility with imports in callers

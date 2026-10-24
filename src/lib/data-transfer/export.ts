@@ -6,50 +6,87 @@ import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { kataTemplateRepo } from '@/lib/db/kata-template.repo';
 import { checkInRepo } from '@/lib/db/check-in.repo';
 import { getDb } from '@/lib/db/db';
-import { CURRENT_ENVELOPE_VERSION, type ExportEnvelopeV2 } from './types';
+import { CURRENT_ENVELOPE_VERSION, type ExportEnvelopeV2, type LeftOutItem } from './types';
 import { toLocalDateString } from '@/lib/utils/date';
 
 /**
- * Collect all user data into an exportable envelope. API keys are stripped
- * from LLM provider configs for safe export (importing on a new device
- * requires re-entering keys).
+ * Collect all user data into an exportable envelope.
+ *
+ * SECRETS never travel in a plain backup (docs/waves/wave-18.md): API keys, the Google sign-in
+ * tokens and the private calendar-feed URL are left out, and the envelope's `leftOut` says so, with
+ * how many of each, instead of a backup that is quietly smaller than it looks. Calendar updates still
+ * waiting to be sent from this device are left out too: they belong to this device's sessions.
+ *
+ * Reading never changes data that is there: the single-row records are read as they are stored (the
+ * repositories' `get()` also rewrites a stored AI-settings row, merging environment providers into it).
+ * Only a device that has no such record yet gets its defaults created, as before.
  */
 export async function collectAll(): Promise<ExportEnvelopeV2> {
-  const [sessions, reflections, streak, settings, llmSettings, kataTemplates, conversations, messages, habits, habitLogs, checkIns, domains, projects, tasks, blocks, dayPlans, estimates, reviews, reviewDrafts] =
+  const db = getDb();
+  const [sessions, reflections, storedStreak, storedSettings, storedLLMSettings, kataTemplates, conversations, messages, habits, habitLogs, checkIns, domains, projects, tasks, blocks, dayPlans, estimates, reviews, reviewDrafts, tokenCount, pendingOpCount] =
     await Promise.all([
       sessionRepo.getAll(),
       reflectionRepo.getAll(),
-      streakRepo.get(),
-      settingsRepo.get(),
-      llmSettingsRepo.get(),
+      db.streak.get('singleton'),
+      db.settings.get('singleton'),
+      db.llmSettings.get('singleton'),
       kataTemplateRepo.getAll(),
-      getDb().conversations.toArray(),
-      getDb().messages.toArray(),
-      getDb().habits.toArray(),
-      getDb().habitLogs.toArray(),
+      db.conversations.toArray(),
+      db.messages.toArray(),
+      db.habits.toArray(),
+      db.habitLogs.toArray(),
       checkInRepo.getAll(),
-      getDb().domains.toArray(),
-      getDb().projects.toArray(),
-      getDb().tasks.toArray(),
-      getDb().blocks.toArray(),
-      getDb().dayPlans.toArray(),
-      getDb().estimates.toArray(),
-      getDb().reviews.toArray(),
-      getDb().reviewDrafts.toArray(),
+      db.domains.toArray(),
+      db.projects.toArray(),
+      db.tasks.toArray(),
+      db.blocks.toArray(),
+      db.dayPlans.toArray(),
+      db.estimates.toArray(),
+      db.reviews.toArray(),
+      db.reviewDrafts.toArray(),
+      db.tokens.count(),
+      db.pendingCalendarOps.count(),
     ]);
 
-  // Strip API keys.
-  const safeLLMSettings = llmSettings
-    ? {
-        ...llmSettings,
-        providers: Object.fromEntries(
-          Object.entries(llmSettings.providers).filter(([, cfg]) => cfg.credentialSource !== 'environment').map(([name, cfg]) => [
-            name,
-            { ...cfg, apiKey: '' },
-          ])
-        ),
-      }
-    : null;
+  const streak = storedStreak ?? (await streakRepo.get());
+  const settings = storedSettings ?? (await settingsRepo.get());
+  const llmSettings = storedLLMSettings ?? (await llmSettingsRepo.get());
+
+  const leftOut: LeftOutItem[] = [];
+
+  // API keys: blanked on every provider. Providers that came from this device's environment are
+  // not written at all; the device finds them again by itself.
+  const providers = Object.entries(llmSettings.providers);
+  const browserProviders = providers.filter(([, cfg]) => cfg.credentialSource !== 'environment');
+  const environmentProviders = providers.length - browserProviders.length;
+  const keysLeftOut = browserProviders.filter(([, cfg]) => cfg.apiKey).length;
+  const safeLLMSettings = {
+    ...llmSettings,
+    providers: Object.fromEntries(browserProviders.map(([name, cfg]) => [name, { ...cfg, apiKey: '' }])),
+  };
+  if (keysLeftOut > 0) {
+    leftOut.push({ id: 'llmSettings.apiKey', what: 'API keys', why: 'Keys are secrets. A plain backup never holds them; re-enter them on the new device.', count: keysLeftOut });
+  }
+  if (environmentProviders > 0) {
+    leftOut.push({ id: 'llmSettings.environmentProviders', what: 'AI providers set up by the device itself', why: 'They are found again on the device they came from.', count: environmentProviders });
+  }
+
+  // The private calendar link is a bearer token: anyone holding it can read the calendar.
+  let safeSettings = settings;
+  if ('icsSubscriptionUrl' in settings) {
+    const { icsSubscriptionUrl, ...rest } = settings;
+    safeSettings = rest;
+    if (icsSubscriptionUrl) {
+      leftOut.push({ id: 'settings.icsSubscriptionUrl', what: 'The private calendar link', why: 'The link works like a password for your calendar, so it stays on this device.', count: 1 });
+    }
+  }
+
+  if (tokenCount > 0) {
+    leftOut.push({ id: 'tokens', what: 'Google Calendar sign-in', why: 'Sign-in tokens are secrets. Connect again on the new device.', count: tokenCount });
+  }
+  if (pendingOpCount > 0) {
+    leftOut.push({ id: 'pendingCalendarOps', what: 'Calendar updates waiting to be sent', why: 'They belong to this device and its sign-in.', count: pendingOpCount });
+  }
 
   return {
     version: CURRENT_ENVELOPE_VERSION,
@@ -57,7 +94,7 @@ export async function collectAll(): Promise<ExportEnvelopeV2> {
     sessions,
     reflections,
     streak,
-    settings,
+    settings: safeSettings,
     llmSettings: safeLLMSettings,
     kataTemplates,
     conversations,
@@ -73,6 +110,7 @@ export async function collectAll(): Promise<ExportEnvelopeV2> {
     estimates,
     reviews,
     reviewDrafts,
+    leftOut,
   };
 }
 

@@ -55,7 +55,7 @@ actually exists.
 | W15 | Practice and session modes | partial | M | B | focus guard, checklists, per-anchor modes |
 | W16 | Notifications and nudges | partial | M | C | 5 reminder kinds, quiet hours, snooze |
 | W17 | Android-native polish | partial | M | C/D | widget, ongoing notification, share sheet |
-| W18 | Backup, export, optional sync | partial | M | A/C | encrypted backup, rotation, sync |
+| W18 | Backup, export, optional sync | partial (part 1 of 4) | M | A/C | import preview + merge/replace UI, encrypted backup, rotation, sync decision |
 | W19 | UX, accessibility, performance | partial | M | B | palette, a11y gaps, perf budget |
 | W20 | Hardening and release | partial | L | D | loop e2e, error boundary, integrity checker |
 
@@ -668,6 +668,10 @@ takes on native maintenance, which is a maintenance decision, not just a feature
 - Exists: secret hygiene — export blanks `apiKey` and skips env-sourced providers
   (`src/lib/data-transfer/export.ts:38-40`).
 - Exists: "clear all data" — `src/components/settings/ClearDataSettings.tsx`.
+- Exists (W18 part 1): the completeness oracle — `tests/unit/data-transfer/completeness.test.ts`
+  derives the table list from `getDb().tables` and the field list from the Zod schemas, and compares an
+  export → wipe → import round trip row by row in six zones; the secrets rule and the `leftOut` report
+  are in `docs/waves/wave-18.md`.
 - Missing: import preview and merge-vs-replace conflict handling — `DataTransfer.tsx:96` states
   "Importing replaces ALL local data"; there is no preview step and no merge path.
 - Missing: encrypted backup — `grep -rInE "crypto\.subtle|AES-GCM|PBKDF2|Argon" src tests` → **0 hits**.
