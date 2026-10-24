@@ -22,8 +22,12 @@ import { toLocalDateString } from '@/lib/utils/date';
  * repositories' `get()` also rewrites a stored AI-settings row, merging environment providers into it).
  * Only a device that has no such record yet gets its defaults created, as before.
  */
-export async function collectAll(): Promise<ExportEnvelopeV2> {
+export async function collectAll(options: { createDefaults?: boolean } = {}): Promise<ExportEnvelopeV2> {
   const db = getDb();
+  // Saving a file the person asked for may create the defaults of a record the device never had, as it always
+  // did. A copy made in the background must not: it writes nothing to the app's data (`createDefaults: false`),
+  // and a record the device does not have is simply absent from it.
+  const createDefaults = options.createDefaults !== false;
   const [sessions, reflections, storedStreak, storedSettings, storedLLMSettings, kataTemplates, conversations, messages, habits, habitLogs, checkIns, domains, projects, tasks, blocks, dayPlans, estimates, reviews, reviewDrafts, tokenCount, pendingOpCount] =
     await Promise.all([
       sessionRepo.getAll(),
@@ -49,33 +53,36 @@ export async function collectAll(): Promise<ExportEnvelopeV2> {
       db.pendingCalendarOps.count(),
     ]);
 
-  const streak = storedStreak ?? (await streakRepo.get());
-  const settings = storedSettings ?? (await settingsRepo.get());
-  const llmSettings = storedLLMSettings ?? (await llmSettingsRepo.get());
+  const streak = storedStreak ?? (createDefaults ? await streakRepo.get() : null);
+  const settings = storedSettings ?? (createDefaults ? await settingsRepo.get() : null);
+  const llmSettings = storedLLMSettings ?? (createDefaults ? await llmSettingsRepo.get() : null);
 
   const leftOut: LeftOutItem[] = [];
 
   // API keys: blanked on every provider. Providers that came from this device's environment are
   // not written at all; the device finds them again by itself.
-  const providers = Object.entries(llmSettings.providers);
-  const browserProviders = providers.filter(([, cfg]) => cfg.credentialSource !== 'environment');
-  const environmentProviders = providers.length - browserProviders.length;
-  const keysLeftOut = browserProviders.filter(([, cfg]) => cfg.apiKey).length;
-  const safeLLMSettings = {
-    ...llmSettings,
-    providers: Object.fromEntries(browserProviders.map(([name, cfg]) => [name, { ...cfg, apiKey: '' }])),
-  };
-  if (keysLeftOut > 0) {
-    leftOut.push({ id: 'llmSettings.apiKey', what: 'your API keys', why: 'Keys are secrets. A plain backup never holds them; re-enter them on the new device.', count: keysLeftOut });
-  }
-  if (environmentProviders > 0) {
-    leftOut.push({ id: 'llmSettings.environmentProviders', what: 'AI providers the device set up itself', why: 'They are found again on the device they came from.', count: environmentProviders });
+  let safeLLMSettings: typeof llmSettings = null;
+  if (llmSettings) {
+    const providers = Object.entries(llmSettings.providers);
+    const browserProviders = providers.filter(([, cfg]) => cfg.credentialSource !== 'environment');
+    const environmentProviders = providers.length - browserProviders.length;
+    const keysLeftOut = browserProviders.filter(([, cfg]) => cfg.apiKey).length;
+    safeLLMSettings = {
+      ...llmSettings,
+      providers: Object.fromEntries(browserProviders.map(([name, cfg]) => [name, { ...cfg, apiKey: '' }])),
+    };
+    if (keysLeftOut > 0) {
+      leftOut.push({ id: 'llmSettings.apiKey', what: 'your API keys', why: 'Keys are secrets. A plain backup never holds them; re-enter them on the new device.', count: keysLeftOut });
+    }
+    if (environmentProviders > 0) {
+      leftOut.push({ id: 'llmSettings.environmentProviders', what: 'AI providers the device set up itself', why: 'They are found again on the device they came from.', count: environmentProviders });
+    }
   }
 
   // The private calendar link is a bearer token: anyone holding it can read the calendar.
   // (Only the link itself is the secret: a stored `null` means "none" and travels as it is.)
   let safeSettings = settings;
-  if (settings.icsSubscriptionUrl) {
+  if (settings?.icsSubscriptionUrl) {
     const { icsSubscriptionUrl: _link, ...rest } = settings;
     safeSettings = rest;
     leftOut.push({ id: 'settings.icsSubscriptionUrl', what: 'your private calendar link', why: 'The link works like a password for your calendar, so it stays on this device.', count: 1 });

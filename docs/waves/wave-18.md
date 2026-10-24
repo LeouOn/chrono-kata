@@ -1,6 +1,6 @@
 # Wave 18 — Backup, export and optional sync
 
-**Status:** parts 1 to 3 of 4 (the completeness oracle and its fixes; the import preview with merge or replace, hostile-file refusal and date repair; the encrypted backup) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 18
+**Status:** all four parts (the completeness oracle and its fixes; the import preview with merge or replace, hostile-file refusal and date repair; the encrypted backup; automatic copies with restore, and the sync decision), behind `taskInbox` · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 18
 **Status map:** `docs/ROADMAP_STATUS.md` W18
 
 Done when: export, wipe, import restores **everything identically**, proved by a deep-equal test.
@@ -276,6 +276,78 @@ keys, sign-in and calendar link win over the device's; unticked files change non
 - Engines other than Node's and Chromium's WebCrypto, and an Android device, are untested.
 - **Rotation and restore from automatic copies**, and `docs/SYNC_DECISION.md`, are part 4.
 
+## Part 4: automatic copies, restore from any, and the sync decision
+
+Behind `taskInbox`. A **Copies on this device** card in Settings, and a background copy once a day.
+
+### Where copies live, and what that does and does not protect
+
+In a database of their own, **`chrono-kata-copies`** (`src/lib/copies/copies-db.ts`), with its own tiny Dexie
+instance and one store. It is **not a table of `chrono-kata`**: the app's Dexie version did not move, copies are
+never part of an export (a copy inside every backup would double each one), and the completeness oracle's list of
+tables is unchanged. The one thing both databases share is the browser profile, so the screen says, in these
+words, always: *"These copies are kept in this browser, next to your data. They protect you from a bad import or a
+mistake, not from the browser clearing its storage. Save a file as well."* A copy follows the **plain rule**: no
+API keys, no sign-in, no calendar link.
+
+### The rules (each one a bug class already met)
+
+1. **One source of truth for "the last copy"**: the newest `madeAt` in the copies database. No second record
+   (nothing in localStorage, nothing in settings) exists to disagree with it. Tested by deleting the newest
+   copy and by clearing localStorage.
+2. **One automatic copy per LOCAL day, however many tabs ask.** The fast check is repeated inside the one
+   transaction that writes, and IndexedDB serialises transactions on the same store across tabs. Tested with
+   eight simultaneous callers (one copy), and for a stretch of days around each zone's clock changes, in six
+   zones (exactly one copy per calendar day, on that day).
+3. **A copy that cannot be made says so.** A failed automatic copy is remembered and shown on the card ("The last
+   automatic copy could not be made: There isn't room left on this device to keep another copy."); a failed
+   copy before an import **stops the import** with the reason, and the person can choose "Import without a safety
+   copy". Nothing proceeds silently.
+4. **Compressed and bounded.** gzip when the browser can (stored plain, honestly, when it cannot), the newest N
+   kept (3, 7, 14 or 30; default 7; a device-local choice, not in a backup) and all copies together within 100 MB.
+   The oldest go first and the newest is never the one dropped. Lowering N prunes at once and says so.
+5. **Idle and flagged.** `AutoCopyRunner` waits for `requestIdleCallback` (a 5 s timer where there is none),
+   runs again when the tab comes back to the front, and with the flag off schedules nothing and opens nothing
+   (tested: the copies database is not even created). A device with nothing of the person's on it (the four
+   default life areas do not count) makes no automatic copy.
+6. **A copy writes nothing to the app's data.** `collectAll({ createDefaults: false })`: a record the device
+   never had (settings, streak, AI settings) is simply absent from the copy instead of being created by it.
+7. **Same plain rule, same preview.** "Look at this copy…" opens the SAME preview as importing a file (add what
+   is missing, or replace), with the copy as its source. Nothing is applied without it.
+8. **Clear all data clears the copies**, whatever the flag says (a wipe that left the data behind in copies would
+   not be one). With the flag on, the card says so.
+
+### Undoing a bad import
+
+Right before **every** import (add or replace) a copy of what is on the device is made ("made just before an
+import"), unless the device is empty. Restoring that copy from the list puts the state back. The tests do exactly
+this: damage the data, restore the earlier copy, and the data is what it was, with the damaged state itself kept
+as a copy.
+
+### The words
+
+"Last copy: today." / "yesterday." / "12 days ago." / "No copy yet." Never "overdue", never an exclamation mark
+(a test pins the wording).
+
+### Tests
+
+`tests/unit/copies/copies.test.ts` (what a copy holds and that putting it back is identical on the oracle's
+datasets; no secret inside; compression and its fallback; a damaged copy reads back as nothing; rotation by count
+and by size; the single source of truth; the daily rule in six zones; eight simultaneous tabs; failures; the
+read-only guarantee), `copies-ui.test.tsx` (the card, the idle runner, the safety copy and what blocks it,
+restore from a copy, Clear all data), and `tests/e2e/w18-copies.spec.ts` (a real browser: make a copy, wreck
+the data, restore from the copy, the export is the one from before; the idle copy appears once; Clear all data
+removes the copies; a phone layout; flag off).
+
+### What part 4 does NOT cover
+
+- Copies share the browser profile with the data. They do not survive the browser clearing its storage or the
+  profile being deleted: only a saved file does. The card says so.
+- No automatic copy to a file or a cloud (the browser cannot write files unasked, and `android/` is out of this
+  wave's reach). `docs/SYNC_DECISION.md` records the decision on sync and stops there: nothing is built.
+- Copies are not encrypted: they hold what the app's own database holds, in the same place.
+- Real storage quotas are only simulated (a rejected write); Android is untested.
+
 ## Decisions for review
 
 1. **The private calendar link is treated as a secret.** It is the one place this changes what an
@@ -307,4 +379,12 @@ keys, sign-in and calendar link win over the device's; unticked files change non
 14. The file is named `chrono-kata-backup-DATE.encrypted.json` and is recognised by its `format` field, not its name.
 15. A stored `null` for the calendar link now travels as `null` in a plain backup (only the link itself is
     stripped), so a round trip is identical for that field too.
+
+### Part 4 decisions, for review
+
+16. A separate database `chrono-kata-copies` (accepted by review before the work started).
+17. One automatic copy per **local calendar day**; copies made by hand and before imports count toward the N kept.
+18. Choices of 3, 7, 14 or 30 copies, default 7; 100 MB for all together.
+19. A copy is made before every import (add as well as replace) unless the device is empty.
+20. `docs/SYNC_DECISION.md`: if sync is ever built, build the file-based encrypted change log, not a CRDT.
 

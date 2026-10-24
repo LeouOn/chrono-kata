@@ -8,6 +8,7 @@ import { CaptureLauncher } from '@/components/tasks/CaptureLauncher';
 import { SessionLauncherProvider, type SessionLink } from '@/components/session/SessionLauncher';
 import { SessionForm } from '@/components/session/SessionForm';
 import { MilestoneCelebration } from '@/components/streak/MilestoneCelebration';
+import { AutoCopyRunner } from '@/components/system/AutoCopyRunner';
 import { NotificationRunner } from '@/components/system/NotificationRunner';
 import { useSessions, recomputeStreakSideEffect } from '@/hooks/useSessions';
 import { flushPendingOps } from '@/lib/calendar/sync';
@@ -98,6 +99,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
       />
       <MilestoneCelebration />
       <NotificationRunner />
+      <AutoCopyRunner />
     </div>
     </SessionLauncherProvider>
   );

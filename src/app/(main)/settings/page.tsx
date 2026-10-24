@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { CalendarSettings } from '@/components/calendar/CalendarSettings';
 import { PWAInstallPrompt } from '@/components/ui/PWAInstallPrompt';
+import { CopiesSettings } from '@/components/settings/CopiesSettings';
 import { DataTransfer } from '@/components/settings/DataTransfer';
 import { ReminderSettings } from '@/components/settings/ReminderSettings';
 import { ThemeSettings } from '@/components/settings/ThemeSettings';
@@ -106,6 +107,8 @@ export default function SettingsPage() {
       <ClearDataSettings />
 
       <DataTransfer />
+
+      <CopiesSettings />
     </div>
   );
 }
