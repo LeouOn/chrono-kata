@@ -171,6 +171,75 @@ describe('PlanningSettings', () => {
     vi.restoreAllMocks();
   });
 
+  it('edits an existing window in place while another save is in flight', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const alpha = {
+      id: '11111111-1111-4111-8111-111111111111',
+      title: 'Alpha',
+      weekdays: [6],
+      start: '22:00',
+      end: '02:00',
+    };
+    const beta = {
+      id: '22222222-2222-4222-8222-222222222222',
+      title: 'Beta',
+      weekdays: [2],
+      start: '09:00',
+      end: '11:00',
+    };
+    const gamma = {
+      id: '33333333-3333-4333-8333-333333333333',
+      title: 'Gamma',
+      weekdays: [4],
+      start: '15:00',
+      end: '16:00',
+    };
+    await settingsRepo.patch({ anchors: [alpha, beta, gamma] });
+
+    // Hold the removal so the edit runs while that write is in flight.
+    const realPatchWith = settingsRepo.patchWith.bind(settingsRepo);
+    let first = true;
+    vi.spyOn(settingsRepo, 'patchWith').mockImplementation(async (merge) => {
+      if (first) {
+        first = false;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      return realPatchWith(merge);
+    });
+
+    renderWithProviders(<PlanningSettings />);
+
+    fireEvent.click(await screen.findByRole('button', { name: `Remove ${alpha.title}` }));
+    fireEvent.click(screen.getByRole('button', { name: /^Remove$/ }));
+
+    // Edit Beta while the removal is still being written.
+    fireEvent.click(screen.getByRole('button', { name: `Edit ${beta.title}` }));
+    await screen.findByRole('dialog', { name: /Protected window/i });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Beta, reshaped' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Wed' }));
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '13:00' } });
+    fireEvent.change(screen.getByLabelText('Until'), { target: { value: '14:30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save window' }));
+
+    await waitFor(async () => {
+      const stored = await settingsRepo.get();
+      const list = stored.anchors ?? [];
+      // Same id, same slot, new values; the removal applied; Gamma untouched.
+      expect(list.map((anchor) => anchor.id)).toEqual([beta.id, gamma.id]);
+      expect(list[0]).toMatchObject({
+        id: beta.id,
+        title: 'Beta, reshaped',
+        // 'Wed' is added to the existing 'Tue', as the dialog's day toggles do.
+        weekdays: [2, 3],
+        start: '13:00',
+        end: '14:30',
+      });
+      expect(list[1]).toEqual(gamma);
+      expect(SettingsSchema.safeParse(stored).success).toBe(true);
+    });
+    vi.restoreAllMocks();
+  });
+
   it('never writes an invalid waking-hours row when the field is cleared', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     const patch = vi.spyOn(settingsRepo, 'patchWith');

@@ -105,7 +105,10 @@ export function PlanningSettings() {
         return { anchors: parsed.data };
       });
     } catch (error) {
-      if (error instanceof IncompletePlanningInput) return;
+      // Unlike a cleared waking-hours input (a normal edit in progress), saving a
+      // window is an explicit act: the editor has already validated it, so a
+      // failure here means the write did not happen and the user must hear about
+      // it rather than watch the editor close on nothing.
       dispatchToast(error instanceof Error ? error.message : 'Could not save protected windows', 'error');
     }
   }
