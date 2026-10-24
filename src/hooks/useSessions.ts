@@ -10,6 +10,7 @@ import { settingsRepo } from '@/lib/db/settings.repo';
 import { checkInRepo } from '@/lib/db/check-in.repo';
 import { saveSessionWithOutcome } from '@/lib/db/session-outcome.repo';
 import { computeStreak } from '@/lib/streak/compute-streak';
+import { announceMilestone } from '@/lib/streak/milestones';
 import { DEFAULT_LOW_ENERGY_REST_THRESHOLD } from '@/lib/schemas/settings';
 import { generateCoachCommentStream } from '@/lib/llm/llm-service';
 import { LLMException, LLMExceptionKind } from '@/lib/llm/types';
@@ -34,7 +35,7 @@ const KEY = ['sessions'] as const;
  * displayed streak stays truthful after missed days. In recovery mode,
  * check-in days count like sessions and low-energy days are exempt.
  */
-export async function recomputeStreakSideEffect() {
+export async function recomputeStreakSideEffect(options: { celebrate?: boolean } = {}) {
   const [current, sessions, settings, checkIns] = await Promise.all([
     streakRepo.get(),
     sessionRepo.getAll(),
@@ -55,6 +56,12 @@ export async function recomputeStreakSideEffect() {
     ),
   });
   await streakRepo.save(next);
+  // Only a save that EARNED a milestone celebrates it. A recompute at app open, a manual recompute, or a
+  // streak that arrived by restoring a backup never does (see MILESTONE_EVENT).
+  if (options.celebrate) {
+    const earned = next.milestonesAchieved.filter((m) => !current.milestonesAchieved.includes(m));
+    if (earned.length > 0) announceMilestone(Math.max(...earned));
+  }
   return next;
 }
 
@@ -215,7 +222,7 @@ export function useSessions() {
       if (ctx) qc.setQueryData(KEY, ctx.previous);
     },
     onSuccess: async (saved, input) => {
-      await recomputeStreakSideEffect();
+      await recomputeStreakSideEffect({ celebrate: true });
       invalidateBoth();
       // Only a linked session changed a task's actualMin/nextAction or a
       // project's breadcrumb; a practice session must not cause task/project

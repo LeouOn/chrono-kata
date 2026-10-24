@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useStreak } from '@/hooks/useStreak';
+import { MILESTONE_EVENT } from '@/lib/streak/milestones';
 
 const COPY: Record<number, string> = {
   3: 'Three days. The shape is forming.',
@@ -39,35 +39,34 @@ function makeConfetti(): ConfettiPiece[] {
 }
 
 export function MilestoneCelebration() {
-  const { streak } = useStreak();
   const [milestone, setMilestone] = useState<number | null>(null);
   const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
-  const [previousCount, setPreviousCount] = useState<number>(
-    streak?.milestonesAchieved.length ?? 0
-  );
 
+  // Celebrates only when told a save just earned a milestone (see MILESTONE_EVENT). It no longer watches the
+  // streak record: a streak that arrives by a restore, a first read or a recompute is not an achievement.
   useEffect(() => {
-    if (!streak) return;
-    const current = streak.milestonesAchieved.length;
-    if (current > previousCount) {
-      const newMilestone = streak.milestonesAchieved[current - 1];
-      if (newMilestone) {
-        setMilestone(newMilestone);
-        setConfetti(makeConfetti());
-        // Vibrate (mobile).
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-          navigator.vibrate([60, 40, 60, 40, 120]);
-        }
-        const t = setTimeout(() => {
-          setMilestone(null);
-          setConfetti([]);
-        }, 4000);
-        setPreviousCount(current);
-        return () => clearTimeout(t);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onMilestone = (event: Event) => {
+      const earned = (event as CustomEvent<{ milestone?: number }>).detail?.milestone;
+      if (typeof earned !== 'number' || !Number.isFinite(earned)) return;
+      setMilestone(earned);
+      setConfetti(makeConfetti());
+      // Vibrate (mobile).
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([60, 40, 60, 40, 120]);
       }
-    }
-    setPreviousCount(current);
-  }, [streak, previousCount]);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        setMilestone(null);
+        setConfetti([]);
+      }, 4000);
+    };
+    window.addEventListener(MILESTONE_EVENT, onMilestone);
+    return () => {
+      window.removeEventListener(MILESTONE_EVENT, onMilestone);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   return (
     <AnimatePresence>
