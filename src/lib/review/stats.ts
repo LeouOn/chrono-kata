@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { addDays, daysBetweenDayKeys } from '@/lib/pacing/days';
+import { addDays } from '@/lib/pacing/days';
 import { cadenceDebt, projectOfTaskIndex, sessionProjectId } from '@/lib/planning/cadence';
-import { WAITING_AFTER_DAYS, isUntouchedFor } from '@/lib/planning/untouched';
+import { lastWorkByProject } from '@/lib/planning/stall';
+import { WAITING_AFTER_DAYS, daysUntouched, isUntouchedFor } from '@/lib/planning/untouched';
 import { localWallClockToEpoch } from '@/lib/planning/time';
-import { toLocalDateString } from '@/lib/utils/date';
 import type { Session } from '@/lib/schemas/session';
 import type { Task } from '@/lib/schemas/task';
 import type { Project } from '@/lib/schemas/project';
@@ -183,7 +183,6 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
   // shared rule in planning/untouched.ts: local days, not elapsed milliseconds,
   // so it is the same on a DST week). A task deliberately deferred into the
   // future is not waiting for a decision.
-  const todayKey = toLocalDateString(input.now);
   const nowMs = input.now.getTime();
   const waitingTaskIds = input.tasks
     .filter((task) => task.status === 'next')
@@ -201,6 +200,7 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
     if (!projectId) continue;
     sessionsByProject.set(projectId, (sessionsByProject.get(projectId) ?? 0) + 1);
   }
+  const lastWork = lastWorkByProject(input.projects, input.sessions, input.tasks);
   const weekProjects = input.projects
     .filter((project): project is Project & { status: 'active' | 'paused' } =>
       project.status === 'active' || project.status === 'paused',
@@ -211,10 +211,11 @@ export function summarizeWeek(input: WeeklyStatsInput): WeeklyStats {
       sessionsThisWeek: sessionsByProject.get(project.id) ?? 0,
       cadenceDebt:
         project.status === 'active' ? cadenceDebt(project, input.sessions, cadenceAsOf, input.tasks) : 0,
-      daysSinceTouched: Math.max(
-        0,
-        daysBetweenDayKeys(toLocalDateString(project.lastTouchedAt), todayKey),
-      ),
+      // Days since the project last had WORK: the same rule the stall detector
+      // uses (a session on it or on one of its tasks, a task of it finished, or
+      // its own lastTouchedAt), not lastTouchedAt alone, which never sees work
+      // done through a task.
+      daysSinceTouched: daysUntouched(lastWork.get(project.id) ?? project.lastTouchedAt, input.now),
     }))
     // Most recently touched first (a review reads top-down), then id so the
     // order never depends on the database's insertion order.

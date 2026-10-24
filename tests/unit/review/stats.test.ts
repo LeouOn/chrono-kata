@@ -279,7 +279,9 @@ describe('projects and cadence', () => {
     ];
     const thisWeek = summarizeWeek(weekInput({ weekOf: WEEK, now: NOW, projects, sessions }));
     expect(thisWeek.projects).toEqual([
-      { projectId: P_CAREER, status: 'active', sessionsThisWeek: 2, cadenceDebt: 1, daysSinceTouched: 3 },
+      // 2, not 3: daysSinceTouched counts from the last WORK, and the session on
+      // the 19th is later than the project's own lastTouchedAt (the 18th).
+      { projectId: P_CAREER, status: 'active', sessionsThisWeek: 2, cadenceDebt: 1, daysSinceTouched: 2 },
       { projectId: P_TRADING, status: 'active', sessionsThisWeek: 0, cadenceDebt: 0, daysSinceTouched: 171 },
       { projectId: P_PAUSED, status: 'paused', sessionsThisWeek: 0, cadenceDebt: 0, daysSinceTouched: 171 },
     ]);
@@ -319,7 +321,9 @@ describe('project attribution through the task', () => {
       }),
     );
     expect(stats.projects).toEqual([
-      { projectId: P_CAREER, status: 'active', sessionsThisWeek: 1, cadenceDebt: 1, daysSinceTouched: 171 },
+      // 5, not 171: the project's lastTouchedAt never saw this task-linked
+      // session, but it is work on the project (the 16th, five days before NOW).
+      { projectId: P_CAREER, status: 'active', sessionsThisWeek: 1, cadenceDebt: 1, daysSinceTouched: 5 },
     ]);
     expect(stats.sessions.total).toBe(1);
     expect(stats.domainBalance).toEqual([
