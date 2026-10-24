@@ -13,6 +13,7 @@ import { weekBefore, weekKeyFor } from '@/lib/review/week';
 import { addDays } from '@/lib/pacing/days';
 import { toLocalDateString } from '@/lib/utils/date';
 import { localDayKeyToDate } from '@/lib/capture/task-input';
+import { summarizeWeek } from '@/lib/review/stats';
 import { DOMAIN_SEED_IDS } from '@/lib/db/seed-domains';
 import type { Task } from '@/lib/schemas/task';
 
@@ -72,6 +73,17 @@ async function seedWaitingTask(): Promise<void> {
   } as Task;
   await getDb().tasks.put(task);
   await taskRepo.create({ title: 'sort the paper pile', status: 'inbox', source: 'manual' });
+}
+
+/**
+ * Wait for a control to be usable, then click it. The row is written before
+ * React clears `busy`, so a click issued right after a status check can land on
+ * a disabled button; a person would wait for the control too.
+ */
+async function clickWhenEnabled(name: RegExp | string) {
+  const button = screen.getByRole('button', { name }) as HTMLButtonElement;
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
 }
 
 async function goToStep(index: number) {
@@ -204,6 +216,65 @@ describe('ReviewWizard', () => {
     expect(await screen.findByText(`Deferred to ${future}.`)).toBeTruthy();
   });
 
+  it('a deliberate keep refreshes the touch so the task stops asking', async () => {
+    await seedWaitingTask();
+    const before = await taskRepo.getById(WAITING_ID);
+    expect(before?.status).toBe('next');
+    const startedAt = Date.now();
+    // The seeded task was untouched for 20 days, so it is waiting before the keep.
+    const waitingBefore = summarizeWeek({
+      weekOf: WEEK,
+      sessions: [],
+      tasks: await getDb().tasks.toArray(),
+      projects: await getDb().projects.toArray(),
+      domains: await getDb().domains.toArray(),
+      now: new Date(),
+    });
+    expect(waitingBefore.waitingTaskIds).toContain(WAITING_ID);
+
+    renderWizard();
+    await goToStep(1);
+    await clickWhenEnabled(/^Keep:/);
+
+    await waitFor(async () => {
+      const stored = await taskRepo.getById(WAITING_ID);
+      expect(stored?.status).toBe('next');
+      expect(stored?.touchedAt.getTime()).toBeGreaterThanOrEqual(startedAt);
+    });
+
+    // It stays on the next list but no longer counts as waiting, so the next
+    // review does not ask about it again.
+    const waitingAfter = summarizeWeek({
+      weekOf: WEEK,
+      sessions: [],
+      tasks: await getDb().tasks.toArray(),
+      projects: await getDb().projects.toArray(),
+      domains: await getDb().domains.toArray(),
+      now: new Date(),
+    });
+    expect(waitingAfter.waitingTaskIds).not.toContain(WAITING_ID);
+  });
+
+  it('defers to today when today is the day chosen', async () => {
+    await seedWaitingTask();
+    const today = toLocalDateString(new Date());
+    renderWizard();
+    await goToStep(1);
+
+    await clickWhenEnabled(/^Defer:/);
+    fireEvent.change(await screen.findByLabelText(/Day to look at/), { target: { value: today } });
+    await clickWhenEnabled(/^Defer$/);
+
+    await waitFor(async () => {
+      const stored = await taskRepo.getById(WAITING_ID);
+      expect(stored?.status).toBe('scheduled');
+      expect(stored?.deferUntil ? stored.deferUntil.getTime() : null).toBe(
+        localDayKeyToDate(today).getTime(),
+      );
+    });
+    expect(await screen.findByText(`Deferred to ${today}.`)).toBeTruthy();
+  });
+
   it('refuses to schedule a task for nowhere: an empty or past day writes nothing', async () => {
     await seedWaitingTask();
     renderWizard();
@@ -239,14 +310,6 @@ describe('ReviewWizard', () => {
 
     async function expectStatus(expected: string) {
       await waitFor(async () => expect((await taskRepo.getById(WAITING_ID))?.status).toBe(expected));
-    }
-    // The row is written before React clears `busy`, so a click issued right
-    // after the status check can land on a disabled button. Wait for the
-    // control itself, the way a person would.
-    async function clickWhenEnabled(name: RegExp | string) {
-      const button = screen.getByRole('button', { name }) as HTMLButtonElement;
-      await waitFor(() => expect(button.disabled).toBe(false));
-      fireEvent.click(button);
     }
     async function deferTo(dayKey: string) {
       await clickWhenEnabled(/^Defer:/);

@@ -9,6 +9,7 @@ import {
   withoutSweep,
 } from '@/lib/review/decisions';
 import { NOTES_MAX, NEXT_ACTION_MAX, INTENTION_MAX_MINUTES } from '@/lib/review/limits';
+import { isValidDeferDay } from '@/lib/review/decisions';
 
 const TASK_A = '11111111-1111-4111-8111-111111111111';
 const TASK_B = '22222222-2222-4222-8222-222222222222';
@@ -63,6 +64,19 @@ describe('parseDecisions', () => {
     expect(parseDecisions({ weekIntentions: { [DOMAIN]: INTENTION_MAX_MINUTES } }).weekIntentions).toEqual({
       [DOMAIN]: INTENTION_MAX_MINUTES,
     });
+  });
+});
+
+describe('isValidDeferDay', () => {
+  it('allows today and later, and nothing else', () => {
+    const today = '2026-06-15';
+    // "Pick a day from today onwards" includes today itself.
+    expect(isValidDeferDay(today, today)).toBe(true);
+    expect(isValidDeferDay('2026-06-16', today)).toBe(true);
+    expect(isValidDeferDay('2026-06-14', today)).toBe(false);
+    expect(isValidDeferDay('not-a-day', today)).toBe(false);
+    expect(isValidDeferDay('', today)).toBe(false);
+    expect(isValidDeferDay('2026-13-01', today)).toBe(false);
   });
 });
 

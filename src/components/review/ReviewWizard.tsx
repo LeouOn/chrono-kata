@@ -344,8 +344,9 @@ export function ReviewWizard() {
       } else if (decision.action === 'defer') {
         const todayKey = toLocalDateString(now);
         if (!decision.deferUntil || !isValidDeferDay(decision.deferUntil, todayKey)) {
-          // Never write a scheduled task without a real day: the input guards
-          // this, and the write path refuses it too.
+          // Last line of defence: the Defer button is disabled for an invalid
+          // day, so the UI cannot reach this; the check stays so a future caller
+          // still cannot write a scheduled task without a real day.
           setError('Pick a day from today onwards, then try again.');
           return;
         }
