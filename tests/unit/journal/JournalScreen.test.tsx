@@ -29,6 +29,17 @@ afterEach(() => {
   push.mockClear();
 });
 
+/**
+ * Click a control once it is usable. Both writes in the journal disable their
+ * button while in flight (a guard that silently drops a click would lie), so a
+ * test that clicks twice in a row waits for the control, the way a person does.
+ */
+async function clickWhenEnabled(name: RegExp | string) {
+  const button = (await screen.findByRole('button', { name })) as HTMLButtonElement;
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+}
+
 beforeEach(async () => {
   await resetDbForTesting();
   await settingsRepo.setFlag('taskInbox', true);
@@ -124,13 +135,14 @@ describe('JournalScreen', () => {
     renderScreen();
 
     fireEvent.click(await screen.findByRole('button', { name: /^Done: “Fix the hose”$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Close the day' }));
-    await waitFor(async () => expect((await journalRepo.findByDate(TODAY))?.shutdownAt).not.toBeNull());
+    await clickWhenEnabled('Close the day');
+    await screen.findByText(/The day is closed/);
     const first = await journalRepo.findByDate(TODAY);
+    expect(first?.shutdownAt).not.toBeNull();
 
     // The screen now offers "Save changes"; pressing it with the same choices
     // must not rewrite the row.
-    fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }));
+    await clickWhenEnabled('Save changes');
     await waitFor(async () => {
       const second = await journalRepo.findByDate(TODAY);
       expect(second?.updatedAt.getTime()).toBe(first?.updatedAt.getTime());
@@ -165,11 +177,11 @@ describe('JournalScreen', () => {
     renderScreen();
 
     fireEvent.click(await screen.findByRole('button', { name: /^Done: “Fix the hose”$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Close the day' }));
+    await clickWhenEnabled('Close the day');
     expect(await screen.findByRole('alert')).toHaveTextContent('storage went away');
     expect((await taskRepo.getById(finished.id))?.status).toBe('next');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close the day' }));
+    await clickWhenEnabled('Close the day');
     expect(await screen.findByRole('status')).toHaveTextContent('The day is closed: 1 moved.');
     expect(spy).toHaveBeenCalledTimes(2);
   });
@@ -268,8 +280,8 @@ describe('JournalScreen', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /^Done: “Fix the hose”$/ }));
     fireEvent.change(screen.getByLabelText('Shutdown note'), { target: { value: 'Saved note.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Close the day' }));
-    await screen.findByRole('status');
+    await clickWhenEnabled('Close the day');
+    await screen.findByText(/The day is closed/);
 
     // The card now shows the stored row: the same choices and the saved note.
     expect((screen.getByLabelText('Shutdown note') as HTMLTextAreaElement).value).toBe('Saved note.');
@@ -286,8 +298,10 @@ describe('JournalScreen', () => {
     renderScreen();
 
     fireEvent.click(await screen.findByRole('button', { name: /^Back on the list: “Fix the hose”$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Close the day' }));
-    await screen.findByRole('status');
+    await clickWhenEnabled('Close the day');
+    // Wait for the confirmation itself, not any role=status on the page (the
+    // loading line is one too, and resolving on it raced the save).
+    await screen.findByText(/The day is closed/);
     const storedAfterClose = await journalRepo.findByDate(TODAY);
     expect(storedAfterClose?.picksBack).toEqual([finished.id]);
 
@@ -298,7 +312,7 @@ describe('JournalScreen', () => {
       'true',
     );
     // Saving changes with no change writes nothing at all.
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await clickWhenEnabled('Save changes');
     await waitFor(async () => {
       const stored = await journalRepo.findByDate(TODAY);
       expect(stored?.updatedAt.getTime()).toBe(storedAfterClose?.updatedAt.getTime());
@@ -307,7 +321,7 @@ describe('JournalScreen', () => {
 
     // Switching to Done moves it between the lists.
     fireEvent.click(screen.getByRole('button', { name: /^Done: “Fix the hose”$/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await clickWhenEnabled('Save changes');
     await waitFor(async () => {
       const stored = await journalRepo.findByDate(TODAY);
       expect(stored?.picksDone).toEqual([finished.id]);

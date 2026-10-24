@@ -38,6 +38,7 @@ export function JournalEntryCard({ dayKey, plan, domains, savedTemplate }: Props
   const [checks, setChecks] = useState<Record<string, boolean>>(plan?.domainChecks ?? {});
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const guardRef = useRef(false);
 
   // Re-sync when the DAY changes (the screen is not remounted between days),
@@ -56,6 +57,7 @@ export function JournalEntryCard({ dayKey, plan, domains, savedTemplate }: Props
   async function save() {
     if (guardRef.current) return;
     guardRef.current = true;
+    setSaving(true);
     setError(null);
     setStatus(null);
     try {
@@ -67,6 +69,7 @@ export function JournalEntryCard({ dayKey, plan, domains, savedTemplate }: Props
       );
     } finally {
       guardRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -116,7 +119,7 @@ export function JournalEntryCard({ dayKey, plan, domains, savedTemplate }: Props
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button className="min-h-11" onClick={() => void save()}>
+        <Button className="min-h-11" onClick={() => void save()} disabled={saving} aria-busy={saving}>
           Save journal
         </Button>
         <Button

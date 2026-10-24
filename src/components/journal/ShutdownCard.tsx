@@ -40,6 +40,7 @@ export function ShutdownCard({ dayKey, plan, tasks, domains, domainChecks }: Pro
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   const guardRef = useRef(false);
 
   const picks = plan?.picks ?? [];
@@ -87,6 +88,9 @@ export function ShutdownCard({ dayKey, plan, tasks, domains, domainChecks }: Pro
   async function closeDay() {
     if (guardRef.current) return;
     guardRef.current = true;
+    // Disabled while the write is in flight: a click that the guard silently
+    // drops would be a control that looks usable and does nothing.
+    setSaving(true);
     setError(null);
     setStatus(null);
     try {
@@ -104,6 +108,7 @@ export function ShutdownCard({ dayKey, plan, tasks, domains, domainChecks }: Pro
       );
     } finally {
       guardRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -198,7 +203,12 @@ export function ShutdownCard({ dayKey, plan, tasks, domains, domainChecks }: Pro
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button className="min-h-11" onClick={() => void closeDay()}>
+        <Button
+          className="min-h-11"
+          onClick={() => void closeDay()}
+          disabled={saving}
+          aria-busy={saving}
+        >
           {closed ? 'Save changes' : 'Close the day'}
         </Button>
         {closed ? (
