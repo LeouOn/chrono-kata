@@ -72,7 +72,7 @@ describe('ErrorLogSettings export note', () => {
     ui();
     expect(await screen.findByText(NOTE)).toBeTruthy();
     // aria-describedby: a screen reader reads the warning with the button.
-    expect(screen.getByRole('button', { name: 'Export', description: NOTE })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Export error log', description: NOTE })).toBeTruthy();
   });
 
   it('is honest that a short message is stored whole: the card shows it as recorded', async () => {
@@ -88,6 +88,20 @@ describe('ErrorLogSettings export note', () => {
     ui();
     expect(await screen.findByText('Nothing recorded.')).toBeTruthy();
     expect(screen.queryByText(NOTE)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Export' }).hasAttribute('aria-describedby')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Export error log' }).hasAttribute('aria-describedby')).toBe(false);
+  });
+});
+
+describe('ErrorLogSettings button names', () => {
+  it('each button names what it acts on, and the visible text is the name', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    getErrorLog.mockReturnValue([
+      { at: 1, route: '/inbox', name: 'Error', message: 'x', messageTruncated: false, stack: '' },
+    ]);
+    ui();
+    for (const name of ['Export error log', 'Reload error log', 'Clear error log']) {
+      const button = await screen.findByRole('button', { name });
+      expect(button.textContent).toBe(name); // WCAG 2.5.3: nothing hidden in an aria-label
+    }
   });
 });

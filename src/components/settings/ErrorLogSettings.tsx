@@ -109,10 +109,13 @@ export function ErrorLogSettings() {
           disabled={shown.length === 0}
           aria-describedby={shown.length === 0 ? undefined : exportNoteId}
         >
-          Export
+          Export error log
         </Button>
+        {/* The names say what each button acts on: the Settings page has other
+            "Export" and "Refresh" buttons, and "Refresh" in particular is
+            matched as a substring by existing specs - so this one says "Reload". */}
         <Button variant="ghost" className="min-h-11" onClick={refresh}>
-          Refresh
+          Reload error log
         </Button>
         <Button
           variant="ghost"
@@ -120,7 +123,7 @@ export function ErrorLogSettings() {
           onClick={() => setConfirmClear(true)}
           disabled={shown.length === 0}
         >
-          Clear
+          Clear error log
         </Button>
       </div>
       {shown.length > 0 && (

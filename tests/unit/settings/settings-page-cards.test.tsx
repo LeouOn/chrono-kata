@@ -98,6 +98,24 @@ describe('Settings page: calendar interop and error log cards', () => {
     expect(errorLogReads(storageRead).length).toBeGreaterThan(0);
   });
 
+  it('flag ON: the names existing specs search for still find exactly one button', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const { queryClient } = mountPage();
+    await settled(queryClient);
+    expect(await screen.findByRole('heading', { name: 'Error log' })).toBeTruthy();
+
+    // Playwright matches an accessible name as a case-insensitive SUBSTRING, so
+    // emulate that here. w8-calendar-interop.spec.ts clicks { name: 'Refresh' }:
+    // the error log card must not add a second button whose name contains it.
+    expect(screen.getAllByRole('button', { name: /refresh/i })).toHaveLength(1);
+    // The new card's buttons say what they act on.
+    for (const name of ['Export error log', 'Reload error log', 'Clear error log']) {
+      expect(screen.getAllByRole('button', { name: new RegExp(name, 'i') }), name).toHaveLength(1);
+    }
+    // And a bare "Export" or "Clear" is not a name that points at the error log alone.
+    expect(screen.getAllByRole('button', { name: /export/i }).length).toBeGreaterThan(1);
+  });
+
   it('turning the flag back off removes both cards again', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     const { queryClient } = mountPage();
