@@ -108,7 +108,7 @@ describe('every date field of every table, damaged one at a time', () => {
   };
 
   for (const table of COLLECTIONS) {
-    const spec = DATE_SPECS[table as keyof typeof DATE_SPECS] as { core?: string[]; optional?: string[]; stamps?: string[] };
+    const spec = DATE_SPECS[table as keyof typeof DATE_SPECS] as unknown as { core?: string[]; optional?: string[]; stamps?: string[] };
     const fields = [
       ...(spec.core ?? []).map((f) => [f, 'core'] as const),
       ...(spec.optional ?? []).map((f) => [f, 'optional'] as const),
@@ -220,7 +220,7 @@ describe('what a repaired stamp becomes', () => {
 });
 
 describe('the single-row records', () => {
-  const file = (over: Record<string, unknown>) => {
+  const file = (over: (f: Record<string, unknown>) => Record<string, unknown>) => {
     const data = buildDataset(910, 'full', primaryKeys());
     const text = backupTextOf(data, (f) => Object.assign(f, over(f)));
     const parsed = parseEnvelope(text);

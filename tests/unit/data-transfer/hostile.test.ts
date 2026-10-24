@@ -88,7 +88,8 @@ describe('keys that must never be in a backup', () => {
   it('accepts `constructor` and `prototype` as ordinary text/keys, strips them from rows, and pollutes nothing', () => {
     const file = base();
     const task = (file.tasks as Record<string, unknown>[])[0]!;
-    task.constructor = { prototype: { polluted: true } };
+    // (`task.constructor = ...` would be typed as the inherited Function; this is an own, enumerable key.)
+    Object.defineProperty(task, 'constructor', { value: { prototype: { polluted: true } }, enumerable: true, writable: true, configurable: true });
     task.prototype = { polluted: true };
     const result = parseEnvelope(JSON.stringify(file));
     if (!result.ok) throw new Error(result.error);

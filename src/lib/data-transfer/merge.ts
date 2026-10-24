@@ -11,6 +11,7 @@
  * `planMerge` reads and counts; `applyMerge` does the same inside ONE transaction over every table
  * and writes. If any write throws, nothing was written.
  */
+import type { IndexableType } from 'dexie';
 import { getDb } from '@/lib/db/db';
 import { syncHabitLogsForSession } from '@/lib/habits/session-sync';
 import { COLLECTIONS, type CollectionKey } from './collections';
@@ -65,7 +66,7 @@ async function run(envelope: ExportEnvelope, apply: boolean): Promise<MergeRepor
       if (rows === undefined) continue; // the file does not carry this kind
       const table = db.table(key);
       const keyPath = table.schema.primKey.keyPath as string;
-      const existing = (await table.bulkGet(rows.map((r) => r[keyPath]))) as (Row | undefined)[];
+      const existing = (await table.bulkGet(rows.map((r) => r[keyPath] as IndexableType))) as (Row | undefined)[];
 
       const toAdd: Row[] = [];
       let same = 0;
