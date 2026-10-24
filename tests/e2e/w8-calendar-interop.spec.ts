@@ -72,8 +72,7 @@ test('rejects a non-https address calmly and fetches nothing', async ({ page }) 
 
 test('every calendar control exposes an accessible name', async ({ page }) => {
   await enableTaskInbox(page);
-  const scope = page.locator('main');
-  const controls = scope.locator('input, select, textarea, button');
+  const controls = page.locator('input, select, textarea, button');
   const count = await controls.count();
   expect(count).toBeGreaterThan(0);
   for (let i = 0; i < count; i++) {
