@@ -8,11 +8,11 @@ import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import type { Task } from '@/lib/schemas/task';
 
 const runDecomposition = vi.hoisted(() => vi.fn());
-const calmErrorCopy = vi.hoisted(() => vi.fn(() => 'calm copy'));
 
-vi.mock('@/lib/decomposition/service', () => ({
+vi.mock('@/lib/decomposition/service', async (importOriginal) => ({
+  // The REAL calmErrorCopy: provider-name threading must be exercised (c19).
+  ...(await importOriginal<typeof import('@/lib/decomposition/service')>()),
   runDecomposition: runDecomposition,
-  calmErrorCopy: calmErrorCopy,
 }));
 
 import { DecomposeSheet } from '@/components/tasks/DecomposeSheet';
@@ -204,7 +204,7 @@ describe('DecomposeSheet', () => {
     expect(screen.getByTestId('fallback-text').textContent).toContain('one small step');
   });
 
-  it('shows calm error copy with retry and nothing is written', async () => {
+  it('shows calm error copy WITH THE PROVIDER NAME, retry, nothing written (c19)', async () => {
     runDecomposition.mockRejectedValueOnce(Object.assign(new Error('nope'), { kind: 'rateLimited' }));
     const createSpy = vi.spyOn(taskRepo, 'create');
     ui();
@@ -212,12 +212,29 @@ describe('DecomposeSheet', () => {
     await waitFor(() => screen.getByRole('button', { name: /Send to lmstudio/i }));
     fireEvent.click(screen.getByRole('button', { name: /Send to lmstudio/i }));
     await waitFor(() => expect(screen.getByTestId('decompose-error')).toBeTruthy());
-    expect(screen.getByTestId('decompose-error').textContent).toBe('calm copy');
+    // The resolved provider's name, not a generic label (mutant c19).
+    expect(screen.getByTestId('decompose-error').textContent).toBe(
+      'lmstudio is busy right now (rate limit). A moment, then try again.'
+    );
     expect(createSpy).not.toHaveBeenCalled();
     // Retry recovers.
     runDecomposition.mockResolvedValue(VALID_RESULT);
     fireEvent.click(screen.getByRole('button', { name: /Send to lmstudio/i }));
     await waitFor(() => expect(screen.getByTestId('first-action')).toBeTruthy());
+  });
+
+  it('c19 (second kind): a 401 names the provider in the copy', async () => {
+    runDecomposition.mockRejectedValueOnce(
+      Object.assign(new Error('nope'), { kind: 'authFailed' })
+    );
+    ui();
+    fireEvent.click(screen.getByRole('button', { name: /Break down/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Send to lmstudio/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send to lmstudio/i }));
+    await waitFor(() => expect(screen.getByTestId('decompose-error')).toBeTruthy());
+    expect(screen.getByTestId('decompose-error').textContent).toBe(
+      'lmstudio did not accept the key. Check it in LLM settings.'
+    );
   });
 
   it('aborting on unmount stops the call and sets no state', async () => {
