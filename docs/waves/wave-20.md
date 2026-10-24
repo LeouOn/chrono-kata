@@ -132,5 +132,33 @@ is the thin IO shell that reads the live Dexie tables. No UI, no repair here
   repositories collect cleanly; a raw behind-the-repo write is seen.
 - Zones: the two files pass in default, Europe/Helsinki, America/Los_Angeles,
   Pacific/Kiritimati, Pacific/Auckland, Asia/Kolkata (exit 0 each).
-- Mutants: 10/10 killed (each check dropped/inverted/mis-severitied, the
-  threshold flipped, the sort removed, the DATE_SPECS field list trimmed).
+- Mutants: 15 attempted, 14 killed, 1 resolved as equivalent-and-removed (the
+  unreadable-endpoint guards in the range checks were dead code — `validDate`
+  already nulls unreadable values; removed the code rather than claim a kill).
+  The lead's real-repository probe (P1–P6) is committed as
+  `tests/unit/integrity/lead-probe.test.ts` and passes.
+
+## Round 2 (lead review): five probe findings, all fixed
+
+1. **Planned dates are not events** — the far-future check applies only to
+   fields that record what HAPPENED; `tasks.dueAt`/`deferUntil` and
+   `blocks.start`/`end` are excluded BY NAME (`PLANNED_DATE_FIELDS`). A task
+   due in 30 days, deferred a week, with a block next Tuesday, is clean.
+2. **Recurring calendar events share one calendarRef by design** — a duplicate
+   is the same ref AND the same start instant (the issue carries `startIso`);
+   a three-occurrence series with different starts is clean.
+3. **A zero-length session is legal** (SessionSchema has no end>start refine) —
+   sessions use `<`, blocks keep `<=` (their schema forbids equality).
+4. **The detector is TOTAL** — every field access goes through safe readers
+   (`rowOf`/`validDate`/`linkOf`); a fully garbled row is reported, never thrown on.
+5. **`row-date-unreadable`** — any DATE_SPECS field present but not a valid
+   Date (wrong type or NaN) is corruption; range rules stand down for
+   unreadable endpoints (one issue, not two).
+6. **One source of truth** — the field lists are DERIVED from DATE_SPECS; a
+   set-algebra completeness test plus a BEHAVIORAL completeness test (every
+   future-checked field flagged far-future, every planned field clean
+   end-to-end) fail if DATE_SPECS and the detector ever drift.
+
+Part-3 copy note (from the review): orphan links must read as "links to
+something that is gone" in the UI — never "corruption", never red — and the
+info severity stays for the documented DayPlan properties.

@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { detectIntegrity, type IntegrityIssue, type IntegritySnapshot } from '@/lib/integrity/detect';
+import {
+  detectIntegrity,
+  DETECTOR_TABLES,
+  PLANNED_DATE_FIELDS,
+  futureDateFields,
+  unreadableDateFields,
+  type IntegrityIssue,
+  type IntegritySnapshot,
+} from '@/lib/integrity/detect';
 import type { Session } from '@/lib/schemas/session';
 import type { Task } from '@/lib/schemas/task';
 import type { Project } from '@/lib/schemas/project';
@@ -218,13 +226,27 @@ const INJECTIONS: Injection[] = [
   },
 ];
 
-/** Two blocks sharing one external calendar ref → one duplicate issue. */
+/** Two blocks sharing ref AND start instant → the real duplicate. */
 function injectDuplicateRef(s: IntegritySnapshot): void {
   const first = s.blocks[0]!;
-  const second = block({ calendarRef: first.calendarRef });
+  const second = block({ calendarRef: first.calendarRef, start: first.start, end: first.end });
   first.calendarRef = 'cal-shared';
   second.calendarRef = 'cal-shared';
   (s.blocks as Block[]).push(second);
+}
+
+/** A recurring event: many blocks, one ref, different starts — DESIGNED, clean. */
+function injectRecurringSeries(s: IntegritySnapshot): void {
+  const base = s.blocks[0]!;
+  for (let i = 1; i <= 3; i++) {
+    (s.blocks as Block[]).push(
+      block({
+        calendarRef: 'cal-series',
+        start: new Date(base.start.getTime() + i * 86_400_000),
+        end: new Date(base.end.getTime() + i * 86_400_000),
+      })
+    );
+  }
 }
 
 describe('integrity detector oracle', () => {
@@ -243,14 +265,19 @@ describe('integrity detector oracle', () => {
     }
   });
 
-  it('duplicate calendar refs are one issue naming both blocks', () => {
-    const snap = coherentBase();
-    injectDuplicateRef(snap);
-    const issues = detectIntegrity(snap);
+  it('duplicate calendar ref = same ref AND same start; a recurring series sharing one ref is clean', () => {
+    const series = coherentBase();
+    injectRecurringSeries(series);
+    expect(detectIntegrity(series)).toEqual([]);
+
+    const dup = coherentBase();
+    injectDuplicateRef(dup);
+    const issues = detectIntegrity(dup);
     expect(issues).toHaveLength(1);
     const issue = issues[0] as Extract<IntegrityIssue, { kind: 'block-duplicate-calendar-ref' }>;
-    expect(issue.blockIds).toEqual(snap.blocks.map((b) => b.id).sort());
+    expect(issue.blockIds).toEqual(dup.blocks.map((b) => b.id).sort());
     expect(issue.calendarRef).toBe('cal-shared');
+    expect(issue.startIso).toBe(dup.blocks[0]!.start.toISOString());
   });
 
   it('seeded random databases: EXACTLY the injected set (no more, no fewer), deterministic under shuffling', () => {
@@ -290,10 +317,14 @@ describe('integrity detector oracle', () => {
     }
   });
 
-  it('a zero-elapsed session (endedAt === startedAt) is a bad range', () => {
-    const snap = coherentBase();
-    snap.sessions[0]!.endedAt = new Date(snap.sessions[0]!.startedAt.getTime());
-    const issues = detectIntegrity(snap);
+  it('a zero-length session is LEGAL (SessionSchema has no end>start refine); only end<start is bad', () => {
+    const zero = coherentBase();
+    zero.sessions[0]!.endedAt = new Date(zero.sessions[0]!.startedAt.getTime());
+    expect(detectIntegrity(zero)).toEqual([]);
+
+    const reversed = coherentBase();
+    reversed.sessions[0]!.endedAt = new Date(reversed.sessions[0]!.startedAt.getTime() - 1);
+    const issues = detectIntegrity(reversed);
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({ kind: 'session-bad-range' });
   });
@@ -321,10 +352,19 @@ describe('integrity detector oracle', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({ kind: 'row-date-in-future', field: 'createdAt', id: justOutside.sessions[0]!.id });
 
-    // Optional dates count too (a task's dueAt two days ahead is impossible).
-    const futureDue = coherentBase();
-    futureDue.tasks[0]!.dueAt = new Date(NOW.getTime() + 48 * 3_600_000);
-    expect(detectIntegrity(futureDue)[0]).toMatchObject({ kind: 'row-date-in-future', field: 'dueAt' });
+    // Event fields count, planned fields do not: dueAt 30 days ahead is a
+    // PLAN (clean); doneAt 2 days ahead is impossible (flagged).
+    const planned = coherentBase();
+    planned.tasks[0]!.dueAt = new Date(NOW.getTime() + 30 * 86_400_000);
+    planned.tasks[0]!.deferUntil = new Date(NOW.getTime() + 7 * 86_400_000);
+    planned.blocks[0]!.start = new Date(NOW.getTime() + 3 * 86_400_000);
+    planned.blocks[0]!.end = new Date(NOW.getTime() + 3 * 86_400_000 + 3_600_000);
+    expect(detectIntegrity(planned)).toEqual([]);
+
+    const futureDone = coherentBase();
+    futureDone.tasks[0]!.status = 'done';
+    futureDone.tasks[0]!.doneAt = new Date(NOW.getTime() + 48 * 3_600_000);
+    expect(detectIntegrity(futureDone)[0]).toMatchObject({ kind: 'row-date-in-future', field: 'doneAt' });
   });
 
   it('a live pick whose task exists is NOT a dead pick (known-good stays silent)', () => {
@@ -333,4 +373,97 @@ describe('integrity detector oracle', () => {
     snap.dayPlans[0]!.picksBack = [];
     expect(detectIntegrity(snap)).toEqual([]);
   });
+
+  it('row-date-unreadable: present-but-invalid dates are corruption; the detector stays TOTAL', () => {
+    // A string where a Date belongs (the shape a bad import leaves).
+    const asString = coherentBase();
+    (asString.sessions[0] as unknown as Record<string, unknown>).endedAt = 'not-a-date';
+    let issues = detectIntegrity(asString);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'row-date-unreadable', field: 'endedAt' });
+
+    // NaN Date: comparisons with it are false, so it must be named explicitly.
+    const nan = coherentBase();
+    (nan.tasks[0] as Task & { doneAt?: Date }).doneAt = new Date(Number.NaN);
+    (nan.tasks[0] as Task & { status: Task['status'] }).status = 'done';
+    issues = detectIntegrity(nan);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'row-date-unreadable', field: 'doneAt' });
+
+    // A range with an unreadable endpoint reports ONLY the unreadable issue.
+    const mixed = coherentBase();
+    (mixed.blocks[0] as unknown as Record<string, unknown>).end = 42;
+    issues = detectIntegrity(mixed);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'row-date-unreadable', field: 'end' });
+  });
+
+  it('TOTALITY: a fully garbled row reports instead of throwing', () => {
+    const snap = coherentBase();
+    (snap.sessions as unknown[])[0] = {
+      id: 7, // not even a string id
+      startedAt: { nope: true },
+      endedAt: 'whenever',
+      taskId: {}, // not a string: not a link, so no orphan claim either
+    } as never;
+    const issues = detectIntegrity(snap); // must not throw
+    expect(issues.map((i) => i.kind).sort()).toEqual(['row-date-unreadable', 'row-date-unreadable']);
+  });
+
+  it('completeness: every DATE_SPECS field of the detector tables is checked or excluded BY NAME', () => {
+    for (const table of DETECTOR_TABLES) {
+      const spec = unreadableDateFields(table);
+      const future = futureDateFields(table);
+      const planned: readonly string[] =
+        PLANNED_DATE_FIELDS[table as keyof typeof PLANNED_DATE_FIELDS] ?? [];
+      // Everything in DATE_SPECS is covered by the unreadable check.
+      for (const field of spec) {
+        expect(future.includes(field) || planned.includes(field), `${table}.${field} neither checked nor excluded`).toBe(true);
+      }
+      // Exclusions must be real DATE_SPECS fields (no stale names) and never
+      // double-booked as future-checked.
+      for (const field of planned) {
+        expect(spec, `${table}.${field} is excluded but not in DATE_SPECS`).toContain(field);
+        expect(future).not.toContain(field);
+      }
+    }
+  });
+
+  it('BEHAVIORAL completeness: every future-checked field flags far-future, every planned field stays clean', () => {
+    for (const table of DETECTOR_TABLES) {
+      for (const field of futureDateFields(table)) {
+        const snap = coherentBase();
+        const row =
+          table === 'sessions' ? (snap.sessions[0] as unknown as Record<string, unknown>)
+          : table === 'tasks' ? (snap.tasks[0] as unknown as Record<string, unknown>)
+          : table === 'blocks' ? (snap.blocks[0] as unknown as Record<string, unknown>)
+          : table === 'projects' ? (snap.projects[0] as unknown as Record<string, unknown>)
+          : (snap.dayPlans[0] as unknown as Record<string, unknown>);
+        row[field] = new Date(NOW.getTime() + 48 * 3_600_000);
+        const flagged = detectIntegrity(snap).filter(
+          (i) => i.kind === 'row-date-in-future'
+        );
+        expect(
+          flagged.some((i) => (i as { field: string }).field === field),
+          `${table}.${field} far-future was not flagged`
+        ).toBe(true);
+      }
+      const planned: readonly string[] =
+        PLANNED_DATE_FIELDS[table as keyof typeof PLANNED_DATE_FIELDS] ?? [];
+      for (const field of planned) {
+        const snap = coherentBase();
+        const row =
+          table === 'tasks'
+            ? (snap.tasks[0] as unknown as Record<string, unknown>)
+            : (snap.blocks[0] as unknown as Record<string, unknown>);
+        row[field] = new Date(NOW.getTime() + 30 * 86_400_000);
+        expect(
+          detectIntegrity(snap).filter((i) => i.kind === 'row-date-in-future'),
+          `${table}.${field} planned-future was flagged`
+        ).toEqual([]);
+      }
+    }
+  });
 });
+
+
