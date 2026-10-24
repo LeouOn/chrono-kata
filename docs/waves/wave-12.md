@@ -1,7 +1,7 @@
 # Wave 12 — journal and domain accountability
 
-**Status:** in progress · **PRs:** part 1 (pure logic, schema fields and the write path), then the
-journal/shutdown UI, then export and search · **Roadmap:** Wave 12 · **Lane:** B
+**Status:** in progress · **PRs:** part 1 (pure logic, schema fields and the write path), part 2 (the
+journal, shutdown and template screens), then export and search · **Roadmap:** Wave 12 · **Lane:** B
 
 ## What shipped (part 1)
 
@@ -48,6 +48,44 @@ journal/shutdown UI, then export and search · **Roadmap:** Wave 12 · **Lane:**
   really gone — loading just the decided tasks made every other recorded id look
   deleted (found by the lead's probe through the real repo, not by the pure
   tests).
+
+## What shipped (part 2)
+
+- `/journal`: a static route with `?date=` (the `/sessions/detail` pattern), behind `taskInbox`. It
+  shows one local day with yesterday/today/tomorrow navigation.
+- **The entry** starts from the person's template rendered for that day; an existing day opens as it
+  was written; domain ticks save with the text. The card re-syncs only when the DAY changes, so a
+  refetch after a save never overwrites what is being typed or clears the "Saved" line.
+- **The shutdown**: each pick is Done or **Back on the list**, with the note and tomorrow's first move.
+  Closing writes the tasks and the day in one transaction, reopens with the stored choices, and offers
+  "Save changes"; a repeated close with the same choices writes nothing (the part-1 merge, exercised
+  through the UI).
+- **The template** is editable in place, importable from a markdown file, and resettable to the
+  default; it saves through `updateSettingsWith`, whose merge runs inside the settings transaction.
+- **Home** gains a flag-gated Journal card; with the flag off the route redirects home and the card
+  reads nothing (a spy proves no journal query).
+- Every write catches its rejection, says calmly that nothing was saved, resets a REF double-submit
+  guard, and seeds the day cache on success. Nothing in this wave calls an AI provider.
+
+### Part 2 tests
+
+- `tests/unit/journal/JournalScreen.test.tsx` (10, real Dexie, only the router mocked): template
+  start; save + reload + domain ticks; one moved and one back; an idempotent second close (row and
+  `updatedAt` untouched); two clicks in one act() send one shutdown; a rejected close says so and
+  works on retry; a template save keeps other settings; day navigation; a **multi-day oracle** (five
+  seeded days each show and save their own entry, nothing leaks); flag-off inertness with a spy.
+- `tests/e2e/w12-journal.spec.ts` (5): entry + reload; close the day (tasks and row read back from
+  IndexedDB, reopen shows the decisions); `?date=` yesterday with no leakage; flag-off redirect and no
+  Home link; a per-screen tripwire (no horizontal scroll at 390×844, names, label-in-name, calm
+  vocabulary, 44px targets, floating capture button not covering a control).
+- Mutants (reverted to the pre-fix code, each red): shutdown sends no choices; no in-flight guard;
+  rejection uncaught; guard never reset; the entry resets after a save; the flag-off link still reads.
+
+### Part 2 gates
+
+- `tsc --noEmit` 0, `eslint src tests` 0, the journal + repo files 73/73 exit 0 in all six zones,
+  `npm run build` 0, the new browser spec 5/5 exit 0 (single run; the repeat-each run is the lead's
+  gate). Screenshots: `/tmp/qa-w12-shots/journal-day.png`, `journal-closed.png`.
 
 ## Decisions where the roadmap was silent
 
@@ -134,6 +172,21 @@ journal/shutdown UI, then export and search · **Roadmap:** Wave 12 · **Lane:**
   task recorded → "skips a decision for a task that was deleted"; no transaction →
   the rollback proof (and four more); format-only day key → "refuses an invalid
   day key".
+
+## Known properties and deferred polish
+
+- **A deleted task's id stays in the record until the next write that changes
+  it.** `applyShutdown` drops an id only when that write would change the row;
+  a note-only call with nothing new returns the stored row untouched, so a task
+  deleted in another tab can still be listed until the next real change. The
+  export skips ids whose task is missing, and `picks` behaves the same way, so
+  the only visible effect is a stale id for at most one save. Accepted rather
+  than fixed in part 1: rewriting the row to prune would make every no-op write
+  a write.
+- **Bidi control characters (U+202E and friends) still pass through titles.**
+  They do not create markdown structure, but some viewers can visually reverse
+  text around them. Stripping them in `escapeInline` is queued for part 3, with
+  the inline-escaping tests.
 
 ## Gates (part 1)
 

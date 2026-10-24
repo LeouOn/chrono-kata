@@ -19,10 +19,15 @@ export interface JournalRepository {
   /** Save the journal text for a day (creates a bare plan when the day has none). */
   saveJournal(date: string, journal: string, now?: Date): Promise<DayPlan>;
   /**
+   * Save the day's writing fields — journal, shutdown note, tomorrow's first
+   * move, domain ticks — in one row write. Omitted fields keep their value.
+   */
+  saveDayFields(date: string, fields: DayPlanFields, now?: Date): Promise<DayPlan>;
+  /**
    * Apply an evening shutdown: task outcomes and the day's plan fields in one
    * transaction. Idempotent: the second identical call writes nothing.
    */
-  applyShutdown(input: Omit<PlanShutdownInput, 'plan' | 'tasks'>): Promise<DayPlan>;
+  applyShutdown(input: ShutdownInput): Promise<DayPlan>;
 }
 
 /**
@@ -32,6 +37,16 @@ export interface JournalRepository {
 function assertDayKey(date: string): string {
   if (!isDayKey(date)) throw new Error(`Invalid day key "${date}"; expected YYYY-MM-DD`);
   return date;
+}
+
+/** Everything a shutdown needs from the caller; the repo supplies the clock and rows. */
+export type ShutdownInput = Omit<PlanShutdownInput, 'plan' | 'tasks' | 'now'> & { now?: Date };
+
+export interface DayPlanFields {
+  journal?: string | null;
+  shutdownNote?: string | null;
+  firstActionTomorrow?: string | null;
+  domainChecks?: Record<string, boolean>;
 }
 
 export class DexieJournalRepository implements JournalRepository {
@@ -57,7 +72,44 @@ export class DexieJournalRepository implements JournalRepository {
     });
   }
 
-  async applyShutdown(input: Omit<PlanShutdownInput, 'plan' | 'tasks'>): Promise<DayPlan> {
+  async saveDayFields(date: string, fields: DayPlanFields, now: Date = new Date()): Promise<DayPlan> {
+    const key = assertDayKey(date);
+    const journal =
+      fields.journal === undefined ? undefined : normaliseJournalText(fields.journal ?? '', JOURNAL_TEXT_MAX);
+    if (journal && !journal.ok) throw new Error(journal.error);
+    const note =
+      fields.shutdownNote === undefined
+        ? undefined
+        : normaliseJournalText(fields.shutdownNote ?? '', SHUTDOWN_NOTE_MAX);
+    if (note && !note.ok) throw new Error(note.error);
+    const firstAction =
+      fields.firstActionTomorrow === undefined
+        ? undefined
+        : normaliseJournalText(fields.firstActionTomorrow ?? '', FIRST_ACTION_MAX);
+    if (firstAction && !firstAction.ok) throw new Error(firstAction.error);
+
+    const db = getDb();
+    return db.transaction('rw', db.dayPlans, async () => {
+      const existing = await db.dayPlans.get(key);
+      const plan = DayPlanSchema.parse({
+        ...(existing ?? { date: key, picks: [], capacityMin: 0 }),
+        date: key,
+        ...(journal === undefined ? {} : { journal: journal.value === '' ? null : journal.value }),
+        ...(note === undefined ? {} : { shutdownNote: note.value === '' ? null : note.value }),
+        ...(firstAction === undefined
+          ? {}
+          : { firstActionTomorrow: firstAction.value === '' ? null : firstAction.value }),
+        ...(fields.domainChecks === undefined ? {} : { domainChecks: fields.domainChecks }),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      });
+      await db.dayPlans.put(plan);
+      return plan;
+    });
+  }
+
+  async applyShutdown(input: ShutdownInput): Promise<DayPlan> {
+    const now = input.now ?? new Date();
     const date = assertDayKey(input.date);
     // Validate the journal-side values before opening the transaction, on the
     // normalised value the schema will store.
@@ -90,7 +142,7 @@ export class DexieJournalRepository implements JournalRepository {
       const tasks = (await db.tasks.bulkGet(taskIds)).filter(
         (task): task is NonNullable<typeof task> => task !== undefined,
       );
-      const planned = planShutdown({ ...input, date, plan: existing, tasks });
+      const planned = planShutdown({ ...input, date, now, plan: existing, tasks });
       if (!planned.ok) throw new Error(planned.error);
 
       if (!planned.value.changed) {
@@ -107,7 +159,7 @@ export class DexieJournalRepository implements JournalRepository {
         const transitioned = applyTransition(
           patch.clearDeferUntil ? { ...task, deferUntil: null } : task,
           patch.status,
-          input.now,
+          now,
         );
         await db.tasks.put(transitioned);
       }

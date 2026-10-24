@@ -20,6 +20,7 @@ import { MorningCheckIn } from '@/components/checkin/MorningCheckIn';
 import { InboxLink } from '@/components/tasks/InboxLink';
 import { TodayPlanCard } from '@/components/planning/TodayPlanCard';
 import { ReviewLink } from '@/components/review/ReviewLink';
+import { JournalLink } from '@/components/journal/JournalLink';
 import { ReviveCard } from '@/components/projects/ReviveCard';
 import { SessionCard } from '@/components/session/SessionCard';
 import { toLocalDateString } from '@/lib/utils/date';
@@ -92,7 +93,11 @@ export default function HomePage() {
 
       <TodayPlanCard />
 
+      {/* Today, the gentle revive offer, the journal's evening entry, then the
+          weekly review: daily work first, then closing the day, then the week. */}
       <ReviveCard />
+
+      <JournalLink />
 
       <ReviewLink />
 

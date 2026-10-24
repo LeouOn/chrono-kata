@@ -49,7 +49,7 @@ actually exists.
 | W9 | Work block → timed session flow | partial | M | B | outcome + breadcrumb, session links |
 | W10 | Long projects without heroic pushes | shipped (behind `taskInbox`) | M | B | — |
 | W11 | Weekly review wizard | shipped | M | B | Review, stats, wizard and optional AI summary |
-| W12 | Journal and domain accountability | partial (part 1 of 3) | M | B | journal UI, shutdown UI, export/search UI |
+| W12 | Journal and domain accountability | partial (part 2 of 3) | M | B | export/search UI |
 | W13 | Analytics and calibration | partial | M | A | estimate accuracy, calibration, CSV export |
 | W14 | AI coach upgrade (context and tools) | partial | L | C | tool-calling, prompt library, modes |
 | W15 | Practice and session modes | partial | M | B | focus guard, checklists, per-anchor modes |
@@ -461,7 +461,7 @@ update". Name the wizard's artifact `Review` and leave "reflection" alone.
 
 ## W12 — Journal and domain accountability
 
-**Status:** partial (part 1 shipped 2026-10-24: pure logic, schema fields and the write path) ·
+**Status:** partial (parts 1–2 shipped 2026-10-24: pure logic, schema fields, write path, then the journal and shutdown screens behind `taskInbox`) ·
 **Size:** M · **Lanes:** B · **Depends on:** W1 (Domain), W6 (DayPlan)
 
 **Evidence**
@@ -471,7 +471,8 @@ update". Name the wizard's artifact `Review` and leave "reflection" alone.
   version bump: no table or index is needed (day plans are keyed by local date; export reads a date
   range; search scans in memory). The shutdown is one transaction, idempotent, and a pick that goes
   back returns to `next` with no stale defer day and no data loss.
-- Missing: the journal and shutdown UI (part 2), the export hand-off and search UI (part 3).
+- Shipped (part 2): `/journal` (static route, `?date=`) with the day's entry from the person's template, domain ticks, the evening shutdown (Done / back on the list, one transaction, reopened with its stored choices) and an editable/importable template; a flag-gated Home card. Component tests against real Dexie and a 5-case browser spec.
+- Missing: the markdown export hand-off (download → share → clipboard) and the search UI (part 3).
 - Exists (adjacent, not a journal): free-text `Session.note` (max 2000) and `Reflection.observations`.
   Neither is day-attached, templated, or searchable.
 
