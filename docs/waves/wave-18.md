@@ -348,6 +348,20 @@ removes the copies; a phone layout; flag off).
 - Copies are not encrypted: they hold what the app's own database holds, in the same place.
 - Real storage quotas are only simulated (a rejected write); Android is untested.
 
+## Equivalent mutants (the ledger)
+
+Mutants that were applied to the real source and could not be killed, because the changed code cannot change
+any behaviour. Listing them is what makes "all killed" mean something: each is a deliberate non-test.
+
+| Where | Mutant | Why nothing can tell it apart |
+|---|---|---|
+| `DataTransfer` selection counter | removing the bump on the passphrase prompt's "Not now" / on the preview's "Not now" | "Not now" is disabled while an open is running, and the preview cannot be on screen while a prompt is: both bumps are unreachable defence in depth (found by the reviewer) |
+| `MilestoneCelebration` fix (#68) | `Math.min` instead of `Math.max` over the newly earned milestones | `computeStreak` records only the highest milestone a recompute crosses, so there is never more than one to choose between; `max` stays the right answer if that changes |
+| `dates.ts` (part 2) | an unreadable *core* date kept as the raw text instead of skipping the row | the schema rejects the leftover string, so the row is skipped either way (replaced by a stronger mutant that invents a time) |
+| `dates.ts` (part 2) | the "optional field that is a stamp for a done task" branch | the stamp pass handles that field in every case; the branch was redundant and was deleted |
+| `encrypted.ts` | the explicit "ciphertext shorter than a tag" check; strict base64 pattern | decryption fails the same way, with the same sentence, whether these checks run or not |
+| `import.ts` row loop | skipping a row that is an array before reading it | a list is rejected by the schema anyway; the check only avoids copying a huge array |
+
 ## Decisions for review
 
 1. **The private calendar link is treated as a secret.** It is the one place this changes what an
