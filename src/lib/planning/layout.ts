@@ -121,7 +121,6 @@ export function moveBlock(
   const step = Math.max(1, stepMin) * MINUTE_MS;
   const duration = Math.max(step, block.end - block.start);
   const gridStart = gridCeil(window.start, stepMin);
-  const gridEnd = gridFloor(window.end, stepMin);
   const lastStart = Math.max(gridStart, gridFloor(window.end - duration, stepMin));
   const snapped = snapToStep(block.start + deltaMs, stepMin, 'nearest');
   const start = Math.min(Math.max(snapped, gridStart), lastStart);

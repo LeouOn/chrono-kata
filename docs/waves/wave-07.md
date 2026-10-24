@@ -1,9 +1,9 @@
 # Wave 7 — Time blocking and the day timeline
 
-**Status:** part 1 (pure layout core) complete · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 7
+**Status:** parts 1–2 complete (layout core + day timeline) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 7
 **Status map:** `docs/ROADMAP_STATUS.md` W7
 
-Three PRs: 1) this one, the pure layout core; 2) the day timeline (read, add
+Three PRs: 1) the pure layout core; 2) the day timeline (read, add
 commitments, apply a proposal); 3) drag/resize, conflicts and replan-from-now.
 No UI, no DB writes and no LLM in this part.
 
@@ -84,6 +84,32 @@ The oracle is adopted as `tests/unit/planning/layout-oracle.test.ts` (60 cases �
 7 zones including Auckland/Chatham/Lord Howe, completeness and replan-partition
 checks), credited to dev-lead. Mutations for each fix turn the intended test red.
 
+## Shipped (part 2 — the day timeline)
+
+- **`/timeline`** (flag-gated like the rest of planning): one column from the
+  waking window to its end, hour lines, a now line, fixed commitments, anchors
+  (read-only, from Settings), focus blocks, and a plain "nothing fits" state.
+  A proposed layout renders above the day as dashed ghosts until Apply; Cancel
+  writes nothing.
+- **Adding and editing is never drag-only**: "Add a commitment" and tapping any
+  block open a labelled sheet (Title/From/Until) with inline validation
+  ("The end time needs to be after the start"), a double-submit guard and a
+  two-step remove. Fixed-commitment create/update/delete go through
+  `blockRepo`; a focus block keeps its task link when its times move.
+- **Apply is one action**: `useApplyLayout` replaces the day's focus blocks with
+  the proposal inside a single Dexie transaction; picks that do not fit are not
+  written and stay on the task list. Nothing is written before Apply.
+- **Today card** gained a Now/Next line with until/at clock and Start (the
+  block's duration becomes the session estimate) linked to the same session
+  launcher, plus a Timeline link.
+- Tests: `tests/unit/timeline/timeline-screen.test.tsx` (flag gate, add once
+  under a double submit, end-before-start writes nothing, edit, confirm-remove),
+  `timeline-proposal.test.tsx` (ghost then Apply, cancel writes nothing, single
+  Apply), `tests/e2e/w7-timeline.spec.ts` at 390×844 (persisted commitment,
+  edit, remove, propose/apply, Today Now/Next). Hand-rolled geometry stays
+  dependency-free; PR 3 adds pointer drag/resize on the same geometry and a
+  keyboard/tap path for every move.
+
 ## Known gaps
 
 - The step is **5 or 15 minutes**: the grid is anchored at the Unix epoch, which
@@ -97,6 +123,5 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
 
 ## Not in this part
 
-The timeline UI, fixed-commitment CRUD, applying a proposal, drag/resize,
-conflict UI, replan UI, week view (PRs 2–3), calendar-fed blocks (W8 part 2),
-notifications.
+Drag/resize (PR 3), conflict and replan UI (PR 3), week view, calendar-fed
+blocks (W8 part 2), notifications.

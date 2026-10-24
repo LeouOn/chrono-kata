@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { useFlag } from '@/hooks/useFlags';
 import { useTasks } from '@/hooks/useTasks';
 import { usePlanToday, useTodayKey } from '@/hooks/usePlanning';
+import { useDayBlocks } from '@/hooks/useTimeline';
 import { useSessionLauncher } from '@/components/session/SessionLauncher';
 import { DEFAULT_PICK_MINUTES } from '@/lib/planning/overcommit';
 
@@ -20,6 +21,7 @@ export function TodayPlanCard() {
   const dayKey = useTodayKey();
   const { dayPlan, capacity } = usePlanToday(dayKey);
   const { data: tasks = [] } = useTasks({ enabled });
+  const { data: blocks = [] } = useDayBlocks(dayKey);
   const sessionLauncher = useSessionLauncher();
 
   if (!enabled) return null;
@@ -29,14 +31,76 @@ export function TodayPlanCard() {
     .map((id) => taskById.get(id))
     .filter((task): task is NonNullable<typeof task> => task !== undefined && task.status !== 'done' && task.status !== 'dropped');
 
+  const now = Date.now();
+  const focusWithTask = blocks
+    .filter((block) => block.kind === 'focus' && block.taskId && taskById.has(block.taskId))
+    .filter((block) => {
+      const task = taskById.get(block.taskId!);
+      return task && task.status !== 'done' && task.status !== 'dropped';
+    })
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  const current = focusWithTask.find((block) => block.start.getTime() <= now && now < block.end.getTime());
+  const next = focusWithTask.find((block) => block.start.getTime() > now);
+  const clock = (date: Date) =>
+    `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
   return (
     <Card className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xs uppercase tracking-wide text-text-muted">Today&apos;s plan</h2>
-        <Link href="/plan" className="text-xs text-accent min-h-11 flex items-center">
-          {picks.length > 0 ? 'Adjust' : 'Plan your day'}
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/timeline" className="text-xs text-accent min-h-11 flex items-center">
+            Timeline
+          </Link>
+          <Link href="/plan" className="text-xs text-accent min-h-11 flex items-center">
+            {picks.length > 0 ? 'Adjust' : 'Plan your day'}
+          </Link>
+        </div>
       </div>
+
+      {current ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-accent/10 px-3 py-2">
+          <p className="text-sm text-text min-w-0">
+            <span className="text-[11px] uppercase tracking-wide text-text-muted">Now · until {clock(current.end)} </span>
+            <span className="block truncate">{taskById.get(current.taskId!)?.title}</span>
+          </p>
+          <Button
+            variant="ghost"
+            className="shrink-0 min-h-11 px-3 text-sm border border-border"
+            aria-label={`Start a session for ${taskById.get(current.taskId!)?.title}`}
+            onClick={() =>
+              sessionLauncher.openForLink({
+                taskId: current.taskId!,
+                label: (taskById.get(current.taskId!)?.nextAction || taskById.get(current.taskId!)?.title || 'Focus').slice(0, 50),
+                estimateMin: Math.round((current.end.getTime() - current.start.getTime()) / 60_000),
+              })
+            }
+          >
+            Start
+          </Button>
+        </div>
+      ) : next ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
+          <p className="text-sm text-text min-w-0">
+            <span className="text-[11px] uppercase tracking-wide text-text-muted">Next · {clock(next.start)} </span>
+            <span className="block truncate">{taskById.get(next.taskId!)?.title}</span>
+          </p>
+          <Button
+            variant="ghost"
+            className="shrink-0 min-h-11 px-3 text-sm border border-border"
+            aria-label={`Start a session for ${taskById.get(next.taskId!)?.title}`}
+            onClick={() =>
+              sessionLauncher.openForLink({
+                taskId: next.taskId!,
+                label: (taskById.get(next.taskId!)?.nextAction || taskById.get(next.taskId!)?.title || 'Focus').slice(0, 50),
+                estimateMin: Math.round((next.end.getTime() - next.start.getTime()) / 60_000),
+              })
+            }
+          >
+            Start
+          </Button>
+        </div>
+      ) : null}
 
       {picks.length === 0 ? (
         <p className="text-sm text-text-muted">

@@ -43,8 +43,8 @@ actually exists.
 | W3 | Next-action decomposition (AI) | missing | M | C | decomposition prompt/JSON/UI |
 | W4 | Multi-model triangulation | missing | M | C | parallel calls, merge view, estimates |
 | W5 | Local LLM backbone | partial | M | C | LM Studio, per-feature routing, budget |
-| W6 | Daily planning (picks and capacity) | missing | L | A/B | capacity math, pick ranking, anchors |
-| W7 | Time blocking and calendar view | missing | L | B | timeline, drag/resize, replan |
+| W6 | Daily planning (picks and capacity) | shipped | L | A/B | capacity math, pick ranking, anchors |
+| W7 | Time blocking and calendar view | partial (parts 1–2) | L | B | roadmap core + timeline; drag/resize, replan UI next |
 | W8 | Calendar interop (local-first) | partial (Google only) | M | C | ICS export/import, native calendar |
 | W9 | Work block → timed session flow | partial | M | B | outcome + breadcrumb, session links |
 | W10 | Long projects without heroic pushes | missing | M | B | cadence debt, stall detection, project page |
@@ -303,17 +303,19 @@ a first version can rank on due date + energy only, and say so.
 
 ## W7 — Time blocking and calendar view
 
-**Status:** partial — part 1 (pure layout core: snap/move/resize, deterministic proposal,
-replan-from-now, conflict detection, invariants over 7 zones) ships; the day timeline, fixed-commitment
-CRUD, drag/resize, conflict UI and replan UI remain · **Size:** L · **Lanes:** B · **Depends on:**
-W1 (Block), W6 (picks)
+**Status:** partial — parts 1–2 shipped: the pure layout core (snap/move/resize,
+deterministic proposal, replan-from-now, conflict detection, invariants over 7 zones) and the
+`/timeline` day view with fixed-commitment CRUD, apply-proposal and Today Now/Next. Drag/resize,
+conflict and replan UI remain (PR 3) · **Size:** L · **Lanes:** B · **Depends on:** W1 (Block),
+W6 (picks)
 
 **Evidence**
-- Missing: no block entity, no timeline component, no drag/resize library —
-  `grep -rInE "BlockSchema" src tests` → 0 hits; `package.json` has no `dnd-kit`/`react-dnd`/
-  `framer-motion`-style drag library (only `motion` for animation).
-- Exists (adjacent): `src/components/calendar/` holds `CalendarSettings.tsx` and `CalendarStatus.tsx` —
-  these are the **Google Calendar connection** UI, not a time-block timeline.
+- Shipped: `src/lib/planning/layout.ts` (+`tests/unit/planning/layout*.test.ts`),
+  `src/components/timeline/`, `src/hooks/useTimeline.ts`, `tests/e2e/w7-timeline.spec.ts`.
+- No drag/resize library: geometry is hand-rolled (Pointer Events in PR 3), so touch and mouse
+  share one path; `package.json` still has no `dnd-kit`/`react-dnd`.
+- Exists (adjacent): `src/components/calendar/` is the **Google Calendar connection** UI, not the
+  time-block timeline.
 - Exists: sessions can be pushed to a Google Calendar event (`src/lib/calendar/client.ts` →
   `createEvent`, `deleteEvent`; `session.calendarEventId`).
 
@@ -321,8 +323,7 @@ W1 (Block), W6 (picks)
 - Skip: nothing.
 - Extend: `motion` is already a dependency and can animate a proposed layout; reuse the existing
   "current or next block" surface pattern.
-- Net-new: `Block` table + repository, day/week timeline, drag/resize with 5/15-minute snapping,
-  auto-proposed layout, "replan from now", conflict detection UI.
+- Remaining: drag/resize with 5/15-minute snapping, conflict and replan UI, week view.
 
 **Conflicts:** the roadmap wants drag/resize to work with touch *and* mouse; `motion` is present but
 no pointer/touch DnD library is. Budget for a dependency or a hand-rolled pointer implementation.
