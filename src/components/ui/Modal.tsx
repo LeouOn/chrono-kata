@@ -11,6 +11,11 @@ interface Props {
   title?: string;
   /** Stack layer: 1 = normal (z-50), 2 = rendered above another modal (z-[60]). */
   layer?: 1 | 2;
+  /**
+   * Attribute values put on the dialog panel itself, for callers that need to
+   * recognise their own dialog while it animates out (the command palette does).
+   */
+  panelAttributes?: Record<`data-${string}`, string>;
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -28,7 +33,7 @@ const openModalIds: string[] = [];
 /** Body overflow captured when the FIRST modal opened; restored when the LAST closes. */
 let savedBodyOverflow: string | null = null;
 
-export function Modal({ open, onClose, children, title, layer = 1 }: Props) {
+export function Modal({ open, onClose, children, title, layer = 1, panelAttributes }: Props) {
   const titleId = useId();
   const stackId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -117,6 +122,7 @@ export function Modal({ open, onClose, children, title, layer = 1 }: Props) {
           />
           <motion.div
             ref={panelRef}
+            {...panelAttributes}
             role="dialog"
             aria-modal="true"
             aria-labelledby={title ? titleId : undefined}

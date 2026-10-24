@@ -13,7 +13,14 @@ import type { FlagName } from '@/lib/schemas/settings';
  * shortcut layer over the app, never a way around its flags.
  */
 
-export type CommandActionId = 'capture' | 'session' | 'shortcuts';
+export type CommandActionId = 'capture' | 'session' | 'shortcuts' | 'palette';
+
+/**
+ * The launcher's key, in one place: the provider matches it, the palette shows
+ * it and the cheat sheet lists it, so the three cannot drift. On Apple the
+ * provider accepts ⌘K only (Ctrl+K is the text-field kill-line there).
+ */
+export const PALETTE_SHORTCUT = 'Ctrl+K';
 
 export interface CommandContext {
   navigate: (href: string) => void;
@@ -34,6 +41,8 @@ export interface CommandSpec {
   href?: string;
   /** Imperative action, resolved by the provider. */
   action?: CommandActionId;
+  /** False for entries the palette itself should not list (it is already open). */
+  inPalette?: boolean;
   run: (context: CommandContext) => void;
 }
 
@@ -52,6 +61,20 @@ function nav(id: string, title: string, href: string, options: { group?: string;
 const FLAG = 'taskInbox' as const;
 
 export const COMMANDS: readonly CommandSpec[] = [
+  {
+    id: 'act.palette',
+    title: 'Open the command palette',
+    group: 'Anywhere',
+    keywords: ['palette', 'commands', 'shortcut', 'search', 'jump'],
+    // The same constant the provider matches, so the sheet, the palette and the
+    // keyboard cannot drift apart.
+    shortcut: PALETTE_SHORTCUT,
+    // Not in the palette's own list (it is already open when you could pick
+    // it), and not behind the flag: the launcher works for everyone.
+    inPalette: false,
+    action: 'palette',
+    run: (context) => context.run('palette'),
+  },
   nav('go.home', 'Home', '/', { keywords: ['today', 'dashboard'] }),
   nav('go.sessions', 'Sessions', '/sessions', { keywords: ['practice', 'log'] }),
   nav('go.reflect', 'Reflect', '/reflect', { keywords: ['week', 'reflection', 'summary'] }),
@@ -72,7 +95,8 @@ export const COMMANDS: readonly CommandSpec[] = [
     title: 'Capture a task',
     group: 'Actions',
     keywords: ['add', 'new', 'inbox', 'quick'],
-    shortcut: 'Ctrl+K',
+    // No shortcut label: capturing is Ctrl+K, a query, Enter - or the button.
+    // The sheet must not claim a key that does something else.
     flag: FLAG,
     action: 'capture',
     run: (context) => context.run('capture'),
@@ -98,6 +122,11 @@ export const COMMANDS: readonly CommandSpec[] = [
 /** Commands whose flag is on, in registry order. */
 export function visibleCommands(flags: { isEnabled: (flag: FlagName) => boolean }): CommandSpec[] {
   return COMMANDS.filter((command) => !command.flag || flags.isEnabled(command.flag));
+}
+
+/** What the palette lists: visible commands minus the ones that only belong on the sheet. */
+export function paletteCommands(flags: { isEnabled: (flag: FlagName) => boolean }): CommandSpec[] {
+  return visibleCommands(flags).filter((command) => command.inPalette !== false);
 }
 
 /** Case- and whitespace-insensitive search over the title and keywords. */

@@ -55,6 +55,19 @@ test('the palette opens on Ctrl+K, filters, moves with the arrows and runs a com
   await page.screenshot({ path: '/tmp/qa-w19-shots/palette.png' });
 });
 
+test('Ctrl+K 50 ms after Escape opens the palette again (its exit animation lingers)', async ({ page }) => {
+  await enableTaskInbox(page);
+  await page.goto('/');
+  await openPalette(page);
+  await page.keyboard.press('Escape');
+  // The lead's finding: the dialog node stays ~0.5 s while it animates out, and
+  // the old guard counted it as "another dialog is open".
+  await page.waitForTimeout(50);
+  await page.keyboard.press('Control+k');
+  await expect(page.getByRole('dialog', { name: 'Commands' })).toBeVisible();
+  await expect(page.getByLabel('Type a command')).toBeFocused();
+});
+
 test('the palette is inert while another dialog is open', async ({ page }) => {
   await enableTaskInbox(page);
   await page.goto('/inbox');
@@ -73,7 +86,7 @@ test('the shortcut sheet lives in Settings and matches the palette', async ({ pa
   const sheet = page.getByText('Keyboard shortcuts');
   await expect(sheet).toBeVisible();
   await expect(page.locator('#shortcuts')).toBeInViewport();
-  await expect(page.getByText('Capture a task')).toBeVisible();
+  await expect(page.getByText('Open the command palette')).toBeVisible();
   // The palette lists the same shortcut-bearing command.
   await openPalette(page);
   await page.getByLabel('Type a command').fill('capture a task');

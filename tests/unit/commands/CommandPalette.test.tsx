@@ -7,6 +7,7 @@ import { ShortcutSheet } from '@/components/commands/ShortcutSheet';
 import { resetDbForTesting } from '@/lib/db/db';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { CAPTURE_EVENT } from '@/lib/commands/events';
+import { shortcutCommands, visibleCommands } from '@/lib/commands/registry';
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -33,6 +34,19 @@ function renderProvider() {
   );
 }
 
+/**
+ * The flag-gated commands appear only once the settings query resolves, and the
+ * palette's filter is applied to whatever is visible at that moment. Waiting for
+ * a gated option is the honest precondition for a test that searches for one.
+ */
+async function waitForGated() {
+  await waitFor(() =>
+    expect(screen.getAllByRole('option').some((option) => /Inbox/.test(option.textContent ?? ''))).toBe(
+      true,
+    ),
+  );
+}
+
 function openPalette() {
   act(() => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
@@ -46,6 +60,7 @@ describe('the command palette', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Commands' });
     expect(dialog).toBeTruthy();
 
+    await waitForGated();
     const input = screen.getByLabelText('Type a command');
     fireEvent.change(input, { target: { value: 'inbox' } });
     const options = screen.getAllByRole('option');
@@ -103,7 +118,26 @@ describe('the command palette', () => {
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull(), {
+      timeout: 3000,
+    });
+  });
+
+  it('opens again on Ctrl+K 50 ms after Escape, while its own panel still lingers', async () => {
+    renderProvider();
+    openPalette();
+    expect(await screen.findByRole('dialog', { name: 'Commands' })).toBeTruthy();
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    // The panel's exit animation can keep the dialog node in the DOM for ~0.5 s;
+    // "oops, closed it" must work in that window.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    openPalette();
+    expect(await screen.findByRole('dialog', { name: 'Commands' })).toBeTruthy();
+    expect(screen.getByLabelText('Type a command')).toBeTruthy();
   });
 
   it('opens from inside a text field (documented decision)', async () => {
@@ -121,6 +155,7 @@ describe('the command palette', () => {
     const capture = vi.fn();
     window.addEventListener(CAPTURE_EVENT, capture);
     openPalette();
+    await waitForGated();
     fireEvent.change(await screen.findByLabelText('Type a command'), {
       target: { value: 'capture a task' },
     });
@@ -142,14 +177,39 @@ describe('the command palette', () => {
 });
 
 describe('the shortcut sheet', () => {
-  it('lists the shortcuts from the same registry the palette runs', async () => {
+  function renderSheet() {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
         <ShortcutSheet />
       </QueryClientProvider>,
     );
-    expect(await screen.findByText('Capture a task')).toBeTruthy();
-    expect(screen.getByText(/In the inbox, keys 1–6/)).toBeTruthy();
+  }
+
+  it('lists exactly the registry commands that carry a shortcut, launcher included', async () => {
+    renderSheet();
+    const expected = shortcutCommands(visibleCommands({ isEnabled: () => true })).map(
+      (command) => command.title,
+    );
+    expect(await screen.findByText('Open the command palette')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/In the inbox, keys 1–6/)).toBeTruthy());
+    const rows = Array.from(document.querySelectorAll('#shortcuts ~ ul li')).map(
+      (row) => row.querySelector('span')?.textContent,
+    );
+    expect(rows).toEqual(expected);
+    // The key shown is the one the provider matches.
+    expect(rows).toContain('Open the command palette');
+    // Capture has no shortcut label: Ctrl+K opens the palette, it does not capture.
+    expect(rows).not.toContain('Capture a task');
+  });
+
+  it('still lists the launcher with the flag off, and drops the inbox-only line', async () => {
+    await settingsRepo.setFlag('taskInbox', false);
+    renderSheet();
+    expect(await screen.findByText('Open the command palette')).toBeTruthy();
+    expect(screen.getByText('Ctrl+K')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText(/keys 1–6/)).toBeNull());
+    expect(screen.queryByText('Capture a task')).toBeNull();
+    expect(screen.getByText('Escape closes a dialog.')).toBeTruthy();
   });
 });

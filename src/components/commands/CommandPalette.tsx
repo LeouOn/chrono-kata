@@ -5,10 +5,11 @@ import { Modal } from '@/components/ui/Modal';
 import { useFlag } from '@/hooks/useFlags';
 import {
   filterCommands,
+  paletteCommands,
   shortcutLabel,
-  visibleCommands,
   type CommandSpec,
 } from '@/lib/commands/registry';
+import { PALETTE_DIALOG_ATTRIBUTE } from '@/lib/commands/palette-guard';
 
 interface Props {
   open: boolean;
@@ -29,7 +30,7 @@ export function CommandPalette({ open, onClose, onRun }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const commands = useMemo(
-    () => filterCommands(visibleCommands({ isEnabled: () => enabled }), query),
+    () => filterCommands(paletteCommands({ isEnabled: () => enabled }), query),
     // `visibleCommands` only needs to know about the one flag the registry uses.
     [enabled, query],
   );
@@ -62,7 +63,12 @@ export function CommandPalette({ open, onClose, onRun }: Props) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Commands">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Commands"
+      panelAttributes={{ [PALETTE_DIALOG_ATTRIBUTE]: 'true' }}
+    >
       <div className="space-y-3">
         <label className="sr-only" htmlFor="command-search">
           Type a command

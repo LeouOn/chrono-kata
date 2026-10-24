@@ -33,7 +33,9 @@ export function ShortcutSheet() {
         ))}
       </ul>
       <p className="mt-3 text-xs text-text-muted">
-        In the inbox, keys 1–6 choose an outcome and s skips the item. Escape closes a dialog.
+        {enabled
+          ? 'In the inbox, keys 1–6 choose an outcome and s skips the item. Escape closes a dialog.'
+          : 'Escape closes a dialog.'}
       </p>
     </Card>
   );

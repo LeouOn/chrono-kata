@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CommandPalette } from './CommandPalette';
 import { CAPTURE_EVENT, SESSION_EVENT } from '@/lib/commands/events';
-import { isApplePlatform, type CommandSpec } from '@/lib/commands/registry';
+import { isApplePlatform, PALETTE_SHORTCUT, type CommandSpec } from '@/lib/commands/registry';
+import { nextPaletteOpen } from '@/lib/commands/palette-guard';
 
 /**
  * Owns the palette and the global shortcut (roadmap Wave 19).
@@ -26,8 +27,10 @@ export function CommandProvider() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    // The key comes from the registry, which is also what the cheat sheet lists.
+    const shortcutKey = PALETTE_SHORTCUT.split('+').pop()!.toLowerCase();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== 'k') return;
+      if (event.key.toLowerCase() !== shortcutKey) return;
       // Read the platform at event time: Ctrl+K is the text-field kill-line on
       // Apple, so there ⌘K is the launcher and Ctrl+K is left to the field.
       const platform = navigator.platform || navigator.userAgent || '';
@@ -36,12 +39,8 @@ export function CommandProvider() {
         : event.ctrlKey && !event.metaKey;
       if (!matches) return;
       event.preventDefault();
-      setOpen((current) => {
-        // Open: the shortcut toggles the palette shut.
-        if (current) return false;
-        // Closed: another dialog owns the keyboard, so the palette stays inert.
-        return document.querySelectorAll('[role="dialog"]').length === 0;
-      });
+      // The palette's own exiting panel is not "another dialog" (see palette-guard).
+      setOpen((current) => nextPaletteOpen(current));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -53,7 +52,8 @@ export function CommandProvider() {
         router.push(command.href);
         return;
       }
-      if (command.action === 'capture') window.dispatchEvent(new CustomEvent(CAPTURE_EVENT));
+      if (command.action === 'palette') setOpen(true);
+      else if (command.action === 'capture') window.dispatchEvent(new CustomEvent(CAPTURE_EVENT));
       else if (command.action === 'session') window.dispatchEvent(new CustomEvent(SESSION_EVENT));
       else if (command.action === 'shortcuts') router.push('/settings#shortcuts');
     },

@@ -93,6 +93,22 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
   triage (inert while another dialog is open, and while typing); `Timeline` owns Escape for a live
   drag; `Modal` owns Escape and the Tab cycle for the topmost dialog. The palette adds exactly one
   binding (Ctrl/Cmd+K) and is inert while any other dialog is open.
+- **The launcher's key lives in the registry** (`PALETTE_SHORTCUT` in
+  `src/lib/commands/registry.ts`): the provider matches it, the palette shows it and the cheat sheet
+  lists it as the first row ("Open the command palette"), so the three cannot drift. That entry is
+  flag-independent because the launcher is: with the flag off it is the only row on the sheet.
+- **The sheet tells the truth about capture**: capturing is Ctrl+K, a query, Enter - or the button -
+  so `act.capture` carries no shortcut label. The sheet previously claimed "Capture a task - Ctrl+K",
+  which is a key that opens the palette.
+- **The sheet is generated, and gated like the app**: the "keys 1-6 / s" line comes from the same flag
+  the inbox does, so a flag-off user is not told about keys on a screen they do not have. Escape is
+  always listed.
+- **The launcher's own exiting panel is not "another dialog"**. The palette is a `Modal`, and a
+  `Modal` keeps its `role="dialog"` node while it animates out (~0.5 s), so the old guard
+  (`querySelectorAll('[role="dialog"]').length === 0`) counted the palette itself: Ctrl+K, Escape,
+  Ctrl+K - the normal "oops, closed it" - did nothing for half a second. The panel is now marked
+  (`data-command-palette`) and the guard (`src/lib/commands/palette-guard.ts`) ignores it while still
+  treating any other dialog as a reason to stay shut.
 - **Decision**: the launcher is **Ctrl+K off Apple and ⌘K on Apple**, and it opens even while focus is in
   a text field. It is the app's one global launcher and making it depend on the cursor is how a shortcut
   starts to feel unreliable; the alternative (inert in inputs) would leave a text field as a dead zone
@@ -115,9 +131,9 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
   another dialog is on screen; Escape closes; opens from inside a text field (the documented decision);
   the capture action requests the sheet rather than writing anything; flag-off hides gated commands;
   the sheet lists the registry's shortcuts.
-- `tests/e2e/w19-palette.spec.ts` (3): Ctrl+K → filter → Enter navigates to the journal; arrows and
-  Escape; inert while the capture sheet is open; the Settings sheet is in view at `#shortcuts` and lists
-  the same command the palette finds. The inbox spec's capture helper now goes through the palette, and
+- `tests/e2e/w19-palette.spec.ts` (5): Ctrl+K → filter → Enter navigates to the journal; arrows and
+  Escape; Ctrl+K 50 ms after Escape opens it again; inert while the capture sheet is open; the Settings
+  sheet is in view at `#shortcuts` and lists the palette's own key. The inbox spec's capture helper now goes through the palette, and
   the sweep opens the capture sheet with its button (the shortcut moved).
 - `tests/unit/commands/capture-path.test.tsx` (2) is the path that used to be one keystroke, end to end:
   Ctrl+K → palette → type "capture" → Enter leaves the **capture sheet as the only open dialog** and the
@@ -126,7 +142,16 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
 - `tests/unit/tasks/CaptureSheet.test.tsx` moved to the new contract: the launcher opens on the palette's
   capture request and **not** on a bare Ctrl/Cmd+K keydown, the flag-off case listens for nothing (both
   the event and the key), and the stacking/Escape test requests the sheet instead of pressing a key.
-- Mutants: the dialog guard removed → the inert test red; flag filtering removed → the flag test red.
+- `tests/unit/commands/palette-guard.test.ts` (5): its own closing panel is ignored, a foreign dialog
+  still blocks, a foreign dialog beside its own closing panel blocks, toggle-shut, open when clear.
+  An integration case presses Ctrl+K 50 ms after Escape and the palette opens. Two mutants: the guard
+  counting every dialog → red; the capture row regaining a `Ctrl+K` label → the sheet test red.
+- **Flake hunt (the lead's unnamed Helsinki failure)**: 20 runs of `tests/unit/commands` + `tests/unit/tasks`
+  under four-way parallel load. Two real nondeterminisms, both now fixed and both named: the palette
+  tests searched for flag-gated commands before the settings query had resolved (they now wait for a
+  gated option), and the stacking test waited for a dialog to disappear with `waitFor`'s 1 s default
+  while the exit animation can outlast that under load (3 s now). 20/20 green after the fix.
+- Other mutants: the dialog guard removed → the inert test red; flag filtering removed → the flag test red.
 
 ## Decisions where the roadmap was silent
 

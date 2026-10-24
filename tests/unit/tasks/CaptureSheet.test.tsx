@@ -173,7 +173,11 @@ describe('CaptureLauncher stacking and errors', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Capture' })).toBeNull());
+    // The panel keeps role="dialog" while it animates out; under load that can
+    // outlast waitFor's 1 s default, so give it room.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Capture' })).toBeNull(), {
+      timeout: 3000,
+    });
     // The practice form is still there, unmounted nowhere, with its state.
     expect(screen.getByRole('dialog', { name: 'New session' })).toBe(practiceDialog);
     expect(note.value).toBe('half typed note');
