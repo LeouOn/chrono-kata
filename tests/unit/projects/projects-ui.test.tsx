@@ -110,7 +110,7 @@ describe('ProjectsScreen', () => {
 
     const [first] = rows as [HTMLElement];
     expect(first.querySelector('a')?.getAttribute('href')).toBe(`/projects/detail?id=${busy.id}`);
-    expect(first.textContent).toContain('Worked on 2 days ago'); // from the task session, not lastTouchedAt (60 days)
+    expect(first.textContent).toContain('Last worked 2 days ago'); // from the task session, not lastTouchedAt (60 days)
     expect(first.textContent).toContain('2 a week, 45 min each');
     expect(first.textContent).toContain('This week: 10 of 90 min');
     expect(first.textContent).toContain('1 next task');
@@ -126,7 +126,7 @@ describe('ProjectsScreen', () => {
     await makeProject('Ancient plan', { cadencePerWeek: 3 }, at(200));
     const { container } = mount(<ProjectsScreen />);
     await screen.findByRole('list', { name: 'Projects' });
-    expect(container.textContent).toContain('Worked on 6 months ago');
+    expect(container.textContent).toContain('Last worked 6 months ago');
     expect(container.textContent).not.toMatch(GUILT);
     expectNamedControls(container);
     for (const link of within(container).getAllByRole('link')) expect(link.className).toContain('min-h-11');
@@ -170,7 +170,7 @@ describe('ProjectDetail', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Write the novel' })).toBeTruthy();
 
     // Header: status, domain, last work (from today's TASK session, not lastTouchedAt 30 days ago).
-    expect(container.textContent).toContain('Active · Career/Build · Worked on today');
+    expect(container.textContent).toContain('Active · Career/Build · Worked today');
 
     // What is next.
     expect(screen.getByText('Pick up here')).toBeTruthy();
@@ -225,6 +225,63 @@ describe('ProjectDetail', () => {
     const next = screen.getByRole('heading', { name: 'What is next' }).parentElement!;
     expect(within(next).getByText('Pick up here')).toBeTruthy();
     expect(within(next).getByText('Pick up at the lighthouse')).toBeTruthy();
+  });
+
+  it('REPRO: an unrelated edit of the project does not resurrect its older note', async () => {
+    // The project's own note was written 30 days ago; a TASK session 3 days ago left a newer one.
+    vi.setSystemTime(at(30));
+    const project = await projectRepo.create({ title: 'Garden', status: 'active', breadcrumb: 'buy seeds' });
+    const task = await taskRepo.create({ title: 'Edge the bed', status: 'next', projectId: project.id, source: 'manual' });
+    vi.setSystemTime(at(3, 11));
+    await makeSession({ taskId: task.id, startedAt: at(3), breadcrumb: 'next: edge the bed' });
+
+    // Today the project is edited for ANOTHER reason (what the weekly review's pause or a rhythm change does).
+    vi.setSystemTime(NOW);
+    const edited = await projectRepo.update(project.id, { cadencePerWeek: 2 });
+    expect(edited.updatedAt).toEqual(NOW);
+
+    const first = mount(<ProjectDetail projectId={project.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Garden' });
+    const next = screen.getByRole('heading', { name: 'What is next' }).parentElement!;
+    expect(within(next).getByText('next: edge the bed')).toBeTruthy();
+    expect(within(next).queryByText('buy seeds')).toBeNull();
+    first.unmount();
+
+    // A note typed AFTER that session (the review) is newer, so it wins.
+    vi.setSystemTime(at(1));
+    await projectRepo.update(project.id, { breadcrumb: 'typed in the review' });
+    vi.setSystemTime(NOW);
+    mount(<ProjectDetail projectId={project.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Garden' });
+    const nextAgain = screen.getByRole('heading', { name: 'What is next' }).parentElement!;
+    expect(within(nextAgain).getByText('typed in the review')).toBeTruthy();
+    expect(within(nextAgain).queryByText('next: edge the bed')).toBeNull();
+  });
+
+  it('the list row and the page count the same next tasks (a deferred one is neither)', async () => {
+    const project = await makeProject('Write the novel');
+    await taskRepo.create({ title: 'Outline', status: 'next', projectId: project.id, source: 'manual' });
+    await taskRepo.create({ title: 'Draft', status: 'next', projectId: project.id, source: 'manual' });
+    await taskRepo.create({ title: 'Later', status: 'next', projectId: project.id, source: 'manual', deferUntil: at(-3) });
+
+    const list = mount(<ProjectsScreen />);
+    const row = await screen.findByRole('link', { name: /Write the novel/ });
+    expect(row.textContent).toContain('2 next tasks');
+    list.unmount();
+
+    mount(<ProjectDetail projectId={project.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Write the novel' });
+    const items = within(screen.getByRole('list', { name: 'Next tasks' })).getAllByRole('listitem');
+    expect(items.map((li) => li.firstChild?.textContent).sort()).toEqual(['Draft', 'Outline']);
+  });
+
+  it('gives the "Open" link a 44px target in both directions', async () => {
+    const project = await makeProject('Write the novel');
+    await makeSession({ projectId: project.id, startedAt: at(1), breadcrumb: 'a note' });
+    mount(<ProjectDetail projectId={project.id} />);
+    const open = await screen.findByRole('link', { name: /^Open session from / });
+    expect(open.className).toContain('min-h-11');
+    expect(open.className).toContain('min-w-11');
   });
 
   it('reads calmly for a project with no note, no tasks and no sessions', async () => {

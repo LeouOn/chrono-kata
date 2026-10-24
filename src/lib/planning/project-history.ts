@@ -137,6 +137,16 @@ export function projectTimeline(sessionsOfProject: readonly SessionLike[]): Time
 /** How many tasks "what is next" lists. */
 export const NEXT_TASKS_SHOWN = 3;
 
+/**
+ * Is this a task to do next, right now? One definition, used by the page's list
+ * and the list row's count so they cannot disagree: status `next`, and not
+ * deferred to a later time.
+ */
+export function isNextNow(task: Pick<Task, 'status' | 'deferUntil'>, now: Date): boolean {
+  if (task.status !== 'next') return false;
+  return !task.deferUntil || task.deferUntil.getTime() <= now.getTime();
+}
+
 export interface SessionNote {
   readonly at: Date;
   readonly text: string;
@@ -166,11 +176,17 @@ export interface NextAction {
  * session on one of its TASKS (nearly all of them) only writes it to the task,
  * so the project's own `breadcrumb` is often empty or behind. The note shown is
  * therefore the newer of the two: the latest session note if that session
- * started after the project was last updated, otherwise the project's own (a
- * note typed in the weekly review is newer than the sessions before it).
+ * started after the project's note last CHANGED (`breadcrumbAt`, stamped by the
+ * repository only when the text changes), otherwise the project's own (a note
+ * typed in the weekly review is newer than the sessions before it).
+ *
+ * `updatedAt` is NOT the note's time: it moves on every write to the row
+ * (pausing, a cadence edit), which would make an old note look new. It is used
+ * only as the fallback for a row written before `breadcrumbAt` existed, and such
+ * a row keeps that old behaviour until its note is next written.
  */
 export function projectNextAction(
-  project: Pick<Project, 'id' | 'breadcrumb' | 'updatedAt'>,
+  project: Pick<Project, 'id' | 'breadcrumb' | 'breadcrumbAt' | 'updatedAt'>,
   tasks: readonly Task[],
   now: Date,
   options: { readonly limit?: number; readonly sessionNote?: SessionNote | null } = {},
@@ -178,17 +194,17 @@ export function projectNextAction(
   const limit = options.limit ?? NEXT_TASKS_SHOWN;
   const own = typeof project.breadcrumb === 'string' ? project.breadcrumb.trim() : '';
   const fromSession = options.sessionNote ?? null;
+  const ownAt = project.breadcrumbAt ?? project.updatedAt;
   const note =
     own !== '' && fromSession !== null
-      ? fromSession.at.getTime() > project.updatedAt.getTime()
+      ? fromSession.at.getTime() > ownAt.getTime()
         ? fromSession.text
         : own
       : own !== ''
         ? own
         : (fromSession?.text ?? '');
   const nextTasks = tasks
-    .filter((task) => task.projectId === project.id && task.status === 'next')
-    .filter((task) => !task.deferUntil || task.deferUntil.getTime() <= now.getTime())
+    .filter((task) => task.projectId === project.id && isNextNow(task, now))
     .sort((a, b) => {
       const byTouch = b.touchedAt.getTime() - a.touchedAt.getTime();
       if (byTouch !== 0) return byTouch;
@@ -198,18 +214,18 @@ export function projectNextAction(
   return { breadcrumb: note === '' ? null : note, nextTasks };
 }
 
-/** "Last worked on ..." for a number of whole local days, in calm words. */
+/** When a project was last worked on, for a number of whole local days, in calm words. */
 export function workedAgo(days: number): string {
   const d = Math.max(0, Math.floor(days));
-  if (d === 0) return 'Worked on today';
-  if (d === 1) return 'Worked on yesterday';
-  if (d < 7) return `Worked on ${d} days ago`;
+  if (d === 0) return 'Worked today';
+  if (d === 1) return 'Last worked yesterday';
+  if (d < 7) return `Last worked ${d} days ago`;
   if (d < 60) {
     const weeks = Math.floor(d / 7);
-    return weeks === 1 ? 'Worked on a week ago' : `Worked on ${weeks} weeks ago`;
+    return weeks === 1 ? 'Last worked a week ago' : `Last worked ${weeks} weeks ago`;
   }
   const months = Math.floor(d / 30);
-  return `Worked on ${months} months ago`;
+  return `Last worked ${months} months ago`;
 }
 
 export interface RhythmLines {
@@ -261,7 +277,7 @@ export function projectSummaries(input: {
       project,
       daysQuiet: daysUntouched(lastWork.get(project.id) ?? project.lastTouchedAt, now),
       progress: cadenceProgress(project, input.sessions, now, projectOfTask),
-      nextCount: input.tasks.filter((task) => task.projectId === project.id && task.status === 'next').length,
+      nextCount: input.tasks.filter((task) => task.projectId === project.id && isNextNow(task, now)).length,
     }));
   const rank = (status: Project['status']) => (status === 'active' ? 0 : 1);
   return rows.sort((a, b) => {

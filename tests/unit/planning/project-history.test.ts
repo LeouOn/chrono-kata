@@ -3,6 +3,7 @@ import { addDays } from '@/lib/pacing/days';
 import { cadenceProgress, projectOfTaskIndex } from '@/lib/planning/cadence';
 import {
   NEXT_TASKS_SHOWN,
+  isNextNow,
   latestSessionNote,
   outcomeLabel,
   projectNextAction,
@@ -157,6 +158,55 @@ describe('projectNextAction', () => {
   });
 });
 
+describe('isNextNow: one definition of "a task to do next" for the page and the list', () => {
+  it('is status next and not deferred to a later time', () => {
+    inZone('UTC', () => {
+      const t = (p: Parameters<typeof makeTask>[0]) => isNextNow(makeTask(p), NOW());
+      expect(t({ status: 'next' })).toBe(true);
+      expect(t({ status: 'next', deferUntil: daysAgo(1) })).toBe(true); // the deferral has passed
+      expect(t({ status: 'next', deferUntil: NOW() })).toBe(true); // ends exactly now
+      expect(t({ status: 'next', deferUntil: daysAgo(-2) })).toBe(false);
+      for (const status of ['inbox', 'scheduled', 'waiting', 'done', 'dropped'] as const) {
+        expect(t(status === 'done' ? { status, doneAt: daysAgo(1) } : { status }), status).toBe(false);
+      }
+    });
+  });
+
+  it('makes the list count and the page list agree, deferred tasks included in the fixture', () => {
+    inZone('UTC', () => {
+      const random = seeded(0x4e47);
+      for (let i = 0; i < 60; i += 1) {
+        const project = makeProject({ title: `P${i}`, lastTouchedAt: daysAgo(3) });
+        const other = makeProject({});
+        const tasks = Array.from({ length: random.int(0, 9) }, () =>
+          makeTask({
+            projectId: random.chance(0.8) ? project.id : other.id,
+            status: random.pick(['next', 'next', 'next', 'inbox', 'waiting'] as const),
+            deferUntil: random.chance(0.4) ? daysAgo(random.int(-5, 5)) : null,
+            touchedAt: daysAgo(random.int(0, 20)),
+          }),
+        );
+        const row = projectSummaries({ projects: [project], sessions: [], tasks, now: NOW() })[0]!;
+        const page = projectNextAction(project, tasks, NOW(), { limit: 1000 }).nextTasks;
+        expect(row.nextCount, `case ${i}`).toBe(page.length);
+        expect(page.every((task) => isNextNow(task, NOW()))).toBe(true);
+      }
+    });
+  });
+
+  it('a deferred task is in the fixture and in neither count', () => {
+    inZone('UTC', () => {
+      const project = makeProject({});
+      const tasks = [
+        makeTask({ projectId: project.id, title: 'now' }),
+        makeTask({ projectId: project.id, title: 'later', deferUntil: daysAgo(-3) }),
+      ];
+      expect(projectSummaries({ projects: [project], sessions: [], tasks, now: NOW() })[0]!.nextCount).toBe(1);
+      expect(projectNextAction(project, tasks, NOW()).nextTasks.map((t) => t.title)).toEqual(['now']);
+    });
+  });
+});
+
 describe('the note shown as "pick up here"', () => {
   const noteAt = (daysBack: number, text: string) => ({ at: daysAgo(daysBack), text });
 
@@ -182,6 +232,38 @@ describe('the note shown as "pick up here"', () => {
     });
   });
 
+  it('KNOWN CASE: an unrelated edit of the project does not make its old note look new', () => {
+    // The project's own note was written 30 days ago; a task session left a newer note 3 days ago;
+    // today the project is edited for another reason (a cadence change, a pause in the review):
+    // updatedAt is now, but the NOTE did not change, so the newer session note still wins.
+    inZone('UTC', () => {
+      const project = makeProject({ breadcrumb: 'buy seeds', breadcrumbAt: daysAgo(30), updatedAt: daysAgo(0) });
+      const next = projectNextAction(project, [], NOW(), { sessionNote: noteAt(3, 'next: edge the bed') });
+      expect(next.breadcrumb).toBe('next: edge the bed');
+    });
+  });
+
+  it('uses the note\'s own time, not updatedAt, when both are known', () => {
+    inZone('UTC', () => {
+      // Written yesterday (newer than the session) but the row was touched again today.
+      const newer = makeProject({ breadcrumb: 'typed yesterday', breadcrumbAt: daysAgo(1), updatedAt: daysAgo(0) });
+      expect(projectNextAction(newer, [], NOW(), { sessionNote: noteAt(4, 'older session note') }).breadcrumb).toBe('typed yesterday');
+      // Written long ago, row updated recently: the session note is newer than the NOTE.
+      const stale = makeProject({ breadcrumb: 'written long ago', breadcrumbAt: daysAgo(40), updatedAt: daysAgo(1) });
+      expect(projectNextAction(stale, [], NOW(), { sessionNote: noteAt(4, 'newer session note') }).breadcrumb).toBe('newer session note');
+    });
+  });
+
+  it('a row from before breadcrumbAt existed falls back to updatedAt (the old behaviour, until its note is next written)', () => {
+    inZone('UTC', () => {
+      const legacy = makeProject({ breadcrumb: 'old note', updatedAt: daysAgo(0) });
+      expect(legacy.breadcrumbAt).toBeUndefined();
+      expect(projectNextAction(legacy, [], NOW(), { sessionNote: noteAt(3, 'session note') }).breadcrumb).toBe('old note');
+      const legacyOlder = makeProject({ breadcrumb: 'old note', updatedAt: daysAgo(9) });
+      expect(projectNextAction(legacyOlder, [], NOW(), { sessionNote: noteAt(3, 'session note') }).breadcrumb).toBe('session note');
+    });
+  });
+
   it('latestSessionNote is the newest note in a newest-first timeline, skipping sessions without one', () => {
     inZone('UTC', () => {
       const project = makeProject({});
@@ -200,16 +282,16 @@ describe('the note shown as "pick up here"', () => {
 describe('workedAgo', () => {
   it('names the span in calm words at every boundary', () => {
     const cases: [number, string][] = [
-      [0, 'Worked on today'], [1, 'Worked on yesterday'], [2, 'Worked on 2 days ago'], [6, 'Worked on 6 days ago'],
-      [7, 'Worked on a week ago'], [13, 'Worked on a week ago'], [14, 'Worked on 2 weeks ago'], [59, 'Worked on 8 weeks ago'],
-      [60, 'Worked on 2 months ago'], [171, 'Worked on 5 months ago'],
+      [0, 'Worked today'], [1, 'Last worked yesterday'], [2, 'Last worked 2 days ago'], [6, 'Last worked 6 days ago'],
+      [7, 'Last worked a week ago'], [13, 'Last worked a week ago'], [14, 'Last worked 2 weeks ago'], [59, 'Last worked 8 weeks ago'],
+      [60, 'Last worked 2 months ago'], [171, 'Last worked 5 months ago'],
     ];
     for (const [days, words] of cases) expect(workedAgo(days), `${days} days`).toBe(words);
   });
 
   it('clamps nonsense to today and never uses a guilt word', () => {
-    expect(workedAgo(-4)).toBe('Worked on today');
-    expect(workedAgo(0.9)).toBe('Worked on today');
+    expect(workedAgo(-4)).toBe('Worked today');
+    expect(workedAgo(0.9)).toBe('Worked today');
     for (let d = 0; d <= 800; d += 1) expect(workedAgo(d), `${d}`).not.toMatch(GUILT);
   });
 });

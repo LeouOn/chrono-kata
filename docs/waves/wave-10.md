@@ -20,7 +20,7 @@ The page is read-only: opening it writes nothing (tested), so there is nothing t
 lose. Revive and the minimum session arrive in part 3.
 
 - **List** (`ProjectsScreen`): active then paused projects, the one worked on most
-  recently first. Each row: "Worked on 2 days ago", its rhythm and how this week
+  recently first. Each row: "Last worked 2 days ago", its rhythm and how this week
   stands, and how many next tasks it has. Finished and let-go projects are left
   off (they rest); their page still opens by URL.
 - **Page** (`ProjectDetail`): *What is next* (the newest "pick up here" note and
@@ -43,10 +43,23 @@ Decisions:
   session on one of its *tasks* (nearly all of them) only writes it to the task,
   so `Project.breadcrumb` is often empty or behind: the page would otherwise say
   "No note yet" above a timeline full of notes. The latest session note wins if
-  that session started after the project was last updated; a note typed in the
+  that session started after the project's note last CHANGED; a note typed in the
   weekly review (newer than the sessions) wins over older sessions.
+- **"Last changed" is `Project.breadcrumbAt`, not `updatedAt`.** A first version
+  compared the session note with `updatedAt`, which moves on every write to the
+  row, so pausing a project in the review or editing its rhythm made an OLD note
+  look new and it resurfaced as the page's headline (reproduced by dev.lead in the
+  built app). The repository now stamps `breadcrumbAt` only when the note's text
+  changes (one place: every app write of a project's note goes through
+  `projectRepo.update`/`create`); nothing a caller passes can set it. Rows from
+  before the field have no stamp and fall back to `updatedAt` until their note is
+  next written, which is the old behaviour for them and no worse. Pinned by a
+  permanent test of the repro.
+- **One definition of "a task to do next"** (`isNextNow`: status `next`, not deferred
+  to later) feeds both the list row's count and the page's list, so a deferred task
+  is in neither.
 - **Calm wording by construction**, tested against the guilt list: a quiet project
-  was "worked on 6 months ago"; a met week is "kept", an unmet one is "n of m";
+  was "last worked 6 months ago"; a met week is "kept", an unmet one is "n of m";
   a project's status reads Active / Paused / Finished / **Let go**, never "dropped".
 - Controls are 44 px and nothing sits under the practice button: the per-session
   link is left-aligned under its note, not at the right edge.

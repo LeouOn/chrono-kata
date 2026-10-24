@@ -194,7 +194,7 @@ export function ProjectDetail({ projectId }: { projectId: string | null }) {
                     ) : null}
                     <Link
                       href={`/sessions/detail?id=${entry.sessionId}`}
-                      className="mt-1 inline-flex items-center min-h-11 text-xs text-accent"
+                      className="mt-1 inline-flex items-center justify-center min-h-11 min-w-11 text-xs text-accent"
                       aria-label={`Open session from ${formatDay(day.dayKey)} at ${formatClock(entry.at)}`}
                     >
                       Open

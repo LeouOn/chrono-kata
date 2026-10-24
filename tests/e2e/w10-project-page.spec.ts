@@ -80,6 +80,7 @@ async function reachable(locator: Locator) {
   const box = await locator.boundingBox();
   expect(box, 'control has a box').not.toBeNull();
   expect(box!.height, 'at least 44px tall').toBeGreaterThanOrEqual(44);
+  expect(box!.width, 'at least 44px wide').toBeGreaterThanOrEqual(44);
   const hit = await locator.evaluate((el) => {
     const rect = el.getBoundingClientRect();
     const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -101,10 +102,10 @@ test('Home to the list to a project: the work done through its task shows up, ca
   await projectsLink.click();
   await expect(page).toHaveURL(/\/projects$/);
 
-  // The list: the project, worked on today (from task sessions, which carry no projectId).
+  // The list: the project, worked today (from task sessions, which carry no projectId).
   await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
   const row = page.getByRole('link', { name: /draft chapter two/ });
-  await expect(row).toContainText('Worked on today');
+  await expect(row).toContainText('Worked today');
   await expect(row).toContainText('no rhythm set');
   await reachable(row);
   await noSidewaysScroll(page);
@@ -115,7 +116,7 @@ test('Home to the list to a project: the work done through its task shows up, ca
   // The page.
   await expect(page).toHaveURL(/\/projects\/detail\?id=/);
   await expect(page.getByRole('heading', { level: 1, name: 'draft chapter two' })).toBeVisible();
-  await expect(page.getByText(/Active · .*Worked on today/)).toBeVisible();
+  await expect(page.getByText(/Active · .*Worked today/)).toBeVisible();
   await expect(page.getByText('2 sessions').first()).toBeVisible();
   // "What is next" carries the note the TASK sessions left (the project has none of its own).
   const next = page.getByRole('heading', { name: 'What is next' }).locator('..');
