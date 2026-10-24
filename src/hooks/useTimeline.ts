@@ -8,7 +8,9 @@ import { usePlanToday } from '@/hooks/usePlanning';
 import { resolveAnchors, resolveWakingHours } from '@/lib/planning/resolve';
 import { anchorsWithinWindow } from '@/lib/planning/anchors';
 import type { AnchorInterval as DatedAnchor } from '@/lib/planning/anchors';
-import { wakingWindow } from '@/lib/planning/time';
+import { localDayStart, wakingWindow, localWallClockToEpoch } from '@/lib/planning/time';
+import { toLocalDateString } from '@/lib/utils/date';
+import { addDays } from '@/lib/pacing/days';
 import { proposeLayout, type Interval, type ProposedBlock } from '@/lib/planning/layout';
 import type { Block, BlockInput } from '@/lib/schemas/block';
 import type { Settings, WakingHours } from '@/lib/schemas/settings';
@@ -19,6 +21,7 @@ export interface TimelineView {
   enabled: boolean;
   dayKey: string;
   window: { start: number; end: number };
+  wakingHours: WakingHours;
   blocks: Block[];
   fixedBlocks: Block[];
   focusBlocks: Block[];
@@ -29,12 +32,24 @@ export interface TimelineView {
 /** Blocks that overlap a day's waking window (any kind). Flag-gated. */
 export function useDayBlocks(dayKey: string, wakingHours: WakingHours) {
   const enabled = useFlag('taskInbox');
-  const window = wakingWindow(dayKey, wakingHours);
+  // Fetch a little beyond the waking window so a commitment outside it is
+  // still visible (it is listed under the timeline, never silently hidden).
+  const from = localDayStart(dayKey);
+  const to = localWallClockToEpoch(addDays(dayKey, 2), '00:00');
   return useQuery({
-    queryKey: ['timelineBlocks', dayKey, window.start, window.end],
-    queryFn: async () => blockRepo.range(new Date(window.start), new Date(window.end)),
+    queryKey: ['timelineBlocks', dayKey, from, to],
+    queryFn: async () => blockRepo.range(new Date(from), new Date(to)),
     enabled,
   });
+}
+
+/** Blocks whose local start day is this timeline's day but which sit outside its window. */
+export function outsideWindowBlocks(blocks: readonly Block[], dayKey: string, window: { start: number; end: number }): Block[] {
+  return blocks.filter(
+    (block) =>
+      (block.end.getTime() <= window.start || block.start.getTime() >= window.end) &&
+      toLocalDateString(block.start) === dayKey,
+  );
 }
 
 /** Everything the timeline renders for one day. */
@@ -73,6 +88,7 @@ export function useTimeline(dayKey: string, settings: Settings | null | undefine
     enabled,
     dayKey,
     window: { start: window.start, end: window.end },
+    wakingHours,
     blocks,
     fixedBlocks,
     focusBlocks,
@@ -112,11 +128,12 @@ export function useFixedBlockMutations(dayKey: string) {
  * Replace the day's focus blocks with a proposed layout in one transaction, and
  * return picked tasks that did not fit back to `next`.
  */
-export function useApplyLayout(dayKey: string) {
+export function useApplyLayout(dayKey: string, wakingHours: WakingHours) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ blocks }: { blocks: ProposedBlock[] }) => {
-      await blockRepo.replaceFutureFocus(windowDates(dayKey), new Date(), blocks);
+      const window = wakingWindow(dayKey, wakingHours);
+      await blockRepo.replaceFutureFocus({ start: new Date(window.start), end: new Date(window.end) }, new Date(), blocks);
     },
     onSuccess: () => {
       invalidate(qc, dayKey);
@@ -124,12 +141,6 @@ export function useApplyLayout(dayKey: string) {
       void qc.invalidateQueries({ queryKey: ['plan'] });
     },
   });
-}
-
-/** The calendar window the apply transaction scopes itself to. */
-function windowDates(dayKey: string): { start: Date; end: Date } {
-  const window = wakingWindow(dayKey, { start: '00:00', end: '23:59' });
-  return { start: new Date(window.start), end: new Date(window.end) };
 }
 
 export type { Interval };

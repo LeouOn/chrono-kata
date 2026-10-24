@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { clockAtOrAfter, localWallClockToEpoch, wakingWindow } from '@/lib/planning/time';
+import { clockAtOrAfter, clockInWakingWindow, localWallClockToEpoch, wakingWindow } from '@/lib/planning/time';
 
 const previousTz = process.env.TZ;
 afterEach(() => {
@@ -36,6 +36,29 @@ describe('clockAtOrAfter', () => {
     expect(start).toBe(localWallClockToEpoch(DAY, '09:00'));
     const end = clockAtOrAfter(start, '10:00', true);
     expect(end).toBe(localWallClockToEpoch(DAY, '10:00'));
+  });
+
+  it('keeps a clock before a daytime window on the window\'s own date', () => {
+    process.env.TZ = 'Europe/Helsinki';
+    const window = wakingWindow(DAY, { start: '09:00', end: '17:00' });
+    const start = clockInWakingWindow(window.start, window.end, '07:30');
+    expect(new Date(start).getDate()).toBe(15);
+    expect(new Date(start).getHours()).toBe(7);
+    expect(new Date(start).getMinutes()).toBe(30);
+  });
+
+  it('keeps a clock after a daytime window on the window\'s own date too', () => {
+    process.env.TZ = 'Europe/Helsinki';
+    const window = wakingWindow(DAY, { start: '09:00', end: '17:00' });
+    const start = clockInWakingWindow(window.start, window.end, '18:00');
+    expect(new Date(start).getDate()).toBe(15);
+    expect(new Date(start).getHours()).toBe(18);
+  });
+
+  it('still maps a clock inside an overnight window to the next day', () => {
+    process.env.TZ = 'Europe/Helsinki';
+    const window = wakingWindow(DAY, { start: '20:00', end: '02:00' });
+    expect(new Date(clockInWakingWindow(window.start, window.end, '00:30')).getDate()).toBe(16);
   });
 
   it('survives a fall-back night in Los Angeles', () => {

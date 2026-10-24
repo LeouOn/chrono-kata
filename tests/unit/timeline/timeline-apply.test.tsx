@@ -17,6 +17,7 @@ vi.mock('@/hooks/useTimeline', async (importOriginal) => ({
   useTimeline: () => ({
     enabled: true,
     dayKey: '2026-06-15',
+    wakingHours: { start: '00:00', end: '23:59' },
     window: { start: now - 3_600_000, end: now + 12 * 3_600_000 },
     blocks: [],
     fixedBlocks: [],

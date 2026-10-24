@@ -8,6 +8,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { useTasks } from '@/hooks/useTasks';
 import { useTodayKey } from '@/hooks/usePlanning';
 import { useTimeline, useFixedBlockMutations, useApplyLayout, TIMELINE_STEP_MIN } from '@/hooks/useTimeline';
+import { toLocalDateString } from '@/lib/utils/date';
 import { useNow } from '@/hooks/useNow';
 import { snapToStep } from '@/lib/planning/layout';
 import { Timeline, toTimelineBlocks, type TimelineBlock } from './Timeline';
@@ -31,7 +32,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   const timeline = useTimeline(dayKey, settings);
   const { data: tasks = [] } = useTasks({ enabled: timeline.enabled });
   const { createBlock, updateBlock, deleteBlock } = useFixedBlockMutations(dayKey);
-  const applyLayout = useApplyLayout(dayKey);
+  const applyLayout = useApplyLayout(dayKey, timeline.wakingHours);
 
   const [preview, setPreview] = useState(false);
   const [sheet, setSheet] = useState<
@@ -41,22 +42,41 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [anchorNotice, setAnchorNotice] = useState(false);
+  const [outsideNotice, setOutsideNotice] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const applyingRef = useRef(false);
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task] as const)), [tasks]);
-  const entries = useMemo(
+  const clock = (instant: number) => {
+    const date = new Date(instant);
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  };
+  const allEntries = useMemo(
     () =>
-      toTimelineBlocks([...timeline.fixedBlocks, ...timeline.focusBlocks], timeline.anchors)
-        .filter((entry) => entry.end > timeline.window.start && entry.start < timeline.window.end)
-        // A focus block shows its task's current name: a rename is visible without
-        // rewriting the block, and applied blocks are not all called "Focus".
-        .map((entry) =>
-          entry.kind === 'focus' && entry.block?.taskId
-            ? { ...entry, title: taskById.get(entry.block.taskId)?.title ?? entry.title }
-            : entry,
-        ),
-    [timeline.fixedBlocks, timeline.focusBlocks, timeline.anchors, timeline.window, taskById],
+      // A focus block shows its task's current name: a rename is visible without
+      // rewriting the block, and applied blocks are not all called "Focus".
+      toTimelineBlocks([...timeline.fixedBlocks, ...timeline.focusBlocks], timeline.anchors).map((entry) =>
+        entry.kind === 'focus' && entry.block?.taskId
+          ? { ...entry, title: taskById.get(entry.block.taskId)?.title ?? entry.title }
+          : entry,
+      ),
+    [timeline.fixedBlocks, timeline.focusBlocks, timeline.anchors, taskById],
+  );
+  const entries = useMemo(
+    () => allEntries.filter((entry) => entry.end > timeline.window.start && entry.start < timeline.window.end),
+    [allEntries, timeline.window],
+  );
+  // Never hide data: commitments that sit outside the waking window belong to
+  // this day but cannot be drawn on the timeline. They are listed below it.
+  const outsideEntries = useMemo(
+    () =>
+      allEntries.filter(
+        (entry) =>
+          (entry.end <= timeline.window.start || entry.start >= timeline.window.end) &&
+          entry.block &&
+          toLocalDateString(entry.block.start) === dayKey,
+      ),
+    [allEntries, timeline.window, dayKey],
   );
   const ghosts = useMemo(() => {
     if (!preview || !timeline.proposal) return [];
@@ -111,6 +131,11 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
     } else {
       await updateBlock({ id: sheet.block.id, patch: { title: fields.title, start: new Date(fields.start), end: new Date(fields.end) } });
     }
+    const outside =
+      fields.end <= timeline.window.start || fields.start >= timeline.window.end;
+    setOutsideNotice(
+      outside ? 'Saved. It is outside your waking hours, so it is listed below the timeline.' : null,
+    );
     setSheet(null);
   }
 
@@ -185,6 +210,12 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
         </Card>
       ) : null}
 
+      {outsideNotice ? (
+        <p role="status" className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-text">
+          {outsideNotice}
+        </p>
+      ) : null}
+
       {error ? (
         <p role="alert" className="text-sm text-hype">
           {error}
@@ -220,6 +251,32 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
       <p className="text-[11px] text-text-muted">
         Tap a block to edit its times. Drag and resize come next; keyboard editing here always works.
       </p>
+
+      {outsideEntries.length > 0 ? (
+        <Card className="space-y-2">
+          <h2 className="text-xs uppercase tracking-wide text-text-muted">Outside your waking hours</h2>
+          <ul className="space-y-2">
+            {outsideEntries.map((entry) => (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  onClick={() => openBlock(entry)}
+                  aria-label={`outside block ${entry.title} ${clock(entry.start)} to ${clock(entry.end)}`}
+                  className="w-full min-h-11 rounded-xl border border-border bg-surface-2 px-3 py-2 text-left text-sm text-text"
+                >
+                  <span className="block truncate font-medium">{entry.title}</span>
+                  <span className="block text-[11px] text-text-muted">
+                    {clock(entry.start)}–{clock(entry.end)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] text-text-muted">
+            These are kept on this day, but they fall outside the waking hours you set.
+          </p>
+        </Card>
+      ) : null}
 
       {sheet ? (
         <BlockSheet

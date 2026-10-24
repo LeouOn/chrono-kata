@@ -5,7 +5,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { Block } from '@/lib/schemas/block';
-import { clockAtOrAfter, epochToLocalClock } from '@/lib/planning/time';
+import { clockInWakingWindow } from '@/lib/planning/time';
 
 function toTimeValue(instant: number): string {
   const date = new Date(instant);
@@ -48,17 +48,8 @@ export function BlockSheet({ open, initial, window, focusTaskTitle, onClose, onS
     if (savingRef.current) return;
     const startClock = parseClock(from);
     const endClock = parseClock(until);
-    const start = startClock ? clockAtOrAfter(window.start, startClock) : null;
-    // An end clock at or before the start only means "after midnight" when the
-    // waking window itself crosses midnight; a daytime 11:00-10:00 is still a
-    // mistake, not a 23-hour block.
-    const crossesMidnight =
-      epochToLocalClock(window.end).clock <= epochToLocalClock(window.start).clock;
-    if (startClock && endClock && endClock <= startClock && !crossesMidnight) {
-      setError('The end time needs to be after the start.');
-      return;
-    }
-    const end = start != null && endClock ? clockAtOrAfter(start, endClock, true) : null;
+    const start = startClock ? clockInWakingWindow(window.start, window.end, startClock) : null;
+    const end = start != null && endClock ? clockInWakingWindow(window.start, window.end, endClock, true) : null;
     if (!title.trim()) {
       setError('Give this block a title.');
       return;

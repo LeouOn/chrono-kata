@@ -92,6 +92,11 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   anchors (read-only, tapping one points to Settings > Planning), focus blocks,
   and a plain "nothing fits" state. A proposed layout renders above the day as
   dashed ghosts until Apply; Cancel writes nothing.
+- **Nothing is hidden or silently moved**: a clock outside the waking span
+  stays on the window's own local date (07:30 in a 09:00-17:00 day is today,
+  not tomorrow), and commitments outside the window are listed in an "Outside
+  your waking hours" section below the timeline, tappable to edit/remove, with
+  a calm note after saving one.
 - **Overnight windows are real**: the block sheet maps a clock to the first
   instant at or after the window start with that local clock, so in a
   20:00–02:00 day "00:30" belongs to the next date and 23:00–01:00 saves;
@@ -140,6 +145,10 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   (v1 behaviour).
 - The 5-minute gap is enforced between proposed blocks and after kept blocks,
   not next to fixed commitments or anchors. By design.
+- **Propose after the morning blocks have happened lays the same picks
+  again** later in the day (3 morning + 3 afternoon blocks for 3 tasks). PR 3's
+  Replan button must call `replanFromNow`, and plain Propose should use the same
+  rule when focus blocks already exist.
 - **Overlapping blocks are drawn on top of each other** (all full-width), so
   the covered block cannot be tapped. PR 2 lets a commitment be added over a
   focus block, so this is reachable today. **PR 3 must lay overlaps out in

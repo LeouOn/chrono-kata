@@ -167,3 +167,26 @@ export function clockAtOrAfter(windowStart: number, clock: string, strictAfter =
   }
   return localWallClockToEpoch(addDays(dayKey, 4), clock);
 }
+
+/**
+ * Map a wall clock to an instant for a waking window. A clock inside the
+ * window's local span resolves to the next occurrence at/after the window start
+ * (so 00:30 in a 20:00-02:00 day is after midnight). A clock OUTSIDE the span
+ * stays on the window start's own local date: "Commute 07:30" added to a
+ * 09:00-17:00 day is today 07:30, not tomorrow.
+ */
+export function clockInWakingWindow(
+  windowStart: number,
+  windowEnd: number,
+  clock: string,
+  strictAfter = false,
+): number {
+  const { dayKey, clock: startClock } = epochToLocalClock(windowStart);
+  const endClock = epochToLocalClock(windowEnd).clock;
+  const crossesMidnight = endClock <= startClock;
+  const inside = crossesMidnight
+    ? clock >= startClock || clock <= endClock
+    : clock >= startClock && clock <= endClock;
+  if (inside) return clockAtOrAfter(windowStart, clock, strictAfter);
+  return localWallClockToEpoch(dayKey, clock);
+}
