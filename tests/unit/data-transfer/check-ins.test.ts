@@ -117,7 +117,6 @@ describe('check-ins in backups', () => {
           checkInRow('2026-09-20', 3),
           checkInRow('2026-09-20', 5), // duplicate date
           checkInRow('2026-09-21', 7), // out of range
-          { ...checkInRow('2026-09-22'), createdAt: 'not a date' },
           checkInRow('22.09.2026'),
           'garbage',
         ],
@@ -126,7 +125,24 @@ describe('check-ins in backups', () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.envelope.checkIns?.map((c) => [c.date, c.energy])).toEqual([['2026-09-20', 3]]);
-    expect(parsed.skipped).toBe(5);
+    expect(parsed.skipped).toBe(4);
+    expect(parsed.repaired).toBe(0);
+  });
+
+  it('keeps a check-in whose bookkeeping time cannot be read, and says it was repaired (not skipped)', () => {
+    // Wave 18: an unreadable createdAt used to cost the whole check-in. The answers are the data; the
+    // time is bookkeeping, so the row is kept with the row's other readable time.
+    const row = checkInRow('2026-09-22', 4);
+    const parsed = parseEnvelope(
+      JSON.stringify({ ...v1File, version: 2, checkIns: [{ ...row, createdAt: 'not a date' }] })
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.envelope.checkIns?.map((c) => [c.date, c.energy])).toEqual([['2026-09-22', 4]]);
+    expect(parsed.envelope.checkIns![0]!.createdAt).toEqual(new Date(row.updatedAt as string));
+    expect(parsed.skipped).toBe(0);
+    expect(parsed.repaired).toBe(1);
+    expect(parsed.repairedBy).toEqual({ checkIns: 1 });
   });
 
   it('rejects a file whose checkIns is not an array', () => {

@@ -298,3 +298,37 @@ export function rowsCover(rows: readonly unknown[], path: string): boolean {
   const parts = tokens(path);
   return rows.some((row) => hasAt(row, parts));
 }
+
+export interface DateLeaf {
+  /** Dotted path from the table; arrays as `[]`, records as `{}`. */
+  path: string;
+  /** True when the schema requires the date (not optional, nullable or defaulted). */
+  required: boolean;
+}
+
+/** Every Date a schema holds, wherever it is nested: the field list the importer's date rules must cover. */
+export function dateLeaves(schema: ZodTypeAny, prefix: string, required = true): DateLeaf[] {
+  switch (typeName(schema)) {
+    case 'ZodOptional':
+    case 'ZodNullable':
+    case 'ZodDefault':
+      return dateLeaves((schema._def as { innerType: ZodTypeAny }).innerType, prefix, false);
+    case 'ZodEffects':
+      return dateLeaves((schema._def as { schema: ZodTypeAny }).schema, prefix, required);
+    case 'ZodDate':
+      return [{ path: prefix, required }];
+    case 'ZodObject': {
+      const shape = (schema as unknown as { shape: Record<string, ZodTypeAny> }).shape;
+      return Object.entries(shape).flatMap(([key, inner]) => dateLeaves(inner, `${prefix}.${key}`, true));
+    }
+    case 'ZodArray':
+      return dateLeaves((schema._def as { type: ZodTypeAny }).type, `${prefix}[]`, true);
+    case 'ZodRecord':
+      return dateLeaves((schema._def as { valueType: ZodTypeAny }).valueType, `${prefix}{}`, true);
+    case 'ZodUnion':
+    case 'ZodDiscriminatedUnion':
+      return (schema as unknown as { options: ZodTypeAny[] }).options.flatMap((option) => dateLeaves(option, prefix, true));
+    default:
+      return [];
+  }
+}
