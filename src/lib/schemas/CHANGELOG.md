@@ -1,5 +1,22 @@
 # Schema Changelog
 
+## 2026-10-24 — Journal, shutdown and the journal template (roadmap W12, part 1)
+
+`day-plan.ts` gains five **optional, non-indexed** fields: `domainChecks` (the
+domains ticked at shutdown, keyed by domain id), `firstActionTomorrow` (≤ 500),
+`picksDone` and `picksBack` (the shutdown's decisions — the same task ids are
+also moved to `done` / `next`, sorted so a repeated shutdown writes the same
+row), and `shutdownAt` (when the shutdown was applied). `journal` (≤ 5,000) and
+`shutdownNote` (≤ 2,000) were already reserved on the row for this wave.
+`settings.ts` gains optional `journalTemplate` (≤ 20,000): the markdown scaffold
+a new entry starts from, which the user may import from a file.
+
+All optional and non-indexed, so Dexie stays on **v8** and rows written before
+this change remain valid. No table or index is added because none is needed: a
+day plan is keyed by its local date, export reads a date range, and searching a
+few thousand plans in memory is cheaper than maintaining an index. Journal text
+never leaves the device in this wave.
+
 ## 2026-10-24 — Review intentions for the week ahead (roadmap W11, wizard)
 
 `review.ts`: `Review` gains optional `nextWeekIntentions`, a record of minutes

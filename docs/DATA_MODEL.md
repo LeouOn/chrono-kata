@@ -105,7 +105,8 @@ Schemas are the boundary: repos validate on write, import validates on read.
   reminder time, notifications, theme/accent/rating style, confirmation flags,
   goals, rest days, freeze tokens, recovery mode and low-energy threshold) and
   timestamps. Missing optionals fall back to `DEFAULT_SETTINGS` readers.
-  It also carries `flags`: an optional, non-indexed object holding any subset
+  It also carries `journalTemplate` (≤ 20,000, W12: the markdown scaffold a new
+  journal entry starts from) and `flags`: an optional, non-indexed object holding any subset
   of the closed flag set `FLAG_NAMES` (`privateMode`, `nativeCalendar`,
   `nudgeKinds`, `sync`). Flags are read/written only via
   `src/lib/settings/flags.ts` (`flagValue`, `withFlag`, `isFlagName`), so an
@@ -117,6 +118,12 @@ Schemas are the boundary: repos validate on write, import validates on read.
   `totalTokensThisMonth`, `totalTokensResetAt`, `updatedAt`.
 - **reflection** (`reflection.ts`): `id`, `periodStart`, `periodEnd`,
   `observations` (1–5 strings), `question`, `sourceSessionIds`, `createdAt`.
+- **dayPlan** (`day-plan.ts`): `date` (primary key — the local day key),
+  `picks` (task ids in order), `capacityMin`, `shutdownNote` (≤ 2,000),
+  `journal` (≤ 5,000), and (W12) optional `domainChecks` (domain id → ticked),
+  `firstActionTomorrow` (≤ 500), `picksDone` / `picksBack` (the shutdown's
+  decisions, sorted), `shutdownAt`, `createdAt`, `updatedAt`. All W12 fields are
+  optional and non-indexed, so no Dexie version changed.
 - **review** (`review.ts`): `weekOf` (primary key — the local Monday day key of
   the reviewed week), `notes` (≤ 10,000), an optional `statsSnapshot` (the
   `WeeklyStatsSchema` object from `src/lib/review/stats.ts`), an optional
