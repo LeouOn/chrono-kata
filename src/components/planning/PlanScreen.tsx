@@ -10,6 +10,7 @@ import { useConfirmDayPlan, usePlanToday, useTodayKey } from '@/hooks/usePlannin
 import { checkOvercommit, DEFAULT_PICK_MINUTES } from '@/lib/planning/overcommit';
 import type { Task } from '@/lib/schemas/task';
 import { DecomposeSheet } from '@/components/tasks/DecomposeSheet';
+import { ReviveCard } from '@/components/projects/ReviveCard';
 import type { RankedPick } from '@/lib/planning/rank-picks';
 
 interface Props {
@@ -162,6 +163,8 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
           </p>
         ) : null}
       </Card>
+
+      <ReviveCard />
 
       {isLoading ? (
         <Card>

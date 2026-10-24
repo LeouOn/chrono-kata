@@ -47,7 +47,7 @@ actually exists.
 | W7 | Time blocking and calendar view | partial (parts 1–2) | L | B | roadmap core + timeline; drag/resize, replan UI next |
 | W8 | Calendar interop (local-first) | partial (ICS UI in review; native later) | M | C | native calendar |
 | W9 | Work block → timed session flow | partial | M | B | outcome + breadcrumb, session links |
-| W10 | Long projects without heroic pushes | partial (parts 1–2 of 3) | M | B | revive card, minimum viable session |
+| W10 | Long projects without heroic pushes | shipped (behind `taskInbox`) | M | B | — |
 | W11 | Weekly review wizard | shipped | M | B | Review, stats, wizard and optional AI summary |
 | W12 | Journal and domain accountability | partial (part 2 of 3) | M | B | export/search UI |
 | W13 | Analytics and calibration | partial | M | A | estimate accuracy, calibration, CSV export |
@@ -395,10 +395,9 @@ version; storing the latest breadcrumb on `Session` avoids that. Worth deciding 
 
 ## W10 — Long projects without heroic pushes
 
-**Status:** partial — parts 1–2 of 3 shipped (pure logic: shared "untouched for N days", cadence by sessions
-or minutes with task-linked work counted, stall detection; two optional `Project` fields, no Dexie bump;
-then the read-only project list and page behind `taskInbox`). The revive card + minimum viable session
-remain; see `docs/waves/wave-10.md`
+**Status:** shipped behind `taskInbox` — pure logic (shared "untouched for N days", cadence by sessions or
+minutes with task-linked work counted, stall detection; two optional `Project` fields, no Dexie bump), the
+read-only project list and page, and the gentle offer with the ten-minute session; see `docs/waves/wave-10.md`
 · **Size:** M · **Lanes:** B · **Depends on:** W1 (Project), W6 (cadence debt)
 
 **Evidence**

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { useSessionLauncher } from '@/components/session/SessionLauncher';
 import { useProjects, useTasks } from '@/hooks/useTasks';
 import { useSessions } from '@/hooks/useSessions';
 import { useDomains } from '@/hooks/useDomains';
@@ -23,6 +24,7 @@ import {
   workedAgo,
   type TimelineEntry,
 } from '@/lib/planning/project-history';
+import { minimumSessionLink } from '@/lib/planning/revive';
 import { formatDuration } from '@/lib/utils/format';
 
 /** How many timeline entries show at first, and how many each "earlier" press adds. */
@@ -57,6 +59,7 @@ export function ProjectDetail({ projectId }: { projectId: string | null }) {
   const tasksQuery = useTasks();
   const domainsQuery = useDomains();
   const { sessions } = useSessions();
+  const launcher = useSessionLauncher();
   const [shown, setShown] = useState(TIMELINE_PAGE);
 
   const loading = projectsQuery.isLoading || tasksQuery.isLoading;
@@ -152,6 +155,28 @@ export function ProjectDetail({ projectId }: { projectId: string | null }) {
         ) : (
           <p className="text-sm text-text-muted">No next tasks.</p>
         )}
+        {project.status === 'active' ? (
+          <div className="space-y-1">
+            {/* The existing launcher and timer with a ten-minute estimate; the project's
+                pick-up note is required to save it, which is the point. ACTIVE projects
+                only: the launcher's "Working on" picker lists only active ones, so for a
+                paused project the link would be dropped silently and a plain practice
+                session opened. A paused project is resting on purpose. */}
+            <Button
+              variant="ghost"
+              className="min-h-11 w-full border border-border"
+              aria-label={`Start a 10-minute session on ${project.title}`}
+              onClick={() => launcher.openForLink(minimumSessionLink(project))}
+            >
+              Start a 10-minute session
+            </Button>
+            <p className="text-xs text-text-muted">Ten minutes is enough to touch it and leave a note.</p>
+          </div>
+        ) : project.status === 'paused' ? (
+          <p className="text-xs text-text-muted">
+            Paused for now. “Make active again” in the weekly review brings it back.
+          </p>
+        ) : null}
       </Card>
 
       <Card className="space-y-1">
