@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { WeekKeySchema } from '@/lib/review/week';
 import { WeeklyStatsSchema, type WeeklyStats } from '@/lib/review/stats';
+import { IntentionsSchema } from '@/lib/review/decisions';
+import { NOTES_MAX } from '@/lib/review/limits';
 
 /** The six steps of the review wizard; drafts store a zero-based step. */
 export const REVIEW_STEP_COUNT = 6;
@@ -15,8 +17,15 @@ export const REVIEW_STEP_COUNT = 6;
  */
 export const ReviewSchema = z.object({
   weekOf: WeekKeySchema,
-  notes: z.string().max(10_000).default(''),
+  notes: z.string().max(NOTES_MAX).default(''),
   statsSnapshot: WeeklyStatsSchema.optional(),
+  /**
+   * What the user intends for the week AFTER this one, as minutes per domain
+   * (roadmap step 6, "shape next week"). It lives on this review so next week's
+   * review can compare against it; `Project.cadencePerWeek` already holds the
+   * per-project target. Optional and non-indexed: no Dexie version change.
+   */
+  nextWeekIntentions: IntentionsSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -44,4 +53,8 @@ export const ReviewDraftInputSchema = ReviewDraftSchema.omit({ updatedAt: true }
 export type ReviewDraftInput = z.infer<typeof ReviewDraftInputSchema>;
 
 /** Fields a caller may set when saving a review; omitted ones keep their value. */
-export type ReviewPatch = { notes?: string; statsSnapshot?: WeeklyStats };
+export type ReviewPatch = {
+  notes?: string;
+  statsSnapshot?: WeeklyStats;
+  nextWeekIntentions?: z.infer<typeof IntentionsSchema>;
+};

@@ -23,6 +23,8 @@ export interface TaskRepository {
   update(id: string, patch: Partial<TaskInput>): Promise<Task>;
   /** Validated status change (see TASK_TRANSITIONS); bumps touchedAt, manages doneAt. */
   setStatus(id: string, status: TaskStatus, now?: Date): Promise<Task>;
+  /** Field patch plus a validated status change, in ONE transaction. */
+  updateStatus(id: string, patch: Partial<TaskInput>, status: TaskStatus, now?: Date): Promise<Task>;
   delete(id: string): Promise<void>;
 }
 
@@ -88,6 +90,25 @@ export class DexieTaskRepository implements TaskRepository {
         touchedAt: new Date(),
         doneAt: existing.doneAt,
       });
+      await db.tasks.put(updated);
+      return updated;
+    });
+  }
+
+  async updateStatus(
+    id: string,
+    patch: Partial<TaskInput>,
+    status: TaskStatus,
+    now: Date = new Date(),
+  ): Promise<Task> {
+    const db = getDb();
+    return db.transaction('rw', db.tasks, async () => {
+      const existing = await db.tasks.get(id);
+      if (!existing) throw new Error(`Task ${id} not found`);
+      // One transaction: a review decision that both changes a field and moves
+      // the status (defer, for example) can never land half-applied.
+      const transitioned = applyTransition({ ...existing, ...patch }, status, now);
+      const updated = TaskSchema.parse({ ...transitioned, id: existing.id, createdAt: existing.createdAt });
       await db.tasks.put(updated);
       return updated;
     });
