@@ -1,6 +1,6 @@
 # Wave 11 — weekly review wizard
 
-**Status:** in progress · **PRs:** data core (this PR), then the wizard, then the
+**Status:** in progress · **PRs:** #45 (data core), then the wizard, then the
 optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
 
 ## What shipped (data core)
