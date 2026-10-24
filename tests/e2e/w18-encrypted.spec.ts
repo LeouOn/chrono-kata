@@ -87,6 +87,10 @@ function backupWithSecrets(seed = 1810): string {
   plantSecrets(data);
   data.settings![0]!.icsSubscriptionUrl = SECRET.icsUrl;
   data.settings![0]!.flags = { taskInbox: true };
+  // The generated streak carries milestones the app has "just" earned; restoring a record with more of them
+  // than the screen last saw makes the app throw a full-screen celebration over the page, which covers the
+  // buttons this test clicks. A person's own exports list the milestones they already had.
+  (data.streak![0] as Record<string, unknown>).milestonesAchieved = [];
   return backupTextOf(data);
 }
 
