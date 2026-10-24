@@ -165,13 +165,15 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
   land together, `touchedAt` moves (so a kept task leaves the waiting window),
   `doneAt` is set exactly on `done`, an illegal transition refuses and leaves
   the row untouched, a missing task is reported instead of written.
-- `tests/unit/review/wizard.test.tsx` (6, real Dexie + react-query, only the
+- `tests/unit/review/wizard.test.tsx` (8, real Dexie + react-query, only the
   router mocked): a saved draft resumes at its step; **two Finish clicks in one
   act() call `complete` exactly once** and store one review; a rejected finish
   shows "nothing was changed" and the button works again on the next press
   (guard reset); two "Let it go" clicks in one act() write once; deferring
-  writes the day and `scheduled` together; "Close for now" saves the step and
-  navigates home.
+  writes the day and `scheduled` together; **a draft left over from the previous
+  week finishes under that week, not today** (the week-rollover resume); an aim
+  typed on the balance step is in the draft immediately; "Close for now" saves
+  the step and navigates home.
 - `tests/e2e/w11-review.spec.ts` (6): the Home card opens step 1 and the inbox
   sheet opens/closes inside the step; letting a waiting task go changes only its
   status (read back from IndexedDB), keeps the row on screen, and survives a

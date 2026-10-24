@@ -9,7 +9,8 @@ import { getDb, resetDbForTesting } from '@/lib/db/db';
 import { reviewRepo } from '@/lib/db/review.repo';
 import { projectRepo } from '@/lib/db/project.repo';
 import { taskRepo } from '@/lib/db/task.repo';
-import { weekKeyFor } from '@/lib/review/week';
+import { weekBefore, weekKeyFor } from '@/lib/review/week';
+import { DOMAIN_SEED_IDS } from '@/lib/db/seed-domains';
 import type { Task } from '@/lib/schemas/task';
 
 const push = vi.fn();
@@ -175,6 +176,41 @@ describe('ReviewWizard', () => {
       );
     });
     expect(await screen.findByText('Deferred to 2026-07-01.')).toBeTruthy();
+  });
+
+  it('finishes a draft that belongs to the previous week under that week, not today', async () => {
+    await seedWaitingTask();
+    const lastWeek = weekBefore(WEEK);
+    await reviewRepo.saveDraft(lastWeek, {
+      step: 5,
+      decisions: { notes: 'carried over from Sunday night' },
+    });
+    renderWizard();
+
+    await screen.findByText(/^Step 6 of 6:/);
+    const notes = screen.getByLabelText('What stood out?') as HTMLTextAreaElement;
+    expect(notes.value).toBe('carried over from Sunday night');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish review' }));
+    expect(await screen.findByRole('heading', { name: 'Review saved' })).toBeTruthy();
+    const reviews = await getDb().reviews.toArray();
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]?.weekOf).toBe(lastWeek);
+    expect(reviews[0]?.notes).toBe('carried over from Sunday night');
+  });
+
+  it('keeps the aim typed on the balance step in the draft', async () => {
+    await seedWaitingTask();
+    renderWizard();
+    await goToStep(3);
+
+    const aim = screen.getByLabelText(/Minutes you aimed for in Trading this week/) as HTMLInputElement;
+    fireEvent.change(aim, { target: { value: '120' } });
+
+    await waitFor(async () => {
+      const draft = await reviewRepo.getDraft(WEEK);
+      expect(draft?.decisions.weekIntentions).toEqual({ [DOMAIN_SEED_IDS.trading]: 120 });
+    });
   });
 
   it('closing for now saves the draft step and returns home', async () => {
