@@ -151,6 +151,22 @@ describe('timeline pointer editing', () => {
     expect((onCommit.mock.calls[0]![1] as { start: number }).start).toBe(entry('a', 9, 10).start + 5 * 60_000);
   });
 
+  it('does not commit an unmoved press but does commit a drag past a snap step', () => {
+    const onCommit = vi.fn();
+    render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={15} />);
+    const block = screen.getByRole('button', { name: /fixed block a 09:00 to 10:00/i });
+    fireEvent.pointerDown(block, { clientY: 100 });
+    fireEvent.pointerUp(block);
+    expect(onCommit).not.toHaveBeenCalled();
+    fireEvent.pointerDown(block, { clientY: 100 });
+    fireEvent.pointerMove(block, { clientY: 166 });
+    fireEvent.pointerUp(block);
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const next = onCommit.mock.calls[0]![1] as { start: number; end: number };
+    expect(next.start).toBe(entry('a', 9, 10).start + 60 * 60_000);
+    expect(next.end).toBe(entry('a', 9, 10).end + 60 * 60_000);
+  });
+
   it('moves with Alt+ArrowDown and resizes with Shift+Alt+ArrowDown', () => {
     const onCommit = vi.fn();
     render(<Timeline window={dayWindow} blocks={[entry('a', 9, 10)]} now={dayWindow.start} onSelect={() => {}} onCommit={onCommit} stepMin={15} />);
