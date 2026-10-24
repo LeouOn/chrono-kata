@@ -24,9 +24,13 @@ card offers a way back in, and then the app leaves the user alone about it.
   no second timer. A project-linked session needs its pick-up note to save (W9), which
   is the whole point: touch the project and leave a note. Saving touches the project,
   so it is no longer quiet and the offer goes away on its own.
-- **The same button on the project page** ("Start a 10-minute session", for active and
-  paused projects) whether or not it is quiet. Opening the page still writes nothing;
-  only saving the session does.
+- **The same button on the project page** ("Start a 10-minute session", for **active**
+  projects) whether or not it is quiet. Opening the page still writes nothing; only
+  saving the session does. Active only, because the launcher's "Working on" picker lists
+  only active projects: for a paused one the form would keep the link in its state but
+  show "No link", so the person would see a plain practice session. A paused project's
+  page says it is paused and that "Make active again" in the weekly review brings it back.
+  (The offer on Home can never reach a paused project: only active ones are ever quiet.)
 
 Restraint is the design (`src/lib/planning/revive.ts`, pure and simulated):
 

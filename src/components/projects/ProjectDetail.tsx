@@ -155,10 +155,13 @@ export function ProjectDetail({ projectId }: { projectId: string | null }) {
         ) : (
           <p className="text-sm text-text-muted">No next tasks.</p>
         )}
-        {project.status === 'active' || project.status === 'paused' ? (
+        {project.status === 'active' ? (
           <div className="space-y-1">
             {/* The existing launcher and timer with a ten-minute estimate; the project's
-                pick-up note is required to save it, which is the point. */}
+                pick-up note is required to save it, which is the point. ACTIVE projects
+                only: the launcher's "Working on" picker lists only active ones, so for a
+                paused project the link would be dropped silently and a plain practice
+                session opened. A paused project is resting on purpose. */}
             <Button
               variant="ghost"
               className="min-h-11 w-full border border-border"
@@ -169,6 +172,10 @@ export function ProjectDetail({ projectId }: { projectId: string | null }) {
             </Button>
             <p className="text-xs text-text-muted">Ten minutes is enough to touch it and leave a note.</p>
           </div>
+        ) : project.status === 'paused' ? (
+          <p className="text-xs text-text-muted">
+            Paused for now. “Make active again” in the weekly review brings it back.
+          </p>
         ) : null}
       </Card>
 

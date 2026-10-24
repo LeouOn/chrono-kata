@@ -340,13 +340,14 @@ describe('ProjectDetail: the ten-minute session', () => {
     expect(container.textContent).not.toMatch(GUILT);
   });
 
-  it('is offered for an active or paused project, and not for a finished or let-go one', async () => {
-    for (const [status, offered] of [['active', true], ['paused', true], ['done', false], ['dropped', false]] as const) {
+  it('is offered for an ACTIVE project only (the launcher\'s picker lists no other), with a calm line for a paused one', async () => {
+    for (const [status, offered] of [['active', true], ['paused', false], ['done', false], ['dropped', false]] as const) {
       cleanup();
       const project = await makeProject(`Project ${status}`, { status });
       mountWithLauncher(project.id);
       await screen.findByRole('heading', { level: 1, name: `Project ${status}` });
       expect(screen.queryByRole('button', { name: /^Start a 10-minute session/ }) !== null, status).toBe(offered);
+      expect(screen.queryByText(/Paused for now\./) !== null, `${status} line`).toBe(status === 'paused');
     }
   });
 
