@@ -254,7 +254,7 @@ test('every route passes the in-house a11y sweep at 390x844', async ({ page }) =
  * pass after somebody changed the theme).
  */
 /** Set the theme the way the app reads it (the settings row), then reload. */
-async function applyTheme(page: Page, theme: 'light' | 'dark', accent: string) {
+async function applyTheme(page: Page, theme: 'light' | 'dark' | 'system', accent: string) {
   await page.goto('/');
   // Wait for the app to create/upgrade the database before opening it raw, so
   // the open cannot create an empty v1 instead.
@@ -291,10 +291,55 @@ async function applyTheme(page: Page, theme: 'light' | 'dark', accent: string) {
   await page.reload();
   await page.waitForFunction(
     ({ theme, accent }) =>
-      document.documentElement.getAttribute('data-theme') === theme &&
+      // 'system' resolves through prefers-color-scheme, so the attribute is absent.
+      (theme === 'system'
+        ? document.documentElement.getAttribute('data-theme') === null
+        : document.documentElement.getAttribute('data-theme') === theme) &&
       document.documentElement.getAttribute('data-accent') === accent,
     { theme, accent },
   );
+}
+
+/**
+ * The computed colours of real elements, not just the tokens: a body
+ * background, a text-accent link and a primary (bg-accent) button, with the
+ * WCAG ratio between them.
+ */
+async function measureComputedContrast(page: Page) {
+  return page.evaluate(() => {
+    const parse = (value: string) => (value.match(/\d+(\.\d+)?/g) ?? ['0', '0', '0']).slice(0, 3).map(Number);
+    const channel = (value: number) => {
+      const c = value / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (rgb: number[]) => 0.2126 * channel(rgb[0]!) + 0.7152 * channel(rgb[1]!) + 0.0722 * channel(rgb[2]!);
+    const ratio = (a: string, b: string) => {
+      const la = luminance(parse(a));
+      const lb = luminance(parse(b));
+      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    };
+    const body = getComputedStyle(document.body).backgroundColor;
+    const accentToken = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();
+    const link = document.querySelector('.text-accent');
+    // A primary button, not a progress bar or a dot that merely paints itself
+    // with the accent: the pair that matters is accent background + text.
+    const button =
+      document.querySelector('.bg-accent.text-base') ??
+      document.querySelector('button.bg-accent') ??
+      document.querySelector('a.bg-accent');
+    const linkColour = link ? getComputedStyle(link).color : null;
+    const buttonBackground = button ? getComputedStyle(button).backgroundColor : null;
+    const buttonText = button ? getComputedStyle(button).color : null;
+    return {
+      accentToken,
+      body,
+      linkColour,
+      linkRatio: linkColour ? ratio(linkColour, body) : null,
+      buttonBackground,
+      buttonText,
+      buttonRatio: buttonBackground && buttonText ? ratio(buttonText, buttonBackground) : null,
+    };
+  });
 }
 
 test('theme tokens meet WCAG AA in light and dark', async ({ page }) => {
@@ -339,6 +384,37 @@ test('theme tokens meet WCAG AA in light and dark', async ({ page }) => {
         if (ratio < minimum) {
           failures.push(`${theme}/${accent}: ${foreground} on ${background} is ${ratio.toFixed(2)}:1, needs ${minimum}:1`);
         }
+      }
+    }
+  }
+  expect(failures, `\n${failures.join('\n')}\n`).toEqual([]);
+});
+
+test('the system theme follows the OS light/dark choice with AA accents', async ({ page }) => {
+  // The most common light-mode case is NOT an explicit data-theme="light": the
+  // app resolves 'system' through prefers-color-scheme. The accent fix has to
+  // cover that path too, measured on the computed colours of real elements.
+  const failures: string[] = [];
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const accent of ['amber', 'sage', 'magenta', 'cyan']) {
+      await applyTheme(page, 'system', accent);
+      const measured = await measureComputedContrast(page);
+      if (!measured.linkColour || measured.linkRatio === null) {
+        failures.push(`${scheme}/${accent}: no text-accent element to measure`);
+        continue;
+      }
+      if (measured.linkRatio < 4.5) {
+        failures.push(
+          `${scheme}/${accent}: text-accent ${measured.linkColour} on ${measured.body} is ${measured.linkRatio.toFixed(2)}:1 (token ${measured.accentToken})`,
+        );
+      }
+      if (measured.buttonRatio === null) {
+        failures.push(`${scheme}/${accent}: no primary button to measure`);
+      } else if (measured.buttonRatio < 4.5) {
+        failures.push(
+          `${scheme}/${accent}: primary button text ${measured.buttonText} on ${measured.buttonBackground} is ${measured.buttonRatio.toFixed(2)}:1`,
+        );
       }
     }
   }

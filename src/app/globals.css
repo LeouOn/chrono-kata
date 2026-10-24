@@ -82,27 +82,60 @@
 }
 
 /* ============================================================
-   LIGHT-THEME ACCENT OVERRIDES
-   The bright accents are tuned for a dark surface. On the light base they fall
-   to 1.9:1 as text and as the text behind a button, so the light theme uses a
-   darker variant of the same hue: it keeps the meaning (still amber, sage,
-   magenta, cyan) and clears AA 4.5:1 both as text and behind the button text.
+   LIGHT-THEME ACCENT VARIANTS, ONCE
+   The bright accents are tuned for a dark surface. On a light surface they fall
+   to 1.9-3.3:1, so the light theme uses a darker shade of the SAME hue (nothing
+   the person learned changes). The values live here once and both light paths
+   consume them: an explicit data-theme="light", and the default "System" theme
+   resolving to light through prefers-color-scheme (where data-theme is absent -
+   that is the common light-mode case, and the one this block exists for).
    ============================================================ */
+:root {
+  --accent-light-amber: #9a5a00;
+  --accent-light-amber-hover: #a86100;
+  --accent-light-sage: #456d34;
+  --accent-light-sage-hover: #4f7a3c;
+  --accent-light-magenta: #a8264e;
+  --accent-light-magenta-hover: #b02a52;
+  --accent-light-cyan: #1f6f8f;
+  --accent-light-cyan-hover: #247a9c;
+}
+
 :root[data-theme="light"][data-accent="amber"] {
-  --color-accent: #9a5a00;
-  --color-accent-hover: #a86100;
+  --color-accent: var(--accent-light-amber);
+  --color-accent-hover: var(--accent-light-amber-hover);
 }
 :root[data-theme="light"][data-accent="sage"] {
-  --color-accent: #456d34;
-  --color-accent-hover: #4f7a3c;
+  --color-accent: var(--accent-light-sage);
+  --color-accent-hover: var(--accent-light-sage-hover);
 }
 :root[data-theme="light"][data-accent="magenta"] {
-  --color-accent: #a8264e;
-  --color-accent-hover: #b02a52;
+  --color-accent: var(--accent-light-magenta);
+  --color-accent-hover: var(--accent-light-magenta-hover);
 }
 :root[data-theme="light"][data-accent="cyan"] {
-  --color-accent: #1f6f8f;
-  --color-accent-hover: #247a9c;
+  --color-accent: var(--accent-light-cyan);
+  --color-accent-hover: var(--accent-light-cyan-hover);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme])[data-accent="amber"],
+  :root:not([data-theme]):not([data-accent]) {
+    --color-accent: var(--accent-light-amber);
+    --color-accent-hover: var(--accent-light-amber-hover);
+  }
+  :root:not([data-theme])[data-accent="sage"] {
+    --color-accent: var(--accent-light-sage);
+    --color-accent-hover: var(--accent-light-sage-hover);
+  }
+  :root:not([data-theme])[data-accent="magenta"] {
+    --color-accent: var(--accent-light-magenta);
+    --color-accent-hover: var(--accent-light-magenta-hover);
+  }
+  :root:not([data-theme])[data-accent="cyan"] {
+    --color-accent: var(--accent-light-cyan);
+    --color-accent-hover: var(--accent-light-cyan-hover);
+  }
 }
 
 /* Personality colors stay constant across themes */

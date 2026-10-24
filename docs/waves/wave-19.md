@@ -14,7 +14,9 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
      measured by its label, the real tap target; a visually hidden file input is exempt because the
      visible button next to it is the control); no horizontal scroll; exactly one `<h1>` and no skipped
      heading levels; one `<main>` and at least one `<nav>`; every `<svg>` is `aria-hidden` or named.
-  2. **Theme-token contrast** computed in the browser from the CSS variables the app really uses:
+  2. **Theme-token contrast** computed in the browser from the CSS variables the app really uses,
+     in both theme paths (explicit light/dark and the OS-driven System theme, measured on the
+     computed colours of a body background, a `text-accent` link and a primary button):
      text/base, text/surface, text/surface-2, text-muted/surface, text-muted/base and the accent in
      both directions (accent as text, and base text on the accent as a button) at AA 4.5:1, for dark
      and light and for all four accent colours.
@@ -35,7 +37,11 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
   - **Light-theme accent variants**: the bright accents are tuned for a dark surface; on the light
     base amber was 1.9:1 as text and behind the button text. Each accent now has a darker variant in
     the light theme (same hue, same meaning) that clears 4.5:1 both as text and as a button
-    background. Dark magenta was also 4.36:1 on the card surface; one shade lighter clears it.
+    background. Dark magenta was also 4.36:1 on the card surface; one shade lighter clears it. The
+    values live once as custom properties and are wired into **both light paths** - explicit
+    `data-theme="light"` and the default "System" theme resolving to light through
+    `prefers-color-scheme` (where no `data-theme` attribute exists, which is the common light-mode
+    case and the one the first version missed; found by the lead looking at the built app).
   - **Reduced motion**: a `prefers-reduced-motion` media query in `globals.css` (no CSS animation,
     transition or smooth scrolling) and `MotionProvider` (`MotionConfig reducedMotion="user"`) in the
     root layout, so motion/react skips transform animations too.
@@ -76,6 +82,7 @@ in dark and red in light for the accent pairs.
 - Journal link's `aria-label` restored → sweep red (`label-in-name`).
 - The reduced-motion media query neutered → reduced-motion test red.
 - The light amber accent restored to the bright value → contrast test red.
+- The system-light accent block deleted → the System-theme test red, naming amber at 1.91:1.
 - The heatmap exemption removed → sweep red (371 target-size failures).
 - The `/timeline` "Plan" link back to 25px wide → sweep red (`target-size`, the named link).
 
