@@ -33,13 +33,25 @@ function minutesOf(clock: string): number {
 }
 
 /**
+ * The waking-hours inputs fire with '' every time somebody clears one to retype
+ * it. That is an incomplete edit, not a failure: it must abort the write quietly
+ * (no red toast), unlike a real storage error.
+ */
+export class IncompleteWakingHours extends Error {
+  constructor() {
+    super('Waking hours need a valid start and end time.');
+    this.name = 'IncompleteWakingHours';
+  }
+}
+
+/**
  * Planning settings (roadmap Wave 6, behind `taskInbox`): waking hours and the
  * recurring protected windows ("anchors"). Optional fields, saved through the
  * settings repository, so backups already round-trip them.
  */
 export function PlanningSettings() {
   const enabled = useFlag('taskInbox');
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, updateSettingsWith } = useSettings();
   const { data: domains = [] } = useDomains({ enabled });
   const [editing, setEditing] = useState<{ anchor: Anchor; isNew: boolean } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Anchor | null>(null);
@@ -48,15 +60,31 @@ export function PlanningSettings() {
 
   if (!enabled) return null;
 
-  async function saveWakingHours(next: WakingHours) {
-    // A cleared time input fires with '' — never write a row that fails the
-    // schema: the importer drops an invalid settings row wholesale, which
-    // would silently lose every setting on restore.
-    const parsed = WakingHoursSchema.safeParse(next);
-    if (!parsed.success) return;
+  /**
+   * Change one end of the waking window.
+   *
+   * The merge happens INSIDE the repository transaction, so the other end comes
+   * from the stored row, not from a render snapshot: the two inputs save on every
+   * change, and building `{ ...wakingHours, start }` here could revert an `end`
+   * that had just been saved (or vice versa).
+   *
+   * The merged value is validated inside the merge: a cleared time input fires
+   * with '', and a row that fails the schema must never be written (the importer
+   * drops an invalid settings row wholesale). Throwing aborts the transaction, so
+   * nothing is half-written either.
+   */
+  async function saveWakingHours(change: Partial<WakingHours>) {
     try {
-      await updateSettings({ wakingHours: parsed.data });
+      await updateSettingsWith((current) => {
+        const next = { ...resolveWakingHours(current), ...change };
+        const parsed = WakingHoursSchema.safeParse(next);
+        if (!parsed.success) throw new IncompleteWakingHours();
+        return { wakingHours: parsed.data };
+      });
     } catch (error) {
+      // A cleared field is an edit in progress: the transaction aborted, so
+      // nothing was written, and the user does not need an error for it.
+      if (error instanceof IncompleteWakingHours) return;
       dispatchToast(error instanceof Error ? error.message : 'Could not save waking hours', 'error');
     }
   }
@@ -89,7 +117,7 @@ export function PlanningSettings() {
               id="waking-start"
               type="time"
               value={wakingHours.start}
-              onChange={(event) => void saveWakingHours({ ...wakingHours, start: event.target.value })}
+              onChange={(event) => void saveWakingHours({ start: event.target.value })}
               className="w-full bg-surface-2 rounded-xl px-3 py-2.5 text-text text-sm border border-border focus:border-accent outline-none min-h-11"
             />
           </div>
@@ -101,7 +129,7 @@ export function PlanningSettings() {
               id="waking-end"
               type="time"
               value={wakingHours.end}
-              onChange={(event) => void saveWakingHours({ ...wakingHours, end: event.target.value })}
+              onChange={(event) => void saveWakingHours({ end: event.target.value })}
               className="w-full bg-surface-2 rounded-xl px-3 py-2.5 text-text text-sm border border-border focus:border-accent outline-none min-h-11"
             />
           </div>

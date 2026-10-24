@@ -9,6 +9,17 @@ import { collectAll } from '@/lib/data-transfer/export';
 import { parseEnvelope } from '@/lib/data-transfer/import';
 import { PlanningSettings } from '@/components/settings/PlanningSettings';
 
+/** Collect the toasts a component dispatches, the way ToastProvider listens. */
+function collectToasts(): { events: { message: string; variant?: string }[]; stop: () => void } {
+  const events: { message: string; variant?: string }[] = [];
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<{ message?: string; variant?: string }>).detail;
+    if (detail?.message) events.push({ message: detail.message, variant: detail.variant });
+  };
+  window.addEventListener('chrono-kata-toast', handler);
+  return { events, stop: () => window.removeEventListener('chrono-kata-toast', handler) };
+}
+
 beforeEach(async () => {
   await resetDbForTesting();
 });
@@ -56,6 +67,26 @@ describe('PlanningSettings', () => {
     });
   });
 
+  it('keeps both ends when the two waking-hours fields change back to back', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    renderWithProviders(<PlanningSettings />);
+
+    const start = await screen.findByLabelText('Awake from');
+    const end = screen.getByLabelText('Awake until');
+
+    // One act, no await between them: the second handler runs before the first
+    // save has come back, which is exactly the desktop fast-typing case. A patch
+    // built from the render snapshot would send the old start and revert it.
+    act(() => {
+      fireEvent.change(start, { target: { value: '08:00' } });
+      fireEvent.change(end, { target: { value: '21:00' } });
+    });
+
+    await waitFor(async () => {
+      expect((await settingsRepo.get()).wakingHours).toEqual({ start: '08:00', end: '21:00' });
+    });
+  });
+
   it('adds an anchor with named controls and a midnight note', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     renderWithProviders(<PlanningSettings />);
@@ -87,7 +118,8 @@ describe('PlanningSettings', () => {
 
   it('never writes an invalid waking-hours row when the field is cleared', async () => {
     await settingsRepo.setFlag('taskInbox', true);
-    const patch = vi.spyOn(settingsRepo, 'patch');
+    const patch = vi.spyOn(settingsRepo, 'patchWith');
+    const toasts = collectToasts();
     renderWithProviders(<PlanningSettings />);
 
     const start = await screen.findByLabelText('Awake from');
@@ -103,11 +135,29 @@ describe('PlanningSettings', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    expect(patch).not.toHaveBeenCalled();
+    // The write is attempted, but the merge validates the merged value INSIDE
+    // the transaction and throws, so the row is left exactly as it was.
     const stored = await settingsRepo.get();
     expect(stored.wakingHours).toEqual({ start: '08:00', end: '22:00' });
     expect(SettingsSchema.safeParse(stored).success).toBe(true);
+    // A field being cleared to retype it is not an error: no red toast.
+    expect(toasts.events).toEqual([]);
+    toasts.stop();
     patch.mockRestore();
+  });
+
+  it('still reports a real save failure', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const toasts = collectToasts();
+    vi.spyOn(settingsRepo, 'patchWith').mockRejectedValueOnce(new Error('storage is unavailable'));
+    renderWithProviders(<PlanningSettings />);
+
+    fireEvent.change(await screen.findByLabelText('Awake from'), { target: { value: '08:00' } });
+
+    await waitFor(() => expect(toasts.events).toHaveLength(1));
+    expect(toasts.events[0]).toEqual({ message: 'storage is unavailable', variant: 'error' });
+    expect((await settingsRepo.get()).wakingHours?.start).toBe('07:00');
+    toasts.stop();
   });
 
   it('keeps the settings row valid after every interaction', async () => {

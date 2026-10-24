@@ -8,6 +8,15 @@ export interface SettingsRepository {
   get(): Promise<Settings>;
   save(settings: Settings): Promise<void>;
   patch(patch: Partial<Settings>): Promise<Settings>;
+  /**
+   * Merge against the row as it is INSIDE one transaction.
+   *
+   * Use this instead of `patch({ nested: { ...renderedState } })` when the new
+   * value depends on the current one: a value read during render can be stale by
+   * the time the write lands, and the patch would then revert a field somebody
+   * else just saved.
+   */
+  patchWith(merge: (current: Settings) => Partial<Settings>): Promise<Settings>;
   /** Set one feature flag, leaving every other flag and setting untouched. */
   setFlag(flag: FlagName, value: boolean): Promise<Settings>;
   /** Replace the per-feature provider routing table. */
@@ -50,7 +59,7 @@ export class DexieSettingsRepository implements SettingsRepository {
    * not with a separate `get()` first: a value read outside the transaction can
    * be stale by the time the write lands.
    */
-  private async patchWith(merge: (current: Settings) => Partial<Settings>): Promise<Settings> {
+  async patchWith(merge: (current: Settings) => Partial<Settings>): Promise<Settings> {
     const db = getDb();
     return db.transaction('rw', db.settings, async () => {
       const current = await this.get();

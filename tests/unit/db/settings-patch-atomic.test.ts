@@ -53,6 +53,20 @@ describe('settingsRepo.patch is one transaction', () => {
     expect(afterToggle.flags?.sync).toBe(true);
   });
 
+  it('merges inside the transaction, so two derived writes both survive', async () => {
+    // `patchWith` is the public escape hatch for a value computed from the
+    // current row (a nested object, a list). The merge must run INSIDE the
+    // transaction, or the second one is built from a stale row and drops the
+    // first — the caller-side version of the same lost update.
+    await Promise.all([
+      settingsRepo.patchWith((current) => ({ restDays: [...(current.restDays ?? []), 'sun'] })),
+      settingsRepo.patchWith((current) => ({ restDays: [...(current.restDays ?? []), 'sat'] })),
+    ]);
+
+    const saved = await settingsRepo.get();
+    expect([...(saved.restDays ?? [])].sort()).toEqual(['sat', 'sun']);
+  });
+
   it('keeps the last of two waking-hours writes and the other settings', async () => {
     // Both inputs save on change; the second value follows the first.
     await Promise.all([
