@@ -4,9 +4,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Block } from '@/lib/schemas/block';
 import type { AnchorInterval as DatedAnchor } from '@/lib/planning/anchors';
 import { moveBlock, resizeBlock, type Interval } from '@/lib/planning/layout';
+import { handleGeometry, laneNeighbours, PX_PER_MIN } from '@/lib/timeline/handles';
 
 const MIN = 60_000;
-const PX_PER_MIN = 1.1;
 
 /**
  * Local wall-clock hour boundaries inside [start, end]. Anchoring at whole UTC
@@ -79,6 +79,12 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
       event.preventDefault();
       dragRef.current = null;
       setDrag(null);
+      // The pointerup after Escape still produces a click; swallow that click
+      // so the edit sheet does not open on the cancelled drag.
+      suppressClickRef.current = true;
+      globalThis.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
     };
     globalThis.addEventListener('keydown', onKey);
     return () => globalThis.removeEventListener('keydown', onKey);
@@ -209,6 +215,9 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
           const heightPx = Math.max(18, top(active.end) - topPx);
           const lane = entry.lane ?? 0;
           const laneCount = Math.max(1, entry.laneCount ?? 1);
+          const geometry = handleGeometry(entry, { ...laneNeighbours(entry, blocks), fullWidth: laneCount === 1 });
+          const startTop = Math.max(0, topPx + geometry.start.top);
+          const endTop = Math.max(0, topPx + geometry.end.top);
           const className =
             entry.kind === 'fixed'
               ? 'bg-surface-2 border-border'
@@ -233,7 +242,7 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
               onKeyDown={(event) => keydown(event, entry)}
               aria-label={`${entry.kind} block ${entry.title} ${clock(active.start)} to ${clock(active.end)}`}
               aria-describedby="timeline-hint"
-              className={`absolute overflow-hidden rounded-xl border px-2 py-1 text-left text-[11px] text-text min-h-11 ${entry.conflicting ? 'ring-2 ring-hype/70' : ''} ${className}`}
+              className={`absolute overflow-hidden rounded-xl border px-2 py-1 text-left text-[11px] text-text ${entry.conflicting ? 'ring-2 ring-accent' : ''} ${className}`}
               style={{
                 top: topPx,
                 height: heightPx,
@@ -256,16 +265,21 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
                   onPointerMove={move}
                   onPointerUp={finish}
                   onPointerCancel={cancel}
-                  className="absolute z-10 flex items-center justify-center bg-transparent"
+                  className="absolute z-10"
                   style={{
                     left: `calc(${(lane / laneCount) * 100}% + 2px)`,
                     width: `calc(${100 / laneCount}% - 4px)`,
-                    top: Math.max(0, topPx - 22),
-                    height: 44,
+                    top: startTop,
+                    height: Math.max(1, geometry.start.height),
                     touchAction: 'none',
+                    background: 'transparent',
                   }}
                 >
-                  <span className="block h-1 w-full rounded-full bg-accent/70" aria-hidden="true" />
+                  <span
+                    className="pointer-events-none absolute left-0 right-0 h-1 rounded-full bg-accent/70"
+                    style={{ top: Math.max(0, topPx + geometry.start.bar - startTop - 2) }}
+                    aria-hidden="true"
+                  />
                 </button>
                 <button
                   type="button"
@@ -274,16 +288,21 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCo
                   onPointerMove={move}
                   onPointerUp={finish}
                   onPointerCancel={cancel}
-                  className="absolute z-10 flex items-center justify-center bg-transparent"
+                  className="absolute z-10"
                   style={{
                     left: `calc(${(lane / laneCount) * 100}% + 2px)`,
                     width: `calc(${100 / laneCount}% - 4px)`,
-                    top: Math.max(0, topPx + heightPx - 22),
-                    height: 44,
+                    top: endTop,
+                    height: Math.max(1, geometry.end.height),
                     touchAction: 'none',
+                    background: 'transparent',
                   }}
                 >
-                  <span className="block h-1 w-full rounded-full bg-accent/70" aria-hidden="true" />
+                  <span
+                    className="pointer-events-none absolute left-0 right-0 h-1 rounded-full bg-accent/70"
+                    style={{ top: Math.max(0, topPx + geometry.end.bar - endTop - 2) }}
+                    aria-hidden="true"
+                  />
                 </button>
               </>
             ) : null}

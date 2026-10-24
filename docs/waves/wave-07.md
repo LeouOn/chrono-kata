@@ -150,8 +150,11 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   only (nearest snap, grid edges, duration kept); release commits, **Escape
   cancels a live drag** (window keydown listener while dragging), and
   `pointercancel` clears the drag so a touch scroll never leaves a stale one.
-  The visual bars are slim; each handle's hit area is 44px tall and reaches
-  outside the block edge, so a 30-minute block (33px) keeps a tappable middle.
+  The visual bars are slim; each handle's hit area reaches outward at most half
+  the gap to its neighbour and inward at most a third of the block, so a
+  30-minute block (33px) keeps an 11px movable middle and adjacent blocks never
+  steal each other's edge. Blocks are drawn at their true height (no min-height
+  stretching); the handle target grows outward instead.
   A 5/15 snap toggle drives proposal, drag and keyboard; keyboard Alt+Up/Down
   moves and Shift+Alt+Up/Down changes the end. The tap-to-edit sheet remains a
   complete alternative, and the first Enter after a pointer interaction is not
@@ -167,7 +170,7 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   `commitLayout` in ONE transaction: focus blocks replaced (started and
   non-focus blocks preserved), only overflow ids removed from an existing plan
   (never creating one, never touching task status), with a calm confirmation
-  afterwards. Mutants killed include: suggestions instead of plan, commit
+  afterwards; the notice clears on the next sheet/drag. Mutants killed include: suggestions instead of plan, commit
   fabricating a plan, Escape disabled, small handle, union-span conflict text,
   proposal ignoring the snap step, lanes tie-break, and the earlier lane/
   keyboard/commit/conflict set.

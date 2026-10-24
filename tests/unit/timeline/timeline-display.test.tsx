@@ -24,6 +24,7 @@ vi.mock('@/hooks/useTimeline', () => ({
     blocks: [focusBlock],
     fixedBlocks: [],
     focusBlocks: [focusBlock],
+    focusInWindow: [focusBlock],
     anchors: [
       {
         id: 'a1',

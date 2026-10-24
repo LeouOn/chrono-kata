@@ -127,6 +127,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
 
   function openNew() {
     setOutsideNotice(null);
+    setApplyNotice(null);
     const start = snapToStep(Math.max(now, timeline.window.start) + 60 * MIN, TIMELINE_STEP_MIN, 'up');
     setSheet({ mode: 'new', kind: 'fixed', start, end: start + 60 * MIN });
   }
@@ -138,6 +139,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
     }
     if (!entry.block) return;
     setOutsideNotice(null);
+    setApplyNotice(null);
     setSheet({ mode: 'edit', block: entry.block, kind: entry.block.kind === 'focus' ? 'focus' : 'fixed' });
   }
 
@@ -183,7 +185,9 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
       setPreview(false);
       setApplyNotice(
         overflow.length > 0
-          ? `Applied. ${overflow.length} pick${overflow.length === 1 ? ' is' : 's are'} back on your list.`
+          ? timeline.hasPlan
+            ? `Applied. ${overflow.length} pick${overflow.length === 1 ? ' is' : 's are'} back on your list.`
+            : `Applied. ${overflow.length} pick${overflow.length === 1 ? ' did' : 's did'} not fit today.`
           : 'Applied. Your day is updated.',
       );
     } catch (e) {
@@ -196,6 +200,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
 
   async function commitTimes(entry: TimelineBlock, next: { start: number; end: number }) {
     setError(null);
+    setApplyNotice(null);
     try {
       if (entry.block) {
         await updateBlock({
@@ -205,8 +210,6 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not move the block.');
-    } finally {
-      /* nothing to release */
     }
   }
 
@@ -231,7 +234,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
           className="min-h-11 border border-border bg-surface text-sm"
           onClick={() => setPreview((value) => !value)}
         >
-          {preview ? 'Hide proposed layout' : timeline.focusBlocks.length > 0 ? 'Replan from now' : 'Propose a layout for today’s picks'}
+          {preview ? 'Hide proposed layout' : timeline.focusInWindow.length > 0 ? 'Replan from now' : 'Propose a layout for today’s picks'}
         </Button>
         <div className="flex items-center gap-1 min-h-11" role="group" aria-label="Drag snap">
           {[5, 15].map((step) => (

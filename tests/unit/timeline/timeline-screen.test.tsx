@@ -101,6 +101,7 @@ describe('timeline screen', () => {
     expect(await screen.findByText(/One time overlap/i)).toBeTruthy();
     expect(await screen.findByText(/share 10:00–11:00/i)).toBeTruthy();
     expect(await screen.findByRole('button', { name: /fixed block B/i })).toBeTruthy();
+    expect((await screen.findByRole('button', { name: /fixed block A/i })).className).toContain('ring-accent');
   });
 
   it('edits and removes a commitment from its block sheet', async () => {

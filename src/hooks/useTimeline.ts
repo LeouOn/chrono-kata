@@ -31,6 +31,7 @@ export interface TimelineView {
   focusBlocks: Block[];
   anchors: DatedAnchor[];
   hasPlan: boolean;
+  focusInWindow: Block[];
   proposal: {
     blocks: ProposedBlock[];
     unplaced: { id: string; estimateMin?: number | null }[];
@@ -81,6 +82,9 @@ export function useTimeline(dayKey: string, settings: Settings | null | undefine
   const blocks = blocksQuery.data ?? [];
   const fixedBlocks = blocks.filter((block) => block.kind === 'fixed');
   const focusBlocks = blocks.filter((block) => block.kind === 'focus');
+  const focusInWindow = focusBlocks.filter(
+    (block) => block.start.getTime() < window.end && block.end.getTime() > window.start,
+  );
 
   const taskById = useMemo(() => new Map((tasksQuery.data ?? []).map((task) => [task.id, task] as const)), [tasksQuery.data]);
   const statusById = useMemo(
@@ -117,10 +121,10 @@ export function useTimeline(dayKey: string, settings: Settings | null | undefine
     };
     // With focus blocks already on the agenda, "propose" means replan from now:
     // picks whose block started stay put, so the same work is never re-laid.
-    if (focusBlocks.length > 0) {
+    if (focusInWindow.length > 0) {
       const result = replanFromNow({
         ...base,
-        existingFocusBlocks: focusBlocks.map((block) => ({
+        existingFocusBlocks: focusInWindow.map((block) => ({
           start: block.start.getTime(),
           end: block.end.getTime(),
           taskId: block.taskId ?? null,
@@ -142,7 +146,7 @@ export function useTimeline(dayKey: string, settings: Settings | null | undefine
       overflow: [],
       keptCount: 0,
     };
-  }, [enabled, plan.enabled, pickIds, taskById, window, fixedBlocks, anchors, focusBlocks, now, stepMin]);
+  }, [enabled, plan.enabled, pickIds, taskById, window, fixedBlocks, anchors, focusInWindow, now, stepMin]);
 
   return {
     enabled,
@@ -152,6 +156,7 @@ export function useTimeline(dayKey: string, settings: Settings | null | undefine
     blocks,
     fixedBlocks,
     focusBlocks,
+    focusInWindow,
     anchors,
     hasPlan: Boolean(plan.dayPlan),
     proposal,

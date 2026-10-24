@@ -26,13 +26,14 @@ afterEach(cleanup);
 
 function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <ToastProvider>
         <TimelineScreen dayKey={TODAY} />
       </ToastProvider>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 async function seedTwoPicks(t2Status: 'next' | 'scheduled' = 'next') {
@@ -107,9 +108,19 @@ describe('layout picks and the replan decision', () => {
       title: 'Focus',
       taskId: task.id,
     });
-    renderScreen();
+    const { client } = renderScreen();
+    await waitFor(() => {
+      const loaded = client
+        .getQueryCache()
+        .getAll()
+        .some((query) => query.queryKey[0] === 'timelineBlocks' && query.state.status === 'success');
+      expect(loaded).toBe(true);
+    });
     expect(await screen.findByRole('button', { name: /propose a layout/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /replan from now/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /propose a layout/i }));
+    expect(await screen.findByText(/focus block proposed/i)).toBeTruthy();
+    expect(screen.queryByText(/will move after now/i)).toBeNull();
   });
 });
 
@@ -149,5 +160,7 @@ describe('Replan from now', () => {
       expect(plan?.picks).toEqual([seeded.t1.id]);
     });
     expect(await screen.findByText(/Applied\. 1 pick is back on your list\./i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /add a commitment/i }));
+    await waitFor(() => expect(screen.queryByText(/Applied\./i)).toBeNull());
   });
 });

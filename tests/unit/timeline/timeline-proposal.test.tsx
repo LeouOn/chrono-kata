@@ -16,6 +16,7 @@ vi.mock('@/hooks/useTimeline', () => ({
     blocks: [],
     fixedBlocks: [],
     focusBlocks: [],
+    focusInWindow: [],
     anchors: [],
     proposal: {
       blocks: [{ taskId: 't1', start: new Date(2026, 5, 15, 9, 15).getTime(), end: new Date(2026, 5, 15, 9, 45).getTime() }],

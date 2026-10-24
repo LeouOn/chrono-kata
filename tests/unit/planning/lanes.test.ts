@@ -55,6 +55,15 @@ describe('assignLanes', () => {
     expect(result.every((entry) => entry.laneCount === 1)).toBe(true);
   });
 
+  it('does not widen a block that merely ends when a two-block overlap starts', () => {
+    const result = assignLanes([block('a', 9, 10), block('b', 10, 11), block('c', 10.5, 11.5)]);
+    expect(result.map((entry) => [entry.id, entry.lane, entry.laneCount])).toEqual([
+      ['a', 0, 1],
+      ['b', 0, 2],
+      ['c', 1, 2],
+    ]);
+  });
+
   it('breaks ties between identical intervals by id, independent of input order', () => {
     const x = block('a', 9, 10);
     const y = block('b', 9, 10);

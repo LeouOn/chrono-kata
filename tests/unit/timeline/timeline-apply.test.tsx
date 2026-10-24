@@ -22,6 +22,7 @@ vi.mock('@/hooks/useTimeline', async (importOriginal) => ({
     blocks: [],
     fixedBlocks: [],
     focusBlocks: [],
+    focusInWindow: [],
     anchors: [],
     proposal: { blocks: proposed, unplaced: [], replanned: false, overflow: [], keptCount: 0 },
     pickIds: [],
