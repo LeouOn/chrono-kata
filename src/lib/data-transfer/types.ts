@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { Session } from '@/lib/schemas/session';
 import type { Reflection } from '@/lib/schemas/reflection';
 import type { Streak } from '@/lib/schemas/streak';
@@ -18,6 +19,21 @@ import type { Review, ReviewDraft } from '@/lib/schemas/review';
 
 /** Envelope format written by current exports. Older files are upgraded by `migrateEnvelope`. */
 export const CURRENT_ENVELOPE_VERSION = 2;
+
+/**
+ * One thing a backup deliberately does not carry. A backup that quietly lacks something is a trap, so
+ * the file says so: `parseEnvelope` reads this back for the import preview.
+ *
+ * `id` is a table name (`tokens`) or a dotted field (`settings.icsSubscriptionUrl`); `count` is how many
+ * rows or values were left out of THIS file.
+ */
+export const LeftOutItemSchema = z.object({
+  id: z.string().min(1).max(100),
+  what: z.string().min(1).max(200),
+  why: z.string().min(1).max(300),
+  count: z.number().int().nonnegative(),
+});
+export type LeftOutItem = z.infer<typeof LeftOutItemSchema>;
 
 export interface ExportEnvelope {
   /** 1 = legacy (no check-ins), 2 = adds checkIns. */
@@ -46,6 +62,8 @@ export interface ExportEnvelope {
   /** Wave 11; absent in older files, so local reviews are preserved. */
   reviews?: Review[];
   reviewDrafts?: ReviewDraft[];
+  /** What this file leaves out on purpose (secrets and device-only data). Absent in files from before Wave 18. */
+  leftOut?: LeftOutItem[];
 }
 
 export type ExportEnvelopeV2 = ExportEnvelope & { version: 2 };
