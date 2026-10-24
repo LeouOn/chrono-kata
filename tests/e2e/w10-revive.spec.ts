@@ -84,7 +84,7 @@ test('a quiet project is offered calmly; ten minutes and a note bring it back', 
   await expect(heading).toBeVisible();
   const card = heading.locator('..');
   await expect(card.getByText('sketch the opening', { exact: true })).toBeVisible();
-  await expect(card.getByText(/Worked on 2 weeks ago\. Ten minutes is enough to keep it going\./)).toBeVisible();
+  await expect(card.getByText(/Last worked 2 weeks ago\. Ten minutes is enough to keep it going\./)).toBeVisible();
   expect(await card.innerText()).not.toMatch(GUILT);
   const start = card.getByRole('button', { name: /^Start 10 minutes/ });
   for (const control of [start, card.getByRole('button', { name: 'Not now' }), card.getByRole('link', { name: 'Open project' })]) {
@@ -117,7 +117,7 @@ test('a quiet project is offered calmly; ten minutes and a note bring it back', 
   await page.goto('/projects');
   await page.getByRole('link', { name: /sketch the opening/ }).click();
   await expect(page.getByText('Pick up here: write the first line of the scene')).toBeVisible();
-  await expect(page.getByText('Worked on today').first()).toBeVisible();
+  await expect(page.getByText('Worked today').first()).toBeVisible();
 });
 
 test('"Not now" is respected: gone for the day, and after a reload', async ({ page }) => {

@@ -83,7 +83,7 @@ describe('flag ON', () => {
 
     const { container } = mount();
     expect(await screen.findByText('Write the novel')).toBeTruthy();
-    expect(screen.getByText(/Worked on 2 weeks ago\. Ten minutes is enough to keep it going\./)).toBeTruthy();
+    expect(screen.getByText(/Last worked 2 weeks ago\. Ten minutes is enough to keep it going\./)).toBeTruthy();
     expect(screen.getByText('Pick up here: Pick up at the lighthouse')).toBeTruthy();
     expect(container.textContent).not.toMatch(GUILT);
     expect(container.textContent).not.toMatch(/stall|overdue|neglect/i);

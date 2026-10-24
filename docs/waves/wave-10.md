@@ -15,7 +15,7 @@ When a project has gone quiet (see "When is a project stalled?" below), **one** 
 card offers a way back in, and then the app leaves the user alone about it.
 
 - **The offer** (`ReviveCard`, on Home after the Today card and on the plan screen
-  after "Your day"): the project's name, "Worked on 2 weeks ago. Ten minutes is
+  after "Your day"): the project's name, "Last worked 2 weeks ago. Ten minutes is
   enough to keep it going.", its newest "pick up here" note, and three 44 px
   controls: **Start 10 minutes**, **Not now**, **Open project**. Nothing on it says
   stalled, late, behind or missed (tested against the guilt list).
