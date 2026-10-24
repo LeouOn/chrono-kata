@@ -16,6 +16,8 @@ import { readSessionTimer } from '@/lib/timers/session-timer';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
 import { ensureDefaultDomains } from '@/lib/db/init';
+import { CommandProvider } from '@/components/commands/CommandProvider';
+import { SESSION_EVENT } from '@/lib/commands/events';
 
 export default function MainLayout({ children }: { children: ReactNode }) {
   const [fabOpen, setFabOpen] = useState(false);
@@ -27,6 +29,16 @@ export default function MainLayout({ children }: { children: ReactNode }) {
     await recomputeStreakSideEffect();
     qc.invalidateQueries({ queryKey: ['streak'] });
   }, [qc]);
+
+  // The command palette's "Start a session" opens the same form the FAB does.
+  useEffect(() => {
+    const onRequest = () => {
+      setSessionLink(null);
+      setFabOpen(true);
+    };
+    window.addEventListener(SESSION_EVENT, onRequest);
+    return () => window.removeEventListener(SESSION_EVENT, onRequest);
+  }, []);
 
   useEffect(() => {
     void ensureDefaultDomains();
@@ -82,6 +94,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         }}
       />
       <CaptureLauncher />
+      <CommandProvider />
       <TabBar />
       <SessionForm
         open={fabOpen}

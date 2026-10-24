@@ -11,6 +11,7 @@ import { CaptureLauncher } from '@/components/tasks/CaptureLauncher';
 import { Modal } from '@/components/ui/Modal';
 import { taskRepo as repoForSpy } from '@/lib/db/task.repo';
 import { InboxScreen } from '@/components/tasks/InboxScreen';
+import { requestCapture } from '@/lib/commands/events';
 
 beforeEach(async () => {
   await resetDbForTesting();
@@ -166,13 +167,17 @@ describe('CaptureLauncher stacking and errors', () => {
     fireEvent.change(note, { target: { value: 'half typed note' } });
 
     await screen.findByRole('button', { name: 'Capture a task' });
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    requestCapture();
     await screen.findByRole('dialog', { name: 'Capture' });
     expect(screen.getAllByRole('dialog')).toHaveLength(2);
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Capture' })).toBeNull());
+    // The panel keeps role="dialog" while it animates out; under load that can
+    // outlast waitFor's 1 s default, so give it room.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Capture' })).toBeNull(), {
+      timeout: 3000,
+    });
     // The practice form is still there, unmounted nowhere, with its state.
     expect(screen.getByRole('dialog', { name: 'New session' })).toBe(practiceDialog);
     expect(note.value).toBe('half typed note');
@@ -198,14 +203,15 @@ describe('CaptureLauncher stacking and errors', () => {
 });
 
 describe('CaptureLauncher', () => {
-  it('renders no capture control while the flag is off', async () => {
+  it('renders no capture control and listens for nothing while the flag is off', async () => {
     renderWithProviders(<CaptureLauncher />);
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Capture a task' })).toBeNull());
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    requestCapture();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('opens the sheet with Ctrl/Cmd+K when the flag is on', async () => {
+  it('opens when the command palette asks for a capture, and not on a bare keydown', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     renderWithProviders(<CaptureLauncher />);
 
@@ -213,7 +219,18 @@ describe('CaptureLauncher', () => {
     expect(button).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).toBeNull();
 
+    // The global shortcut belongs to the palette now (W19 part 3); the launcher
+    // no longer binds a key of its own.
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    requestCapture();
+    expect(await screen.findByRole('dialog', { name: 'Capture' })).toBeInTheDocument();
+    // And the visible button still opens it directly.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Capture' })).toBeNull());
+    fireEvent.click(button);
     expect(await screen.findByRole('dialog', { name: 'Capture' })).toBeInTheDocument();
   });
 });

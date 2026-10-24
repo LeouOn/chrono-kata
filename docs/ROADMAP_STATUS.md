@@ -56,7 +56,7 @@ actually exists.
 | W16 | Notifications and nudges | partial | M | C | 5 reminder kinds, quiet hours, snooze |
 | W17 | Android-native polish | partial | M | C/D | widget, ongoing notification, share sheet |
 | W18 | Backup, export, optional sync | partial (part 1 of 4) | M | A/C | import preview + merge/replace UI, encrypted backup, rotation, sync decision |
-| W19 | UX, accessibility, performance | partial (part 2 of 5) | M | B | palette, perf budget, first-run |
+| W19 | UX, accessibility, performance | partial (part 3 of 5) | M | B | perf budget, first-run |
 | W20 | Hardening and release | partial | L | D | loop e2e, error boundary, integrity checker |
 
 ---
@@ -698,7 +698,7 @@ migrate on import. Decide whether the round trip is identity or "migrated identi
 
 ## W19 — UX, accessibility, performance
 
-**Status:** partial (parts 1–2 shipped 2026-10-24: the in-house a11y sweep and its fixes, then high-contrast mode) ·
+**Status:** partial (parts 1–3 shipped 2026-10-24: the in-house a11y sweep and its fixes, high-contrast mode, then the command palette and shortcut sheet) ·
 **Size:** M · **Lanes:** B · **Depends on:** W1 (data volume for perf)
 
 **Evidence**
@@ -713,7 +713,7 @@ migrate on import. Decide whether the round trip is identity or "migrated identi
   heading order, icon names, visible focus, reduced motion and theme-token contrast in the browser;
   plus the fixes it found (`<main>`, the Home links' naming, chart SVG labels, target sizes across
   settings/insights/LLM/sessions, light-theme accent variants, reduced-motion CSS + MotionConfig).
-- Missing: command palette — `grep -rInE "palette|Ctrl\+K|metaKey && .*'k'" src tests` → **0 hits**.
+- Shipped (part 3): the command palette (Ctrl/Cmd+K, listbox + `aria-activedescendant`, flag-aware, inert under dialogs) and a Settings shortcut sheet generated from the same registry; the capture shortcut moved from `CaptureLauncher` into the palette with a request event, so the capture button remains the non-palette path.
 - Shipped (part 2): high-contrast mode as an Appearance setting, with AAA text / AA accent tokens for light, dark and the OS-driven System theme, plus the transactional default-row fix in `settingsRepo.get()`.
 - Missing: keyboard-shortcut cheat sheet.
 - Missing: reduced-motion support — `grep -rIn "prefers-reduced-motion|useReducedMotion" src` → **0 hits**,

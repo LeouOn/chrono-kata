@@ -1,8 +1,8 @@
 # Wave 19 — UX, accessibility, performance
 
 **Status:** in progress · **PRs:** (1) the in-house a11y sweep and the fixes it found, (2) high
-contrast, (3) command palette and cheat sheet, (4) performance on a 10k-task dataset, (5) empty states
-and first-run · **Roadmap:** Wave 19 · **Lane:** B
+contrast, (3) command palette and shortcut sheet, (4) performance on a 10k-task dataset, (5) empty
+states and first-run · **Roadmap:** Wave 19 · **Lane:** B
 
 ## What shipped (part 1)
 
@@ -72,6 +72,86 @@ and first-run · **Roadmap:** Wave 19 · **Lane:** B
   token ratios and the computed colours of a `text-accent` link and a primary button.
 - A note on the measurement itself: the page background is the `base` token; `body` is transparent, and
   measuring against it compared every colour with black (found and fixed while writing the case).
+
+## What shipped (part 3)
+
+- **The command palette** (Ctrl/Cmd+K): one registry (`src/lib/commands/registry.ts`) of navigation
+  commands (Home, Sessions, Reflect, Insights, LLM, Settings; and with the flag on: Inbox, Plan,
+  Timeline, Projects, Journal, Weekly review) and three actions (capture a task, start a session,
+  keyboard shortcuts). The dialog is the shared `Modal` (focus trap, Escape, focus restore), the list
+  is a `listbox` driven by `aria-activedescendant`, arrows move and Enter runs, and typing filters on
+  the title, group and keywords.
+- **The palette is a shortcut layer, never the only path**: every navigation command targets a route
+  that exists in the tab bar or a screen, capture opens the sheet the FAB already opens (a window event
+  the launcher listens for), and "start a session" opens the existing form. Running a command performs
+  no write of its own, so it cannot bypass a confirmation.
+- **The shortcut sheet** is a Settings card generated from the SAME registry (only commands with a
+  shortcut appear there), reachable at `/settings#shortcuts` without the palette, and rendered per
+  platform (⌘ on Apple).
+- **Existing global key handlers, listed so they cannot collide**: `CaptureLauncher` used to bind
+  Ctrl/Cmd+K and now listens for the palette's capture request; `ProcessMode` owns keys 1–6 and `s` for
+  triage (inert while another dialog is open, and while typing); `Timeline` owns Escape for a live
+  drag; `Modal` owns Escape and the Tab cycle for the topmost dialog. The palette adds exactly one
+  binding (Ctrl/Cmd+K) and is inert while any other dialog is open.
+- **The launcher's key lives in the registry** (`PALETTE_SHORTCUT` in
+  `src/lib/commands/registry.ts`): the provider matches it, the palette shows it and the cheat sheet
+  lists it as the first row ("Open the command palette"), so the three cannot drift. That entry is
+  flag-independent because the launcher is: with the flag off it is the only row on the sheet.
+- **The sheet tells the truth about capture**: capturing is Ctrl+K, a query, Enter - or the button -
+  so `act.capture` carries no shortcut label. The sheet previously claimed "Capture a task - Ctrl+K",
+  which is a key that opens the palette.
+- **The sheet is generated, and gated like the app**: the "keys 1-6 / s" line comes from the same flag
+  the inbox does, so a flag-off user is not told about keys on a screen they do not have. Escape is
+  always listed.
+- **The launcher's own exiting panel is not "another dialog"**. The palette is a `Modal`, and a
+  `Modal` keeps its `role="dialog"` node while it animates out (~0.5 s), so the old guard
+  (`querySelectorAll('[role="dialog"]').length === 0`) counted the palette itself: Ctrl+K, Escape,
+  Ctrl+K - the normal "oops, closed it" - did nothing for half a second. The panel is now marked
+  (`data-command-palette`) and the guard (`src/lib/commands/palette-guard.ts`) ignores it while still
+  treating any other dialog as a reason to stay shut.
+- **Decision**: the launcher is **Ctrl+K off Apple and ⌘K on Apple**, and it opens even while focus is in
+  a text field. It is the app's one global launcher and making it depend on the cursor is how a shortcut
+  starts to feel unreliable; the alternative (inert in inputs) would leave a text field as a dead zone
+  for the only global shortcut. On Apple it is Meta-only on purpose: Ctrl+K is the native kill-line in a
+  text field, and hijacking it there would be a real loss — so the shortcut keeps the platform's
+  convention instead of fighting it. Modals do suppress it, and the sheet states the platform's key.
+- **Search ranks, it does not just filter**: a title that starts with the query beats one that contains
+  it, which beats a group match, which beats a keyword hit. Without that, typing "capture" listed Inbox
+  first (its keyword says captured tasks land there) and put the capture action second — the one word a
+  person types to capture would run the wrong command.
+
+### Part 3 tests
+
+- `tests/unit/commands/registry.test.ts` (7): unique ids, flag filtering, case/whitespace-insensitive
+  search over title/group/keywords, ranking (prefix > contains > group > keyword), the sheet = exactly
+  the shortcut-bearing commands, per-platform labels, and that running a command goes through the
+  caller's context.
+- `tests/unit/commands/CommandPalette.test.tsx` (8): opens on Ctrl+K and runs the filtered command;
+  arrow movement updates `aria-activedescendant`/`aria-selected`; "no command matches"; inert while
+  another dialog is on screen; Escape closes; opens from inside a text field (the documented decision);
+  the capture action requests the sheet rather than writing anything; flag-off hides gated commands;
+  the sheet lists the registry's shortcuts.
+- `tests/e2e/w19-palette.spec.ts` (5): Ctrl+K → filter → Enter navigates to the journal; arrows and
+  Escape; Ctrl+K 50 ms after Escape opens it again; inert while the capture sheet is open; the Settings
+  sheet is in view at `#shortcuts` and lists the palette's own key. The inbox spec's capture helper now goes through the palette, and
+  the sweep opens the capture sheet with its button (the shortcut moved).
+- `tests/unit/commands/capture-path.test.tsx` (2) is the path that used to be one keystroke, end to end:
+  Ctrl+K → palette → type "capture" → Enter leaves the **capture sheet as the only open dialog** and the
+  palette closed; the second case reaches the same command with arrows and no query. That is the new
+  keystroke count: Ctrl+K, a query (or arrows), Enter — plus the button, which stays one click.
+- `tests/unit/tasks/CaptureSheet.test.tsx` moved to the new contract: the launcher opens on the palette's
+  capture request and **not** on a bare Ctrl/Cmd+K keydown, the flag-off case listens for nothing (both
+  the event and the key), and the stacking/Escape test requests the sheet instead of pressing a key.
+- `tests/unit/commands/palette-guard.test.ts` (5): its own closing panel is ignored, a foreign dialog
+  still blocks, a foreign dialog beside its own closing panel blocks, toggle-shut, open when clear.
+  An integration case presses Ctrl+K 50 ms after Escape and the palette opens. Two mutants: the guard
+  counting every dialog → red; the capture row regaining a `Ctrl+K` label → the sheet test red.
+- **Flake hunt (the lead's unnamed Helsinki failure)**: 20 runs of `tests/unit/commands` + `tests/unit/tasks`
+  under four-way parallel load. Two real nondeterminisms, both now fixed and both named: the palette
+  tests searched for flag-gated commands before the settings query had resolved (they now wait for a
+  gated option), and the stacking test waited for a dialog to disappear with `waitFor`'s 1 s default
+  while the exit animation can outlast that under load (3 s now). 20/20 green after the fix.
+- Other mutants: the dialog guard removed → the inert test red; flag filtering removed → the flag test red.
 
 ## Decisions where the roadmap was silent
 

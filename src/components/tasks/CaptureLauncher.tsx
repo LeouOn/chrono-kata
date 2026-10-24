@@ -3,13 +3,15 @@
 import React, { useEffect, useState } from 'react';
 import { useFlag } from '@/hooks/useFlags';
 import { CaptureButton, CaptureSheet } from './CaptureSheet';
+import { CAPTURE_EVENT } from '@/lib/commands/events';
 
 /**
  * Global capture affordance (roadmap Wave 2): a distinct button above the
- * practice FAB and the Ctrl/Cmd+K shortcut. W19's command palette will absorb
- * the shortcut later; until then it opens this sheet directly.
+ * practice FAB. The Ctrl/Cmd+K shortcut now belongs to the command palette
+ * (roadmap Wave 19), which requests this sheet with a window event — the button
+ * and the palette are the same entry point, and neither is the only one.
  *
- * With the `taskInbox` flag off this renders nothing and binds no key.
+ * With the `taskInbox` flag off this renders nothing and listens for nothing.
  */
 export function CaptureLauncher() {
   const enabled = useFlag('taskInbox');
@@ -17,14 +19,9 @@ export function CaptureLauncher() {
 
   useEffect(() => {
     if (!enabled) return;
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        setOpen(true);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const onRequest = () => setOpen(true);
+    window.addEventListener(CAPTURE_EVENT, onRequest);
+    return () => window.removeEventListener(CAPTURE_EVENT, onRequest);
   }, [enabled]);
 
   if (!enabled) return null;
