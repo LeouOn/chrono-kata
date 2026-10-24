@@ -58,6 +58,16 @@ describe('TodayPlanCard', () => {
     expect(screen.getByRole('link', { name: /Plan your day/i })).toHaveAttribute('href', '/plan');
   });
 
+  it('links to the projects list, beside Timeline and the plan, once the card has loaded', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    renderCard();
+    expect(await screen.findByText(/Nothing picked yet/)).toBeInTheDocument();
+    const projects = screen.getByRole('link', { name: 'Projects' });
+    expect(projects).toHaveAttribute('href', '/projects');
+    expect(projects.className).toContain('min-h-11'); // a 44px target
+    expect(screen.getByRole('link', { name: 'Timeline' })).toHaveAttribute('href', '/timeline');
+  });
+
   it('shows confirmed picks, the capacity line, and starts a linked session', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     const task = await taskRepo.create({

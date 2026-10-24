@@ -148,7 +148,7 @@ const HABIT_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const HABIT_LOG_DATE_FIELDS = ['createdAt'];
 const CHECK_IN_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const DOMAIN_DATE_FIELDS = ['createdAt', 'updatedAt'];
-const PROJECT_DATE_FIELDS = ['lastTouchedAt', 'createdAt', 'updatedAt'];
+const PROJECT_DATE_FIELDS = ['lastTouchedAt', 'createdAt', 'updatedAt', 'breadcrumbAt'];
 const TASK_DATE_FIELDS = ['dueAt', 'deferUntil', 'createdAt', 'touchedAt', 'doneAt'];
 const BLOCK_DATE_FIELDS = ['start', 'end', 'createdAt', 'updatedAt'];
 const DAY_PLAN_DATE_FIELDS = ['createdAt', 'updatedAt'];
@@ -331,6 +331,7 @@ export function parseEnvelope(json: string): ParseResult {
                 lastTouchedAt: reviveDate(row.lastTouchedAt),
                 createdAt: reviveDate(row.createdAt),
                 updatedAt: reviveDate(row.updatedAt),
+                breadcrumbAt: reviveNullableDate(row.breadcrumbAt),
               }
             : null
       )

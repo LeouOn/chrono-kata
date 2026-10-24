@@ -1,5 +1,21 @@
 # Schema Changelog
 
+## 2026-10-24 — The time a project's note last changed (roadmap W10 part 2)
+
+`project.ts` gains optional, non-indexed `breadcrumbAt` (a date, nullable): when the
+project's `breadcrumb` last CHANGED. `updatedAt` moves on every write to the row
+(pausing a project in the weekly review, a cadence edit, any session), so it cannot
+tell whether the project's own note or a later session's note is the newer one; the
+project page showed a stale note after any unrelated edit. `breadcrumbAt` can.
+
+It is stamped by the project repository and by nothing else: on `create` with a
+note, and on `update` only when the note's TEXT changes (compared trimmed, blank
+being no note). A write that re-sends the same note, `touch()`, and anything a
+caller passes for `breadcrumbAt` leave it alone. It is not part of the typed input.
+A row from before this field has no stamp; readers fall back to `updatedAt` for it
+until its note is next written. Dexie stays on v7 (not indexed); the backup importer
+revives the date, and a backup without it still imports. See docs/waves/wave-10.md.
+
 ## 2026-10-24 — Journal, shutdown and the journal template (roadmap W12, part 1)
 
 `day-plan.ts` gains five **optional, non-indexed** fields: `domainChecks` (the
