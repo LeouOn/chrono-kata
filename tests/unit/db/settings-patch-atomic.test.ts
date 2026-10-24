@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { resetDbForTesting } from '@/lib/db/db';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getDb, resetDbForTesting } from '@/lib/db/db';
 import { settingsRepo } from '@/lib/db/settings.repo';
 
 /**
@@ -104,5 +104,24 @@ describe('settingsRepo.patch is one transaction', () => {
     expect(saved.flags?.taskInbox).toBe(true);
     expect(saved.flags?.privateMode).toBe(true);
     expect(saved.displayName).toBe('Grace');
+  });
+});
+
+describe('settingsRepo.get() is a read on the common path', () => {
+  it('returns the stored row inside a read-only transaction', async () => {
+    await settingsRepo.patch({ displayName: 'Ada' });
+    const db = getDb();
+    const row = await db.transaction('r', db.settings, async () => settingsRepo.get());
+    expect(row.displayName).toBe('Ada');
+  });
+
+  it('does not open a read-write transaction when the row exists', async () => {
+    await settingsRepo.get();
+    const db = getDb();
+    const spy = vi.spyOn(db, 'transaction');
+    await settingsRepo.get();
+    const modes = spy.mock.calls.map((call) => call[0]);
+    expect(modes).not.toContain('rw');
+    spy.mockRestore();
   });
 });
