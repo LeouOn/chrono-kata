@@ -1,8 +1,8 @@
 # Wave 19 — UX, accessibility, performance
 
-**Status:** in progress · **PRs:** (1) the in-house a11y sweep and the fixes it found, (2) theming and
-high contrast, (3) command palette and cheat sheet, (4) performance on a 10k-task dataset, (5) empty
-states and first-run · **Roadmap:** Wave 19 · **Lane:** B
+**Status:** in progress · **PRs:** (1) the in-house a11y sweep and the fixes it found, (2) high
+contrast, (3) command palette and cheat sheet, (4) performance on a 10k-task dataset, (5) empty states
+and first-run · **Roadmap:** Wave 19 · **Lane:** B
 
 ## What shipped (part 1)
 
@@ -45,6 +45,25 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
   - **Reduced motion**: a `prefers-reduced-motion` media query in `globals.css` (no CSS animation,
     transition or smooth scrolling) and `MotionProvider` (`MotionConfig reducedMotion="user"`) in the
     root layout, so motion/react skips transform animations too.
+
+## What shipped (part 2)
+
+- **High-contrast mode** as an Appearance setting (`settings.highContrast`, off by default): applied as
+  `data-contrast="high"` next to `data-theme`, by the same inline script and `ThemeApplier` that apply
+  the theme, so there is no flash and no second source of truth. It works on top of the light or dark
+  theme and on the System theme, resolved through `prefers-color-scheme`.
+- The palette: black/white text and quiet text at **AAA (≥7:1)**, borders and accents at **AA
+  (≥4.5:1)** both as text and behind the button text, with each of the four accent hues in a shade
+  that clears those numbers on its surface.
+- **`settingsRepo.get()` now creates the default row in one transaction.** A plain read-then-write could
+  put the defaults back over a setting written during the same first paint; the new test writes a
+  setting while several reads of a missing row start together, and the old code loses it.
+- Tests: a unit suite for the toggle (applies/removes the attribute from the stored row, the labelled
+  control saves, a backup round trip keeps it, a row from before the field imports cleanly) and a
+  sweep case over 24 combinations (OS light/dark × System/light/dark theme × four accents) asserting the
+  token ratios and the computed colours of a `text-accent` link and a primary button.
+- A note on the measurement itself: the page background is the `base` token; `body` is transparent, and
+  measuring against it compared every colour with black (found and fixed while writing the case).
 
 ## Decisions where the roadmap was silent
 

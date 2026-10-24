@@ -254,7 +254,12 @@ test('every route passes the in-house a11y sweep at 390x844', async ({ page }) =
  * pass after somebody changed the theme).
  */
 /** Set the theme the way the app reads it (the settings row), then reload. */
-async function applyTheme(page: Page, theme: 'light' | 'dark' | 'system', accent: string) {
+async function applyTheme(
+  page: Page,
+  theme: 'light' | 'dark' | 'system',
+  accent: string,
+  highContrast = false,
+) {
   await page.goto('/');
   // Wait for the app to create/upgrade the database before opening it raw, so
   // the open cannot create an empty v1 instead.
@@ -262,7 +267,7 @@ async function applyTheme(page: Page, theme: 'light' | 'dark' | 'system', accent
     const databases = await indexedDB.databases();
     return databases.some((entry) => entry.name === 'chrono-kata' && (entry.version ?? 0) >= 8);
   });
-  await page.evaluate(async ({ theme, accent }) => {
+  await page.evaluate(async ({ theme, accent, highContrast }) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open('chrono-kata');
       request.onsuccess = () => resolve(request.result);
@@ -282,21 +287,30 @@ async function applyTheme(page: Page, theme: 'light' | 'dark' | 'system', accent
     }
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction('settings', 'readwrite');
-      tx.objectStore('settings').put({ ...(row ?? { id: 'singleton' }), id: 'singleton', theme, accentColor: accent });
+      tx.objectStore('settings').put({
+        ...(row ?? { id: 'singleton' }),
+        id: 'singleton',
+        theme,
+        accentColor: accent,
+        highContrast,
+      });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
     db.close();
-  }, { theme, accent });
+  }, { theme, accent, highContrast });
   await page.reload();
   await page.waitForFunction(
-    ({ theme, accent }) =>
+    ({ theme, accent, highContrast }) =>
       // 'system' resolves through prefers-color-scheme, so the attribute is absent.
       (theme === 'system'
         ? document.documentElement.getAttribute('data-theme') === null
         : document.documentElement.getAttribute('data-theme') === theme) &&
-      document.documentElement.getAttribute('data-accent') === accent,
-    { theme, accent },
+      document.documentElement.getAttribute('data-accent') === accent &&
+      (highContrast
+        ? document.documentElement.getAttribute('data-contrast') === 'high'
+        : document.documentElement.getAttribute('data-contrast') === null),
+    { theme, accent, highContrast },
   );
 }
 
@@ -307,7 +321,15 @@ async function applyTheme(page: Page, theme: 'light' | 'dark' | 'system', accent
  */
 async function measureComputedContrast(page: Page) {
   return page.evaluate(() => {
-    const parse = (value: string) => (value.match(/\d+(\.\d+)?/g) ?? ['0', '0', '0']).slice(0, 3).map(Number);
+    // Tokens come as 3- or 6-digit hex, element colours as rgb()/rgba().
+    const parse = (value: string) => {
+      const text = value.trim();
+      if (text.startsWith('#')) {
+        const hex = text.length === 4 ? `#${text[1]}${text[1]}${text[2]}${text[2]}${text[3]}${text[3]}` : text;
+        return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      }
+      return (text.match(/\d+(\.\d+)?/g) ?? ['0', '0', '0']).slice(0, 3).map(Number);
+    };
     const channel = (value: number) => {
       const c = value / 255;
       return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -318,7 +340,9 @@ async function measureComputedContrast(page: Page) {
       const lb = luminance(parse(b));
       return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
     };
-    const body = getComputedStyle(document.body).backgroundColor;
+    // The page background is the base token: `body` itself is transparent, so
+    // measuring against its computed colour would compare against black.
+    const body = getComputedStyle(document.documentElement).getPropertyValue('--color-base').trim();
     const accentToken = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();
     const link = document.querySelector('.text-accent');
     // A primary button, not a progress bar or a dot that merely paints itself
@@ -330,8 +354,17 @@ async function measureComputedContrast(page: Page) {
     const linkColour = link ? getComputedStyle(link).color : null;
     const buttonBackground = button ? getComputedStyle(button).backgroundColor : null;
     const buttonText = button ? getComputedStyle(button).color : null;
+    const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
+    const tokenRatios = {
+      'text/base': ratio(token('text'), token('base')),
+      'text/surface': ratio(token('text'), token('surface')),
+      'text-muted/surface': ratio(token('text-muted'), token('surface')),
+      'accent/base': ratio(token('accent'), token('base')),
+      'base/accent': ratio(token('base'), token('accent')),
+    };
     return {
       accentToken,
+      tokenRatios,
       body,
       linkColour,
       linkRatio: linkColour ? ratio(linkColour, body) : null,
@@ -415,6 +448,37 @@ test('the system theme follows the OS light/dark choice with AA accents', async 
         failures.push(
           `${scheme}/${accent}: primary button text ${measured.buttonText} on ${measured.buttonBackground} is ${measured.buttonRatio.toFixed(2)}:1`,
         );
+      }
+    }
+  }
+  expect(failures, `\n${failures.join('\n')}\n`).toEqual([]);
+});
+
+test('high contrast reaches AAA text and AA accents in both themes', async ({ page }) => {
+  // High contrast is a settings boolean applied as data-contrast="high"; the
+  // numbers are checked through the OS-driven System path as well as the
+  // explicit ones, because that is the common light-mode case.
+  const failures: string[] = [];
+  const TEXT = 7; // AAA for body text
+  const ACCENT = 4.5; // AA for the accent as text and behind button text
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const theme of ['system', 'light', 'dark'] as const) {
+      for (const accent of ['amber', 'sage', 'magenta', 'cyan']) {
+        await applyTheme(page, theme, accent, true);
+        const measured = await measureComputedContrast(page);
+        for (const [pair, ratio] of Object.entries(measured.tokenRatios)) {
+          const minimum = pair.startsWith('text') ? TEXT : ACCENT;
+          if (ratio < minimum) {
+            failures.push(`${scheme}/${theme}/${accent}: ${pair} is ${ratio.toFixed(2)}:1, needs ${minimum}:1`);
+          }
+        }
+        if (measured.linkRatio !== null && measured.linkRatio < ACCENT) {
+          failures.push(`${scheme}/${theme}/${accent}: text-accent element is ${measured.linkRatio.toFixed(2)}:1`);
+        }
+        if (measured.buttonRatio !== null && measured.buttonRatio < ACCENT) {
+          failures.push(`${scheme}/${theme}/${accent}: primary button is ${measured.buttonRatio.toFixed(2)}:1`);
+        }
       }
     }
   }

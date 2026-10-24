@@ -24,14 +24,23 @@ export interface SettingsRepository {
 }
 
 export class DexieSettingsRepository implements SettingsRepository {
+  /**
+   * The stored row, creating the defaults on first read.
+   *
+   * The creation is ONE transaction: a plain read-then-write here can interleave
+   * with another caller's write and put the defaults back over it (several
+   * queries ask on first paint, and a toggle pressed in that window was lost).
+   */
   async get(): Promise<Settings> {
     const db = getDb();
-    const existing = await db.settings.get('singleton');
-    if (existing) return existing;
-    const now = new Date();
-    const fresh: Settings = { ...DEFAULT_SETTINGS, createdAt: now, updatedAt: now };
-    await db.settings.put(fresh);
-    return fresh;
+    return db.transaction('rw', db.settings, async () => {
+      const existing = await db.settings.get('singleton');
+      if (existing) return existing;
+      const now = new Date();
+      const fresh: Settings = { ...DEFAULT_SETTINGS, createdAt: now, updatedAt: now };
+      await db.settings.put(fresh);
+      return fresh;
+    });
   }
 
   async save(settings: Settings): Promise<void> {

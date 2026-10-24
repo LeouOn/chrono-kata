@@ -79,6 +79,20 @@ describe('settingsRepo.patch is one transaction', () => {
     expect(saved.displayName).toBe('Ada');
   });
 
+  it('creating the default row cannot overwrite a write that lands in between', async () => {
+    // The first-paint race: several reads ask for the row while a write starts.
+    await Promise.all([
+      settingsRepo.get(),
+      settingsRepo.get(),
+      settingsRepo.patch({ highContrast: true }),
+      settingsRepo.get(),
+      settingsRepo.patch({ theme: 'dark' }),
+    ]);
+    const saved = await settingsRepo.get();
+    expect(saved.highContrast).toBe(true);
+    expect(saved.theme).toBe('dark');
+  });
+
   it('keeps one flag when setFlag and a patch overlap', async () => {
     await Promise.all([
       settingsRepo.setFlag('taskInbox', true),
