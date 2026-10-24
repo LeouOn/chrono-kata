@@ -1,4 +1,4 @@
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReviewSummary, type ReviewSummaryState } from '@/hooks/useReviewSummary';
 import { resetDbForTesting } from '@/lib/db/db';
@@ -112,6 +112,43 @@ describe('useReviewSummary', () => {
     });
     expect(result.current.state.phase).toBe('done');
     expect(generate).toHaveBeenCalledTimes(2);
+  });
+
+  it('closing an in-flight call aborts it and leaves no result or error behind', async () => {
+    const { result } = renderHook(() => useReviewSummary());
+    await act(async () => {
+      await result.current.prepare(SESSIONS);
+    });
+
+    let signal: AbortSignal | undefined;
+    let settle: ((outcome: 'resolve' | 'reject') => void) | null = null;
+    generate.mockImplementationOnce(
+      (input: { signal?: AbortSignal }) =>
+        new Promise((resolve, reject) => {
+          signal = input.signal;
+          settle = (outcome) =>
+            outcome === 'resolve'
+              ? resolve({ observations: ['late'], question: '', promptTokens: 1, completionTokens: 1 })
+              : reject(new Error('aborted'));
+        }),
+    );
+
+    act(() => {
+      void result.current.confirm();
+    });
+    await waitFor(() => expect(signal).toBeDefined());
+
+    // Closing must abort the request, not merely hide the panel.
+    act(() => result.current.close());
+    expect(signal!.aborted).toBe(true);
+
+    // The provider rejects because of the abort: the hook must stay idle, so no
+    // error panel appears and no late result lands behind the user's back.
+    await act(async () => {
+      settle!('reject');
+      await Promise.resolve();
+    });
+    expect(result.current.state.phase).toBe('idle');
   });
 
   it('closing aborts an in-flight request and shows no error', async () => {

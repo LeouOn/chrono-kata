@@ -4,6 +4,7 @@ import { useReviewSummary, type ReviewSummaryState } from '@/hooks/useReviewSumm
 import { resetDbForTesting } from '@/lib/db/db';
 import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
 import { settingsRepo } from '@/lib/db/settings.repo';
+import { getCoachSystemPrompt } from '@/lib/coaches';
 import type { Session } from '@/lib/schemas/session';
 
 /**
@@ -42,7 +43,7 @@ beforeEach(async () => {
     apiKey: 'sk-test',
   });
   await llmSettingsRepo.setActive('openai');
-  await settingsRepo.patch({ displayName: DISPLAY_NAME, selectedCoachPersonality: 'zen' });
+  await settingsRepo.patch({ displayName: DISPLAY_NAME });
 
   sentBody = null;
   global.fetch = vi.fn(async (_url: unknown, init: { body?: unknown } = {}) => {
@@ -70,7 +71,12 @@ afterEach(() => {
 });
 
 describe('the summary wire request', () => {
-  it('sends exactly the two texts the panel shows: no note, no name', async () => {
+  // Two coaches, one of them not the default, so a hard-coded coach cannot pass:
+  // the system text must be THIS coach's instruction, resolved at prepare time.
+  it.each(['hype', 'zen'] as const)(
+    'sends exactly the two texts the panel shows for the %s coach: no note, no name',
+    async (coach) => {
+    await settingsRepo.patch({ selectedCoachPersonality: coach });
     const { result } = renderHook(() => useReviewSummary());
     await act(async () => {
       await result.current.prepare(SESSIONS);
@@ -81,9 +87,16 @@ describe('the summary wire request', () => {
     expect(prepared.phase).toBe('privacy');
     if (prepared.phase !== 'privacy') throw new Error('expected the disclosure');
 
+    // The panel's system text is this coach's instruction, not a constant.
+    expect(prepared.request.personality).toBe(coach);
+    expect(prepared.request.systemPrompt).toBe(getCoachSystemPrompt(coach));
+
     // The coach and the display name both change after the panel was built. The
     // send must use the values the user was shown, and the name not at all.
-    await settingsRepo.patch({ selectedCoachPersonality: 'hype', displayName: 'Someone Else' });
+    await settingsRepo.patch({
+      selectedCoachPersonality: coach === 'zen' ? 'hype' : 'zen',
+      displayName: 'Someone Else',
+    });
 
     await act(async () => {
       await result.current.confirm();
@@ -101,5 +114,6 @@ describe('the summary wire request', () => {
     expect(wire).not.toContain('Someone Else');
     expect(wire).not.toContain("The user's name is");
     expect(readState().phase).toBe('done');
-  });
+    },
+  );
 });
