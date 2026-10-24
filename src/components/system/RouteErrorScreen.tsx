@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { recordError } from '@/lib/errors/error-log';
+import { useRecordError } from '@/lib/errors/useRecordError';
 
 /**
  * The shared calm error surface (roadmap Wave 20 part 1). Rendered by every
@@ -21,12 +21,7 @@ export function RouteErrorScreen({
   reset: () => void;
   title?: string;
 }) {
-  React.useEffect(() => {
-    // Pathname at failure time is not knowable here without hooks that can
-    // throw; window.location is the honest source and cannot be worse than
-    // the error itself.
-    recordError(error, typeof window !== 'undefined' ? window.location.pathname : '/');
-  }, [error]);
+  useRecordError(error);
 
   return (
     <div className="py-8">

@@ -1,20 +1,18 @@
 'use client';
 
-import { useEffect } from 'react';
 import Link from 'next/link';
-import { recordError } from '@/lib/errors/error-log';
+import { useRecordError } from '@/lib/errors/useRecordError';
 
 /**
  * The last-resort boundary: fires when the ROOT LAYOUT itself throws, so it
  * renders its own html/body (Next replaces the whole tree). Same calm copy
  * as the route boundaries; the error still goes to the local log.
  *
- * Recording happens in an effect keyed on the error, never during render:
- * React may render a component more than once (StrictMode, concurrent
- * re-renders), and one error must be one entry. It uses the shared
- * `recordError` rather than a private copy of the ring buffer so the two can
- * never drift; that module pulls in no UI and is built to never throw, which
- * is what this file needs from a dependency.
+ * Recording goes through `useRecordError`: an effect, never part of render,
+ * and once per error even under StrictMode's double effects, so one error is
+ * one entry. It uses the shared `recordError` rather than a private copy of the
+ * ring buffer so the two can never drift; that module pulls in no UI and is
+ * built to never throw, which is what this file needs from a dependency.
  */
 export default function GlobalError({
   error,
@@ -23,9 +21,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
-    recordError(error, window.location.pathname);
-  }, [error]);
+  useRecordError(error);
 
   return (
     <html lang="en">

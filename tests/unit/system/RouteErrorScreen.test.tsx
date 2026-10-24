@@ -48,6 +48,30 @@ describe('RouteErrorScreen', () => {
     }
   });
 
+  it('records one error once even under StrictMode, and a repeat failure as a new entry', () => {
+    const error = new Error('same words');
+    const view = render(
+      <React.StrictMode>
+        <RouteErrorScreen error={error} reset={() => {}} />
+      </React.StrictMode>,
+    );
+    expect(getErrorLog()).toHaveLength(1);
+
+    // Re-render with the same error: still one. A fresh error object (Try again failed again): two.
+    view.rerender(
+      <React.StrictMode>
+        <RouteErrorScreen error={error} reset={() => {}} />
+      </React.StrictMode>,
+    );
+    expect(getErrorLog()).toHaveLength(1);
+    view.rerender(
+      <React.StrictMode>
+        <RouteErrorScreen error={new Error('same words')} reset={() => {}} />
+      </React.StrictMode>,
+    );
+    expect(getErrorLog()).toHaveLength(2);
+  });
+
   it('records the current route (pathname only)', () => {
     window.history.replaceState({}, '', '/inbox?tab=2');
     render(<RouteErrorScreen error={new Error('x')} reset={() => {}} />);

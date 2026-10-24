@@ -74,6 +74,24 @@ describe('GlobalError: the last-resort screen', () => {
     expect(getErrorLog()).toHaveLength(2);
   });
 
+  it('records once even under StrictMode, which runs every effect twice in development', () => {
+    render(
+      <React.StrictMode>
+        <GlobalError error={boom()} reset={() => {}} />
+      </React.StrictMode>,
+      { container: document },
+    );
+    expect(recordError).toHaveBeenCalledTimes(1);
+    expect(getErrorLog()).toHaveLength(1);
+  });
+
+  it('records a NEW error object with the same message (Try again failed the same way)', () => {
+    const view = mount(new Error('same words'));
+    view.rerender(<GlobalError error={new Error('same words')} reset={() => {}} />);
+    expect(recordError).toHaveBeenCalledTimes(2);
+    expect(getErrorLog()).toHaveLength(2);
+  });
+
   it('keeps the shared ring buffer bound rather than growing its own', () => {
     for (let i = 0; i < 55; i += 1) recordError(new Error(`older ${i}`), '/old');
     mount(boom());
