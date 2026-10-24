@@ -50,7 +50,7 @@ actually exists.
 | W10 | Long projects without heroic pushes | shipped (behind `taskInbox`) | M | B | — |
 | W11 | Weekly review wizard | shipped | M | B | Review, stats, wizard and optional AI summary |
 | W12 | Journal and domain accountability | shipped | M | B | journal, shutdown, markdown export, search |
-| W13 | Analytics and calibration | partial | M | A | estimate accuracy, calibration, CSV export |
+| W13 | Analytics and calibration | partial (PR 1 pure functions + oracle in review; UI + setting next) | M | A | estimate accuracy, calibration, CSV export |
 | W14 | AI coach upgrade (context and tools) | partial | L | C | tool-calling, prompt library, modes |
 | W15 | Practice and session modes | partial | M | B | focus guard, checklists, per-anchor modes |
 | W16 | Notifications and nudges | partial | M | C | 5 reminder kinds, quiet hours, snooze |
