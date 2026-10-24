@@ -17,9 +17,20 @@ export function useSettings(repo: SettingsRepository = settingsRepo) {
     onSuccess: (updated) => qc.setQueryData(KEY, updated),
   });
 
+  /**
+   * Patch a value that depends on the current row (a nested object, a list).
+   * The merge runs inside the repository's transaction, so it cannot be built
+   * from a stale render snapshot.
+   */
+  const mergeMutation = useMutation({
+    mutationFn: (merge: (current: Settings) => Partial<Settings>) => repo.patchWith(merge),
+    onSuccess: (updated) => qc.setQueryData(KEY, updated),
+  });
+
   return {
     settings: query.data,
     isLoading: query.isLoading,
     updateSettings: mutation.mutateAsync,
+    updateSettingsWith: mergeMutation.mutateAsync,
   };
 }

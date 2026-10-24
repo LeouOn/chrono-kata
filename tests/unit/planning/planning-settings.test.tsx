@@ -56,6 +56,26 @@ describe('PlanningSettings', () => {
     });
   });
 
+  it('keeps both ends when the two waking-hours fields change back to back', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    renderWithProviders(<PlanningSettings />);
+
+    const start = await screen.findByLabelText('Awake from');
+    const end = screen.getByLabelText('Awake until');
+
+    // One act, no await between them: the second handler runs before the first
+    // save has come back, which is exactly the desktop fast-typing case. A patch
+    // built from the render snapshot would send the old start and revert it.
+    act(() => {
+      fireEvent.change(start, { target: { value: '08:00' } });
+      fireEvent.change(end, { target: { value: '21:00' } });
+    });
+
+    await waitFor(async () => {
+      expect((await settingsRepo.get()).wakingHours).toEqual({ start: '08:00', end: '21:00' });
+    });
+  });
+
   it('adds an anchor with named controls and a midnight note', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     renderWithProviders(<PlanningSettings />);
@@ -87,7 +107,7 @@ describe('PlanningSettings', () => {
 
   it('never writes an invalid waking-hours row when the field is cleared', async () => {
     await settingsRepo.setFlag('taskInbox', true);
-    const patch = vi.spyOn(settingsRepo, 'patch');
+    const patch = vi.spyOn(settingsRepo, 'patchWith');
     renderWithProviders(<PlanningSettings />);
 
     const start = await screen.findByLabelText('Awake from');
@@ -103,7 +123,8 @@ describe('PlanningSettings', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    expect(patch).not.toHaveBeenCalled();
+    // The write is attempted, but the merge validates the merged value INSIDE
+    // the transaction and throws, so the row is left exactly as it was.
     const stored = await settingsRepo.get();
     expect(stored.wakingHours).toEqual({ start: '08:00', end: '22:00' });
     expect(SettingsSchema.safeParse(stored).success).toBe(true);
