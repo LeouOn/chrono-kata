@@ -1,25 +1,26 @@
 /**
  * The collections a backup holds, with the words the app uses for them. One list, so the import
- * preview, the merge report and the tests all name things the same way.
+ * preview, the merge report and the tests all name things the same way. The order is the order a
+ * person reads them in (what they work with first).
  *
  * `key` is both the Dexie table and the key in the file's envelope.
  */
 export const COLLECTIONS = [
+  { key: 'tasks', singular: 'task', plural: 'tasks' },
   { key: 'sessions', singular: 'session', plural: 'sessions' },
+  { key: 'projects', singular: 'project', plural: 'projects' },
+  { key: 'habits', singular: 'habit', plural: 'habits' },
+  { key: 'habitLogs', singular: 'habit entry', plural: 'habit entries' },
+  { key: 'dayPlans', singular: 'day plan', plural: 'day plans' },
+  { key: 'reviews', singular: 'weekly review', plural: 'weekly reviews' },
   { key: 'reflections', singular: 'reflection', plural: 'reflections' },
+  { key: 'checkIns', singular: 'check-in', plural: 'check-ins' },
+  { key: 'blocks', singular: 'time block', plural: 'time blocks' },
+  { key: 'estimates', singular: 'estimate', plural: 'estimates' },
+  { key: 'domains', singular: 'life area', plural: 'life areas' },
   { key: 'kataTemplates', singular: 'kata preset', plural: 'kata presets' },
   { key: 'conversations', singular: 'coach conversation', plural: 'coach conversations' },
   { key: 'messages', singular: 'coach message', plural: 'coach messages' },
-  { key: 'habits', singular: 'habit', plural: 'habits' },
-  { key: 'habitLogs', singular: 'habit entry', plural: 'habit entries' },
-  { key: 'checkIns', singular: 'check-in', plural: 'check-ins' },
-  { key: 'domains', singular: 'life area', plural: 'life areas' },
-  { key: 'projects', singular: 'project', plural: 'projects' },
-  { key: 'tasks', singular: 'task', plural: 'tasks' },
-  { key: 'blocks', singular: 'time block', plural: 'time blocks' },
-  { key: 'dayPlans', singular: 'day plan', plural: 'day plans' },
-  { key: 'estimates', singular: 'estimate', plural: 'estimates' },
-  { key: 'reviews', singular: 'weekly review', plural: 'weekly reviews' },
   { key: 'reviewDrafts', singular: 'review draft', plural: 'review drafts' },
 ] as const;
 

@@ -63,7 +63,7 @@ function reviveReviews(rows: unknown, backupTime: Date): {
   let snapshotsDropped = 0;
   let repaired = 0;
   for (const row of rows) {
-    if (typeof row !== 'object' || row === null) {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) {
       skipped++;
       continue;
     }
@@ -103,7 +103,7 @@ function reviveRows<T>(
   const valid: T[] = [];
   let skipped = 0;
   for (const row of rows) {
-    if (typeof row !== 'object' || row === null) {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) {
       skipped++;
       continue;
     }
