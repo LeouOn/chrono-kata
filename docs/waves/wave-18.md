@@ -1,6 +1,6 @@
 # Wave 18 — Backup, export and optional sync
 
-**Status:** part 1 of 4 (the completeness oracle and the fixes it found) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 18
+**Status:** parts 1 and 2 of 4 (the completeness oracle and its fixes; the import preview with merge or replace, hostile-file refusal and date repair) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 18
 **Status map:** `docs/ROADMAP_STATUS.md` W18
 
 Done when: export, wipe, import restores **everything identically**, proved by a deep-equal test.
@@ -111,6 +111,85 @@ themselves tested).
 - **Local calendar arithmetic** is exercised in six zones only on the path that uses it (derived habit
   logs). Nothing else in a backup depends on the zone: dates travel as instants.
 
+## Part 2: the import preview, merge or replace, refusal, and date repair
+
+Behind `taskInbox` (the same preview flag as every task screen). **With the flag off the Backup & Restore
+card is the old one, word for word**, and a test pins that. With it on, choosing a file shows what it holds
+and what each way of bringing it in would do, in sentences with the real numbers, before anything is written.
+
+### The two ways in
+
+- **Add what is missing** (the default, because it cannot take anything away). The rule is the whole rule:
+  a row whose key is already on the device stays exactly as it is, whether or not the file's copy differs.
+  Rows the device does not have are added. Settings, streak and AI settings are not touched. There is no
+  "newest wins": two clocks disagree, and a merge that quietly overwrites an edit is the failure a backup
+  tool must not have. The report counts the rows that were already here separately from the rows that
+  differed ("5 already here, left as they were (1 differed from the file; yours were kept)").
+  Session-derived habit logs are not added a second time under another id when the device already has one
+  for that (habit, session). A file from before habit logs gets logs derived for the sessions it adds, and
+  no existing log is touched.
+- **Replace everything on this device**, which asks a second time, with the numbers: "This will replace 214
+  tasks, 1,310 sessions and 12 projects on this device with 180 tasks, 1,200 sessions and 9 projects from
+  the file." Kinds the file does not carry are named and left alone. The sign-in, API keys and private
+  calendar link stay (the secrets rule above).
+
+Both are one transaction over every table. Nothing is written before it starts: a plan (`planMerge`) only
+reads, and `replaceAll` now reads the device's secrets and re-derives legacy habit logs inside the
+transaction (before, the re-derivation ran after it).
+
+### What the preview says besides the numbers
+
+What the file leaves out (`leftOut`), how many records could not be read and are skipped, how many were
+**repaired** (below), and reviews whose summary this version cannot read. A refused file gets one calm
+sentence that ends "Nothing on this device was changed." and stays on the page (a toast would be gone
+before it was read). After an export the same card says what the file does not include.
+
+### Date repair: an unreadable metadata date costs the field, never the row
+
+A day plan whose `shutdownAt` is damaged is still the day's journal. Every date of every table has one of
+three rules (`src/lib/data-transfer/dates.ts`, tested against the Zod schemas so a date added to a schema
+without a rule fails):
+
+| Rule | Which dates | If unreadable |
+|---|---|---|
+| **core** | a session's `startedAt`, a block's `start` / `end`, a reflection's `periodStart` / `periodEnd` | the row means nothing without it: **skipped**, counted, shown |
+| **optional** | `shutdownAt`, `endedAt`, `archivedAt`, `breadcrumbAt`, `dueAt`, `deferUntil`, `editedAt`, a not-done task's `doneAt`, settings' `googleCalendarConnectedAt` / `lastStreakFreezeUsedAt` | the field is **dropped**, the row is kept, counted as **repaired** |
+| **stamp** | `createdAt`, `updatedAt`, `touchedAt`, `lastTouchedAt`, a done task's `doneAt`, the streak's and AI settings' times | another readable time of the same row (a done task's finish: when it was last touched), else the time the backup was made; row kept, counted as **repaired** |
+
+An absent field is not an unreadable one: a missing required time still skips the row, as before. Only
+dates are repaired. A row that is invalid for any other reason (a number out of range, a bad id) is still
+skipped and counted. One consequence to know about: dropping an unreadable `archivedAt` brings an archived
+habit back as active, and dropping `dueAt` removes a due date; both are named in the preview's
+"repaired" line, never silent. `check-ins.test.ts` used to expect a check-in with an unreadable `createdAt`
+to be skipped; it is now kept and counted repaired.
+
+### Refusing a file that is not a backup (`guard.ts`)
+
+Refused before any row is read, calmly, with nothing written: text that is not JSON (the message never
+quotes the file), a list or other wrong shape, an unknown version, a `__proto__` key anywhere, text over
+64 MB (the card refuses by `File.size` without reading it), and a collection with more than 250,000 rows.
+`constructor` / `prototype` keys are ordinary text and are dropped with the other unknown fields. A file
+nested absurdly deep parses without crashing and its one "row" is skipped.
+
+### Tests added
+
+`date-repair` (the rule table against the schemas; d1's exact probe; every field of every table damaged one
+at a time), `merge`, `atomic` (every write an import makes, in turn, made to throw, replace and merge, both
+file shapes, plus a real duplicate-key failure), `hostile`, `preview` (the sentences as text, a guilt-word
+check), `import-ui` (the real card, real parser, real database), and `tests/e2e/w18-backup.spec.ts` (a real
+browser at 390x844: **export, new browser profile, import by replacing, export again, the two exports are
+equal**; a refused file changes nothing; a damaged shutdown time keeps the journal; flag off is the old card;
+no sideways scroll; every target at least 44 px).
+
+### What part 2 does NOT cover
+
+- Only dates are repaired. Any other invalid field still skips its row (counted).
+- Merge never updates a row that is already here. A person who wants the file's version of a differing row
+  must replace.
+- The preview is a Settings section, not its own route. The encrypted backup (PR 3) and the automatic copies
+  and restore (PR 4) are not here.
+- The phone is a 390-wide browser, not an Android device.
+
 ## Decisions for review
 
 1. **The private calendar link is treated as a secret.** It is the one place this changes what an
@@ -121,3 +200,15 @@ themselves tested).
    orphan log restores it. Rebuilding stays for files that predate habit logs.
 4. An unusable single-row record is now a `skipped` count and the device's own record stays, instead of a
    silent wipe. No existing test counted `skipped` for such a file.
+
+### Part 2 decisions, for review
+
+5. **Merge adds only; it never updates a row that is already here** (no "newest wins"). The report says how
+   many differed.
+6. **"Add what is missing" is the default** in the preview; replace is a deliberate second choice that asks again.
+7. **Date repair** as in the table above. The visible consequences (an archived habit comes back active, a
+   due date goes) are in the preview's "repaired" line.
+8. **Limits**: 64 MB of text and 250,000 rows in any one collection. Far above years of daily use; a file
+   above either is refused, not truncated.
+9. `check-ins.test.ts` changed meaning on purpose (see above).
+

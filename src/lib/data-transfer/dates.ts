@@ -96,8 +96,8 @@ export function reviveDates(row: Row, spec: DateSpec, backupTime: Date): Revived
     if (value === undefined || value === null) continue; // absent stays absent, null stays null
     const date = reviveDate(value);
     if (date) out[field] = date;
-    else if (spec.stampsWhen?.[field]?.(row)) unreadableStamps.push(field);
     else {
+      // (A done task's finish time is also a stamp, below, and is put back there.)
       delete out[field];
       repaired.push(field);
     }
@@ -119,5 +119,5 @@ export function reviveDates(row: Row, spec: DateSpec, backupTime: Date): Revived
     repaired.push(field);
   }
 
-  return { row: out, repaired };
+  return { row: out, repaired: [...new Set(repaired)] };
 }

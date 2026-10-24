@@ -162,7 +162,7 @@ export function DataTransfer() {
         />
       </div>
 
-      {enhanced && outcome && (
+      {outcome && (
         <p role="status" className="mt-3 text-sm text-text" data-testid="backup-outcome">
           {outcome.text}
         </p>
