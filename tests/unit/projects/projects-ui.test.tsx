@@ -17,7 +17,9 @@ import { sessionRepo } from '@/lib/db/session.repo';
 import { DOMAIN_SEED_IDS } from '@/lib/db/seed-domains';
 import { ProjectsScreen } from '@/components/projects/ProjectsScreen';
 import { ProjectDetail, TIMELINE_PAGE } from '@/components/projects/ProjectDetail';
+import { SessionLauncherProvider } from '@/components/session/SessionLauncher';
 import { GUILT } from '../planning/w10-helpers';
+import { expectNamedControls } from './helpers';
 
 const NOW = new Date(2026, 5, 17, 10, 0); // Wed 17 Jun 2026, 10:00 local
 const at = (daysBack: number, hour = 9, minute = 0) =>
@@ -55,28 +57,6 @@ async function makeSession(extra: Record<string, unknown>) {
     rating: 3,
     ...extra,
   } as Parameters<typeof sessionRepo.save>[0]);
-}
-
-/** Every link and button has a name, and the name contains its visible text (WCAG 2.5.3). */
-function expectNamedControls(root: HTMLElement) {
-  const controls = [...within(root).queryAllByRole('link'), ...within(root).queryAllByRole('button')];
-  for (const control of controls) {
-    const visible = (control.textContent ?? '').replace(/\s+/g, ' ').trim();
-    const role = control.tagName === 'A' ? 'link' : 'button';
-    const named = within(root)
-      .getAllByRole(role)
-      .filter((candidate) => candidate === control);
-    expect(named, 'control must be found by role').toHaveLength(1);
-    if (visible !== '') {
-      const escaped = visible.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      expect(
-        within(root).getAllByRole(role, { name: new RegExp(escaped, 'i') }),
-        `"${visible}" must be inside its accessible name`,
-      ).toContain(control);
-    } else {
-      expect(control.getAttribute('aria-label'), 'an icon-only control needs a name').toBeTruthy();
-    }
-  }
 }
 
 describe('ProjectsScreen', () => {
@@ -328,6 +308,56 @@ describe('ProjectDetail', () => {
     ];
     mount(<ProjectDetail projectId={project.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Look but do not touch' });
+    for (const spy of writes) expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProjectDetail: the ten-minute session', () => {
+  function mountWithLauncher(projectId: string) {
+    const openForLink = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <SessionLauncherProvider value={{ openForLink }}>
+          <ProjectDetail projectId={projectId} />
+        </SessionLauncherProvider>
+      </QueryClientProvider>,
+    );
+    return { openForLink, ...view };
+  }
+
+  it('starts a ten-minute session on the project through the existing launcher', async () => {
+    const project = await makeProject('Write the novel');
+    const { openForLink, container } = mountWithLauncher(project.id);
+    await screen.findByRole('heading', { level: 1, name: 'Write the novel' });
+    const button = screen.getByRole('button', { name: 'Start a 10-minute session on Write the novel' });
+    expect(button.textContent).toBe('Start a 10-minute session'); // the visible text is inside the name
+    expect(button.className).toContain('min-h-11');
+    expect(screen.getByText('Ten minutes is enough to touch it and leave a note.')).toBeTruthy();
+    fireEvent.click(button);
+    expect(openForLink).toHaveBeenCalledTimes(1);
+    expect(openForLink).toHaveBeenCalledWith({ projectId: project.id, label: 'Write the novel', estimateMin: 10 });
+    expect(container.textContent).not.toMatch(GUILT);
+  });
+
+  it('is offered for an ACTIVE project only (the launcher\'s picker lists no other), with a calm line for a paused one', async () => {
+    for (const [status, offered] of [['active', true], ['paused', false], ['done', false], ['dropped', false]] as const) {
+      cleanup();
+      const project = await makeProject(`Project ${status}`, { status });
+      mountWithLauncher(project.id);
+      await screen.findByRole('heading', { level: 1, name: `Project ${status}` });
+      expect(screen.queryByRole('button', { name: /^Start a 10-minute session/ }) !== null, status).toBe(offered);
+      expect(screen.queryByText(/Paused for now\./) !== null, `${status} line`).toBe(status === 'paused');
+    }
+  });
+
+  it('writes nothing until the user saves the session (the button only opens the launcher)', async () => {
+    const project = await makeProject('Look first');
+    const writes = [vi.spyOn(projectRepo, 'update'), vi.spyOn(projectRepo, 'touch'), vi.spyOn(sessionRepo, 'save')];
+    const { openForLink } = mountWithLauncher(project.id);
+    await screen.findByRole('heading', { level: 1, name: 'Look first' });
+    fireEvent.click(screen.getByRole('button', { name: /^Start a 10-minute session/ }));
+    expect(openForLink).toHaveBeenCalled();
     for (const spy of writes) expect(spy).not.toHaveBeenCalled();
   });
 });
