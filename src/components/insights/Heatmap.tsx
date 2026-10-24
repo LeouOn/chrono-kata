@@ -48,15 +48,15 @@ export function Heatmap({ sessions }: Props) {
         <div className="flex gap-1">
           <button
             onClick={() => setYear((y) => y - 1)}
-            className="text-text-muted hover:text-text px-2"
+            className="min-h-11 min-w-11 text-text-muted hover:text-text px-2"
             aria-label="Previous year"
-          >‹</button>
+          ><span aria-hidden>‹</span></button>
           <button
             onClick={() => setYear((y) => y + 1)}
             disabled={year >= currentYear}
-            className="text-text-muted hover:text-text px-2 disabled:opacity-30"
+            className="min-h-11 min-w-11 text-text-muted hover:text-text px-2 disabled:opacity-30"
             aria-label="Next year"
-          >›</button>
+          ><span aria-hidden>›</span></button>
         </div>
       </div>
 

@@ -148,7 +148,7 @@ export function PlanScreen({ dayKey: injectedDayKey }: Props) {
           <h1 className="font-serif text-2xl text-text mb-1">Plan</h1>
           <p className="text-xs text-text-muted">{dayKey}</p>
         </div>
-        <Link href="/" className="text-xs text-accent min-h-11 flex items-center">
+        <Link href="/" className="text-xs text-accent min-h-11 min-w-11 flex items-center">
           Home
         </Link>
       </div>

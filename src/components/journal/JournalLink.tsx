@@ -23,7 +23,6 @@ export function JournalLink() {
     <Link
       href="/journal"
       className="flex min-h-11 items-center gap-3 rounded-2xl border border-border bg-surface p-4 transition-colors hover:bg-surface-2"
-      aria-label={closed ? 'Open today’s journal, the day is closed' : 'Open today’s journal'}
     >
       <BookOpen size={18} strokeWidth={2} aria-hidden className="shrink-0 text-accent" />
       <span className="min-w-0 flex-1">

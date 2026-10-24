@@ -220,7 +220,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
           <h1 className="font-serif text-2xl text-text mb-1">Timeline</h1>
           <p className="text-xs text-text-muted">{dayKey}</p>
         </div>
-        <Link href="/plan" className="text-xs text-accent min-h-11 flex items-center">
+        <Link href="/plan" className="text-xs text-accent min-h-11 min-w-11 justify-center flex items-center">
           Plan
         </Link>
       </div>

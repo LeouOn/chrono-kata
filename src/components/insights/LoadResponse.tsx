@@ -149,7 +149,7 @@ export function LoadResponse({ sessions, checkIns, kataTemplates }: Props) {
           <button
             type="button"
             onClick={() => setUseDemoData(false)}
-            className={`px-3 py-1.5 rounded-lg transition-colors ${
+            className={`min-h-11 px-3 py-1.5 rounded-lg transition-colors ${
               !useDemoData
                 ? 'bg-accent text-base font-semibold shadow-xs'
                 : 'text-text-muted hover:text-text'
@@ -160,7 +160,7 @@ export function LoadResponse({ sessions, checkIns, kataTemplates }: Props) {
           <button
             type="button"
             onClick={() => setUseDemoData(true)}
-            className={`px-3 py-1.5 rounded-lg transition-colors ${
+            className={`min-h-11 px-3 py-1.5 rounded-lg transition-colors ${
               useDemoData
                 ? 'bg-accent text-base font-semibold shadow-xs'
                 : 'text-text-muted hover:text-text'
@@ -232,6 +232,8 @@ export function LoadResponse({ sessions, checkIns, kataTemplates }: Props) {
           <div className="w-full overflow-x-auto no-scrollbar">
             <div className="min-w-[480px]">
               <svg
+                role="img"
+                aria-label="Load and wellbeing over time"
                 viewBox={`0 0 ${timelineSvgWidth} ${timelineSvgHeight}`}
                 className="w-full h-auto select-none"
                 preserveAspectRatio="xMidYMid meet"
@@ -459,7 +461,7 @@ export function LoadResponse({ sessions, checkIns, kataTemplates }: Props) {
               <button
                 type="button"
                 onClick={() => setLag(1)}
-                className={`px-2.5 py-1 rounded-lg transition-colors ${
+                className={`min-h-11 px-2.5 py-1 rounded-lg transition-colors ${
                   lag === 1
                     ? 'bg-accent text-base font-semibold'
                     : 'text-text-muted hover:text-text'
@@ -470,7 +472,7 @@ export function LoadResponse({ sessions, checkIns, kataTemplates }: Props) {
               <button
                 type="button"
                 onClick={() => setLag(2)}
-                className={`px-2.5 py-1 rounded-lg transition-colors ${
+                className={`min-h-11 px-2.5 py-1 rounded-lg transition-colors ${
                   lag === 2
                     ? 'bg-accent text-base font-semibold'
                     : 'text-text-muted hover:text-text'
@@ -499,6 +501,8 @@ export function LoadResponse({ sessions, checkIns, kataTemplates }: Props) {
             <div className="w-full overflow-x-auto no-scrollbar">
               <div className="min-w-[450px]">
                 <svg
+                  role="img"
+                  aria-label="Wellbeing against load"
                   viewBox={`0 0 ${scatterWidth} ${scatterHeight}`}
                   className="w-full h-auto select-none"
                   preserveAspectRatio="xMidYMid meet"

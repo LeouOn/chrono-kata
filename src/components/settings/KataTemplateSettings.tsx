@@ -186,7 +186,7 @@ export function KataTemplateSettings() {
                 type="button"
                 onClick={() => void handleMove(idx, 'up')}
                 disabled={idx === 0}
-                className="p-1 text-text-muted hover:text-text disabled:opacity-20 transition-colors"
+                className="min-h-11 min-w-11 p-1 text-text-muted hover:text-text disabled:opacity-20 transition-colors"
                 title="Move up"
               >
                 <ArrowUp size={14} />
@@ -195,7 +195,7 @@ export function KataTemplateSettings() {
                 type="button"
                 onClick={() => void handleMove(idx, 'down')}
                 disabled={idx === templates.length - 1}
-                className="p-1 text-text-muted hover:text-text disabled:opacity-20 transition-colors"
+                className="min-h-11 min-w-11 p-1 text-text-muted hover:text-text disabled:opacity-20 transition-colors"
                 title="Move down"
               >
                 <ArrowDown size={14} />
@@ -203,7 +203,7 @@ export function KataTemplateSettings() {
               <button
                 type="button"
                 onClick={() => openEdit(t)}
-                className="p-1 text-text-muted hover:text-text transition-colors"
+                className="min-h-11 min-w-11 p-1 text-text-muted hover:text-text transition-colors"
                 title="Edit kata"
               >
                 <Edit2 size={14} />
@@ -211,7 +211,7 @@ export function KataTemplateSettings() {
               <button
                 type="button"
                 onClick={() => handleDeleteClick(t)}
-                className="p-1 text-text-muted hover:text-hype transition-colors"
+                className="min-h-11 min-w-11 p-1 text-text-muted hover:text-hype transition-colors"
                 title="Delete kata"
               >
                 <Trash2 size={14} />

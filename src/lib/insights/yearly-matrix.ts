@@ -128,3 +128,57 @@ export function buildYearlyConsistencyMatrix(
     totalSessionsInYear,
   };
 }
+
+export interface MonthlySummary {
+  /** Local month key, e.g. 2026-06. */
+  month: string;
+  sessions: number;
+  minutes: number;
+  activeDays: number;
+}
+
+export interface YearSummary {
+  /** Sessions with any minutes or reps in the year. */
+  sessions: number;
+  activeDays: number;
+  minutes: number;
+  /** The month with the most minutes, or null for a year with no practice. */
+  busiest: MonthlySummary | null;
+  months: MonthlySummary[];
+}
+
+/**
+ * A text summary of a year matrix, so the 371 grid cells are not the only way to
+ * read the year (roadmap Wave 19: a dense visualisation needs a text
+ * alternative). Pure; months are local calendar months from the day keys.
+ */
+export function summariseYearMatrix(matrix: YearlyMatrixResult): YearSummary {
+  const byMonth = new Map<string, MonthlySummary>();
+  for (const week of matrix.weeks) {
+    for (const day of week) {
+      const month = day.date.slice(0, 7);
+      // The first grid week can start in the previous December; that day is not
+      // part of this year's story (and never carries practice from this year).
+      if (!month.startsWith(`${matrix.year}-`)) continue;
+      const entry = byMonth.get(month) ?? { month, sessions: 0, minutes: 0, activeDays: 0 };
+      entry.sessions += day.sessionCount;
+      entry.minutes += day.totalMinutes;
+      if (day.sessionCount > 0 || day.totalMinutes > 0) entry.activeDays += 1;
+      byMonth.set(month, entry);
+    }
+  }
+  const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
+  let busiest: MonthlySummary | null = null;
+  for (const month of months) {
+    if (month.minutes <= 0) continue;
+    // Ties go to the earlier month, so the answer is stable.
+    if (!busiest || month.minutes > busiest.minutes) busiest = month;
+  }
+  return {
+    sessions: matrix.totalSessionsInYear,
+    activeDays: matrix.totalPracticedDays,
+    minutes: matrix.totalMinutesInYear,
+    busiest,
+    months,
+  };
+}

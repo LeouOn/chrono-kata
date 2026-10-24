@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Card } from '@/components/ui/Card';
 import {
   buildYearlyConsistencyMatrix,
+  summariseYearMatrix,
   type HeatmapDay,
 } from '@/lib/insights/yearly-matrix';
 import { formatDuration } from '@/lib/utils/format';
@@ -42,6 +43,8 @@ export function YearlyConsistencyHeatmap({ sessions }: Props) {
   const matrix = useMemo(() => {
     return buildYearlyConsistencyMatrix(sessions, selectedYear);
   }, [sessions, selectedYear]);
+  const summary = useMemo(() => summariseYearMatrix(matrix), [matrix]);
+  const monthName = (month: string) => MONTH_LABELS[Number(month.slice(5, 7)) - 1] ?? month;
 
   return (
     <Card>
@@ -56,6 +59,14 @@ export function YearlyConsistencyHeatmap({ sessions }: Props) {
               <span className="text-accent font-semibold">{matrix.totalPracticedDays}</span> days active •{' '}
               <span className="text-accent font-semibold">{formatDuration(matrix.totalMinutesInYear)}</span> total
             </div>
+            {/* Text alternative for the year grid (Wave 19): the same numbers in
+                words, so nobody has to read 371 squares to know the year. */}
+            <p id="year-map-summary" className="text-xs text-text-muted mt-0.5">
+              {summary.sessions} session{summary.sessions === 1 ? '' : 's'} this year
+              {summary.busiest
+                ? ` · busiest month ${monthName(summary.busiest.month)} (${formatDuration(summary.busiest.minutes)})`
+                : ' · no practice logged yet'}
+            </p>
           </div>
 
           {/* Year Selector */}
@@ -87,7 +98,7 @@ export function YearlyConsistencyHeatmap({ sessions }: Props) {
         </div>
 
         {/* Heatmap Grid Matrix */}
-        <div className="overflow-x-auto pb-2 -mx-4 px-4 no-scrollbar">
+        <div className="overflow-x-auto pb-2 -mx-4 px-4 no-scrollbar" aria-hidden="true">
           <div className="flex gap-1 min-w-[580px]">
             {matrix.weeks.map((week, wIdx) => (
               <div key={wIdx} className="flex flex-col gap-1 flex-1">
@@ -97,6 +108,10 @@ export function YearlyConsistencyHeatmap({ sessions }: Props) {
                     type="button"
                     onClick={() => setHoveredDay(day)}
                     onMouseEnter={() => setHoveredDay(day)}
+                    // Pointer affordance only: the grid is one visualisation and
+                    // its text alternative is above, so it is not 371 tab stops.
+                    tabIndex={-1}
+                    data-a11y-exempt="dense-grid"
                     className={`w-full aspect-square rounded-[3px] transition-all hover:scale-125 hover:z-10 ${
                       INTENSITY_COLORS[day.intensity]
                     }`}
@@ -133,6 +148,27 @@ export function YearlyConsistencyHeatmap({ sessions }: Props) {
             <span>More</span>
           </div>
         </div>
+        <table className="sr-only">
+          <caption>{selectedYear} practice by month</caption>
+          <thead>
+            <tr>
+              <th scope="col">Month</th>
+              <th scope="col">Sessions</th>
+              <th scope="col">Minutes</th>
+              <th scope="col">Active days</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.months.map((month) => (
+              <tr key={month.month}>
+                <th scope="row">{monthName(month.month)}</th>
+                <td>{month.sessions}</td>
+                <td>{month.minutes}</td>
+                <td>{month.activeDays}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </Card>
   );

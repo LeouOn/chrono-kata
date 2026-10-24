@@ -19,7 +19,7 @@ export function PrivateModeCard() {
   return (
     <Card>
       <div className="text-xs uppercase tracking-wide text-text-muted mb-3">Private mode</div>
-      <label className="flex items-center justify-between cursor-pointer">
+      <label className="flex min-h-11 items-center justify-between cursor-pointer">
         <span className="text-sm text-text">Keep AI traffic on this machine or your network</span>
         <input
           type="checkbox"
