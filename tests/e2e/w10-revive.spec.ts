@@ -59,7 +59,10 @@ async function goQuiet(page: Page, daysAgo: number) {
 }
 
 async function reachable(locator: Locator) {
-  await locator.scrollIntoViewIfNeeded();
+  // Scroll it to the middle of the screen, as a person would. scrollIntoViewIfNeeded
+  // leaves an element that is inside the viewport but under the fixed tab bar where it
+  // is, and the hit test below would then (correctly) see the tab bar.
+  await locator.evaluate((el) => el.scrollIntoView({ block: 'center' }));
   const box = await locator.boundingBox();
   expect(box, 'control has a box').not.toBeNull();
   expect(box!.height, 'at least 44px tall').toBeGreaterThanOrEqual(44);
@@ -99,7 +102,8 @@ test('a quiet project is offered calmly; ten minutes and a note bring it back', 
   const form = page.getByRole('dialog', { name: /New session/i });
   await expect(form).toBeVisible();
   await expect(page.getByLabel('Working on (optional)')).toHaveValue(/project:/);
-  await expect(page.getByText('10 min')).toBeVisible();
+  // The timer says ten minutes: in the dialog, exactly (the card behind it also says "Start 10 minutes").
+  await expect(form.getByText('10 min', { exact: true })).toBeVisible();
 
   // A project session needs its pick-up note: saving without one writes nothing and says so.
   await page.getByRole('button', { name: 'Good', exact: true }).click();
@@ -147,9 +151,10 @@ test('the project page offers the same ten minutes any time, quiet or not', asyn
   const button = page.getByRole('button', { name: /^Start a 10-minute session/ });
   await reachable(button);
   await button.click();
-  await expect(page.getByRole('dialog', { name: /New session/i })).toBeVisible();
+  const form = page.getByRole('dialog', { name: /New session/i });
+  await expect(form).toBeVisible();
   await expect(page.getByLabel('Working on (optional)')).toHaveValue(/project:/);
-  await expect(page.getByText('10 min')).toBeVisible();
+  await expect(form.getByText('10 min', { exact: true })).toBeVisible();
 });
 
 test('with the preview flag off there is no offer at all', async ({ page }) => {
