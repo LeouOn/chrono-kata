@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 /**
  * The last-resort boundary: fires when the ROOT LAYOUT itself throws, so it
  * renders its own html/body (Next replaces the whole tree). Same calm copy
@@ -74,7 +76,7 @@ export default function GlobalError({
             >
               Try again
             </button>
-            <a
+            <Link
               href="/"
               aria-label="Go to the Home screen"
               style={{
@@ -90,7 +92,7 @@ export default function GlobalError({
               }}
             >
               Home
-            </a>
+            </Link>
           </div>
         </div>
       </body>
