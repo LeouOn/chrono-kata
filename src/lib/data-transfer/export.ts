@@ -7,6 +7,7 @@ import { kataTemplateRepo } from '@/lib/db/kata-template.repo';
 import { checkInRepo } from '@/lib/db/check-in.repo';
 import { getDb } from '@/lib/db/db';
 import { CURRENT_ENVELOPE_VERSION, type ExportEnvelopeV2, type LeftOutItem } from './types';
+import type { BackupSecrets } from './encrypted';
 import { toLocalDateString } from '@/lib/utils/date';
 
 /**
@@ -72,13 +73,12 @@ export async function collectAll(): Promise<ExportEnvelopeV2> {
   }
 
   // The private calendar link is a bearer token: anyone holding it can read the calendar.
+  // (Only the link itself is the secret: a stored `null` means "none" and travels as it is.)
   let safeSettings = settings;
-  if ('icsSubscriptionUrl' in settings) {
-    const { icsSubscriptionUrl, ...rest } = settings;
+  if (settings.icsSubscriptionUrl) {
+    const { icsSubscriptionUrl: _link, ...rest } = settings;
     safeSettings = rest;
-    if (icsSubscriptionUrl) {
-      leftOut.push({ id: 'settings.icsSubscriptionUrl', what: 'your private calendar link', why: 'The link works like a password for your calendar, so it stays on this device.', count: 1 });
-    }
+    leftOut.push({ id: 'settings.icsSubscriptionUrl', what: 'your private calendar link', why: 'The link works like a password for your calendar, so it stays on this device.', count: 1 });
   }
 
   if (tokenCount > 0) {
@@ -115,15 +115,39 @@ export async function collectAll(): Promise<ExportEnvelopeV2> {
 }
 
 /**
+ * The secrets a plain backup leaves out, collected for an ENCRYPTED backup, and only when the person
+ * ticked the box. AI providers found from this device's environment are not secrets of the file: they
+ * are found again on their own device.
+ */
+export async function collectSecrets(): Promise<BackupSecrets> {
+  const db = getDb();
+  const [llm, token, settings] = await Promise.all([db.llmSettings.get('singleton'), db.tokens.get('google'), db.settings.get('singleton')]);
+  const llmApiKeys = Object.fromEntries(
+    Object.entries(llm?.providers ?? {})
+      .filter(([, cfg]) => cfg.credentialSource !== 'environment' && cfg.apiKey)
+      .map(([name, cfg]) => [name, cfg.apiKey]),
+  );
+  return {
+    llmApiKeys,
+    googleToken: token ?? null,
+    icsSubscriptionUrl: settings?.icsSubscriptionUrl ?? null,
+  };
+}
+
+/**
  * Trigger a JSON file download of the export envelope.
  */
 export function downloadExport(envelope: ExportEnvelopeV2): void {
-  const json = JSON.stringify(envelope, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
+  downloadText(JSON.stringify(envelope, null, 2), `chrono-kata-backup-${toLocalDateString(new Date())}.json`);
+}
+
+/** Hand a text file to the browser's download. */
+export function downloadText(text: string, filename: string): void {
+  const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `chrono-kata-backup-${toLocalDateString(new Date())}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
