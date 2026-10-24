@@ -321,3 +321,104 @@ describe('CalendarInteropSettings — review follow-ups', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('CalendarInteropSettings — round-2 gaps', () => {
+  function icsWithN(n: number): string {
+    const events = Array.from({ length: n }, (_, i) =>
+      [
+        'BEGIN:VEVENT',
+        `UID:bulk-${i}@cal`,
+        'DTSTAMP:20260501T000000Z',
+        `DTSTART:2026090${(i % 9) + 1}T090000Z`,
+        `DTEND:2026090${(i % 9) + 1}T100000Z`,
+        `SUMMARY:Bulk ${i}`,
+        'END:VEVENT',
+      ].join('\r\n'),
+    );
+    return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Test//EN', ...events, 'END:VCALENDAR'].join('\r\n');
+  }
+
+  it('a 65-entry preview lists 60 and says "and 5 more" (p12)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+    fireEvent.change(screen.getByLabelText('Import from a file'), {
+      target: { files: [new File([icsWithN(65)], 'bulk.ics', { type: 'text/calendar' })] },
+    });
+    await waitFor(() => expect(screen.getByTestId('ics-preview')).toBeInTheDocument());
+    expect(screen.getByText(/and 5 more/)).toBeInTheDocument();
+  });
+
+  it('Export reads the repository at click time, not the render-time cache (p14)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    let sharedText: string | null = null;
+    const share = vi.fn(async (data: ShareData & { files?: File[] }) => {
+      sharedText = data.files?.[0] ? await data.files[0].text() : null;
+    });
+    Object.defineProperty(navigator, 'canShare', {
+      value: (data: { files?: File[] }) => Array.isArray(data.files),
+      configurable: true,
+    });
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+
+    // A block lands through the repo AFTER render (e.g. another screen).
+    const now = new Date();
+    await blockRepo.create({
+      start: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0),
+      end: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 0),
+      kind: 'fixed',
+      title: 'Late addition',
+      taskId: null,
+      projectId: null,
+      calendarRef: null,
+    });
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Export today' }));
+    await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+    expect(sharedText).toContain('Late addition');
+  });
+
+  it('a failed settings write toasts and keeps the good preview (fix 3, phase 3)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await settingsRepo.patch({ icsSubscriptionUrl: 'https://example.com/old.ics' });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(SIMPLE_ICS, { status: 200 })));
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+
+    // Sabotage the settings write (remember-update path).
+    const original = settingsRepo.patch.bind(settingsRepo);
+    vi.spyOn(settingsRepo, 'patch').mockImplementation(async (patch) => {
+      if (patch.icsSubscriptionUrl != null) throw new Error('disk full');
+      return original(patch);
+    });
+
+    fireEvent.change(screen.getByLabelText(/calendar address/i), { target: { value: 'https://example.com/new.ics' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    // The preview from the successful fetch must survive the failed remember.
+    await waitFor(() => expect(screen.getByText(/1 new ·/)).toBeInTheDocument());
+    expect(screen.queryByText(/took too long/)).toBeNull();
+    expect(screen.queryByText(/could not be read/)).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it('a read failure during the fetch body says "could not be read", not timeout (fix 3, phase 2)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      return {
+        ok: true,
+        headers: new Headers(),
+        text: async () => { throw new Error('stream aborted'); },
+      } as unknown as Response;
+    }));
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+    fireEvent.change(screen.getByLabelText(/calendar address/i), { target: { value: 'https://example.com/bad.ics' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText(/could not be read/)).toBeInTheDocument();
+    expect(screen.queryByText(/took too long/)).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});

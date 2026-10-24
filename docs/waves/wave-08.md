@@ -228,6 +228,11 @@ moved → exactly one row changes; rows == distinct occurrences.
 
 ### Known gaps
 
+- A response without a `Content-Length` header is read in full before the 2 MB
+  cap is checked — the cap bounds what is parsed, not peak memory while
+  reading (streaming would fix it).
+- Most calendar providers block direct browser requests (CORS); the supported
+  path is the file import.
 - The timeline-screen "Export" button is deferred until the W7 timeline
   rewrite lands.
 - A pre-existing unnamed control on the Settings page (`INPUT.accent-accent`

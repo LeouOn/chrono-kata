@@ -133,7 +133,7 @@ export function CalendarInteropSettings() {
         setParseMessage(`That calendar has more than ${ICS_MAX_EVENTS} events in range. Import a smaller window.`);
         return;
       }
-      const base = buildImportPreview(result.blocks, existing);
+      const base = buildImportPreview(result.blocks, existing, result.window);
       const withReasons = withSkips(base, result.skipped);
       setPreview(withReasons);
       setSourceLabel(label);
@@ -245,12 +245,24 @@ export function CalendarInteropSettings() {
     applyingRef.current = true;
     setBusy(true);
     try {
-      // Deadline of our own (testable under fake timers) plus the wire-level
-      // abort, so a server that never answers cannot leave Refresh stuck.
-      const response = await withDeadline(
-        fetch(check.url, { redirect: 'follow', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
-        FETCH_TIMEOUT_MS,
-      );
+      // Phase 1 — the network call, with its own error copy: deadline of our
+      // own (testable under fake timers) plus the wire-level abort, so a
+      // server that never answers cannot leave Refresh stuck.
+      let response: Response;
+      try {
+        response = await withDeadline(
+          fetch(check.url, { redirect: 'follow', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+          FETCH_TIMEOUT_MS,
+        );
+      } catch (error) {
+        if (error instanceof TypeError) {
+          // Network/CORS class: browsers block most calendar providers.
+          setParseMessage('Some calendar providers do not allow this from an app; import the file instead.');
+        } else {
+          setParseMessage('The calendar address took too long to answer. Nothing was changed.');
+        }
+        return;
+      }
       if (!response.ok) {
         setParseMessage(`The calendar address answered ${response.status}. Nothing was changed.`);
         return;
@@ -260,19 +272,28 @@ export function CalendarInteropSettings() {
         setParseMessage(`That calendar is larger than the ${Math.round(ICS_MAX_FILE_BYTES / 1024 / 1024)} MB limit. Import a file instead.`);
         return;
       }
-      const text = await response.text();
-      parseAndPreview(text, check.url, await currentBlocks());
-      // When Remember is on, keep the stored address in step with what was
-      // just fetched (editing the field then Refreshing updates the stored one).
-      if (remember && check.url !== remembered) {
-        await updateSettings({ icsSubscriptionUrl: check.url });
+      // Phase 2 — reading and parsing have their own calm copy.
+      let text: string;
+      try {
+        text = await response.text();
+      } catch {
+        setParseMessage('That calendar could not be read. Nothing was changed.');
+        return;
       }
-    } catch (error) {
-      if (error instanceof TypeError) {
-        // Network/CORS class: browsers block most calendar providers.
-        setParseMessage('Some calendar providers do not allow this from an app; import the file instead.');
-      } else {
-        setParseMessage('The calendar address took too long to answer. Nothing was changed.');
+      try {
+        parseAndPreview(text, check.url, await currentBlocks());
+      } catch {
+        setParseMessage('That calendar could not be read. Nothing was changed.');
+        return;
+      }
+      // Phase 3 — remembering the address must never replace a good preview
+      // with a failure message; a rejected settings write only toasts.
+      if (remember && check.url !== remembered) {
+        try {
+          await updateSettings({ icsSubscriptionUrl: check.url });
+        } catch (error) {
+          dispatchToast(error instanceof Error ? error.message : 'Could not remember this address.', 'error');
+        }
       }
     } finally {
       applyingRef.current = false;

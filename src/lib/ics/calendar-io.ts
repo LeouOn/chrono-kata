@@ -77,7 +77,17 @@ function mergeOnto(incoming: Block, current: Block): Block {
   };
 }
 
-export function buildImportPreview(imported: readonly Block[], existing: readonly Block[]): ImportPreview {
+/** A moved occurrence pairs only within this distance (days). */
+export const MOVE_PAIRING_MAX_DAYS = 7;
+
+export function buildImportPreview(
+  imported: readonly Block[],
+  existing: readonly Block[],
+  /** The importer's occurrence window (`IcsImportResult.window`): only a
+   * local occurrence INSIDE it can still be present in the file, so only
+   * those may pair as "moved". History outside the window is never touched. */
+  window?: { from: Date; to: Date },
+): ImportPreview {
   const entries: PreviewEntry[] = [];
   const skipped: { summary?: string; reason: string }[] = [];
   const toWrite: Block[] = [];
@@ -121,6 +131,13 @@ export function buildImportPreview(imported: readonly Block[], existing: readonl
       skipped.push({ summary: incoming.title, reason: 'already in your app' });
       continue;
     }
+    if (current.calendarRef !== incoming.calendarRef) {
+      // Id matches a DIFFERENT calendar entry (e.g. another app rewrote the
+      // UID of our export). Preview and confirm must agree: skip it, never
+      // let the repo backstop abort a previewed write.
+      skipped.push({ summary: incoming.title, reason: 'already in your app as a different calendar entry' });
+      continue;
+    }
     matchedExisting.add(current.id);
     classify(incoming, current);
   }
@@ -143,7 +160,12 @@ export function buildImportPreview(imported: readonly Block[], existing: readonl
       let bestDelta = Number.POSITIVE_INFINITY;
       for (const candidate of localGroup) {
         if (matchedExisting.has(candidate.id)) continue;
+        // Only occurrences that can still be in the file (inside the import
+        // window) may pair as "moved"; history is never rewritten, and a
+        // sliding window cannot drag an old occurrence a year ahead.
+        if (window && (candidate.start.getTime() < window.from.getTime() || candidate.start.getTime() > window.to.getTime())) continue;
         const delta = Math.abs(candidate.start.getTime() - incoming.start.getTime());
+        if (delta > MOVE_PAIRING_MAX_DAYS * 24 * 3600 * 1000) continue;
         if (delta < bestDelta) {
           best = candidate;
           bestDelta = delta;
