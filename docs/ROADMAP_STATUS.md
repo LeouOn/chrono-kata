@@ -759,6 +759,11 @@ migrate on import. Decide whether the round trip is identity or "migrated identi
 
 ---
 
+**Part 2 (this PR):** the pure integrity detector (`src/lib/integrity/detect.ts`) + oracle —
+read-only, exact ("no more, no fewer" over seeded random corruption), severities split
+(corruption vs the documented DayPlan dead-pick/dead-domain-check info class), timestamp
+rules aligned with DATE_SPECS; no UI (part 3).
+
 ## Stretch backlog
 
 | Item | Status | Evidence |

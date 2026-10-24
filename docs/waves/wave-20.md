@@ -79,3 +79,58 @@ committing. Set `PLAYWRIGHT_PORT` to a free port if 3008 is taken.
 - The corrupt-row path is exercised through the inbox; a throw in the root
   layout (the `global-error.tsx` case) has unit tests but no end-to-end path
   without a test-only route.
+
+---
+
+# Wave 20 — part 2: the pure integrity detector
+
+**Status:** part 2 · **Head:** this PR
+
+`src/lib/integrity/detect.ts` is a PURE, read-only detector: it takes a plain
+snapshot (sessions, tasks, projects, domains, blocks, dayPlans, habits,
+settings) and reports every issue — nothing else. `collectIntegritySnapshot`
+is the thin IO shell that reads the live Dexie tables. No UI, no repair here
+(part 3 adds the checker screen and the one-transaction tidy-up).
+
+## Severities
+
+- `corruption` — a broken invariant: dangling session/block/task/habit links,
+  session `endedAt ≤ startedAt`, block `end ≤ start`, duplicate `calendarRef`,
+  `doneAt` XOR `status done` (the invariant a bad write once broke), a
+  settings row that fails `SettingsSchema` (the importer drops it whole), and
+  far-future dates (> 24h ahead of now).
+- `info` — KNOWN, documented properties, not faults: a DayPlan shutdown pick
+  (`picksDone`/`picksBack`) whose task was deleted later, and a `domainChecks`
+  tick keyed by a since-deleted domain (it is history the user recorded).
+  Part 3's tidy-up offers dropping the dead id; detection never calls it
+  corruption.
+
+## Choices where the brief was silent
+
+- **Timestamp rules agree with `DATE_SPECS`** (`src/lib/data-transfer/dates.ts`):
+  the future-check covers each table's core/optional/stamp date fields exactly
+  as that table lists them (`projects.breadcrumbAt` and `dayPlans.shutdownAt`
+  included). Ordering checks exist only where a range exists (sessions, blocks).
+  A zero-elapsed session (`endedAt === startedAt`) counts as a bad range.
+- **`domainChecks` dead keys are informational** (suggested by the lead for
+  picks; applied consistently to the domain ticks, which are the same class of
+  historical record). Documented here; part 3 decides the tidy-up.
+- **No kata-template domain rule**: `KataTemplate` has no `domainId` on main.
+- `checkIns` are in no rule (date-keyed, standalone); they stay out of the
+  snapshot rather than pretending to be checked.
+
+## Tests
+
+- Oracle (`detect-oracle.test.ts`, the planning-oracle style): seeded random
+  databases (mulberry32, seeds 1–60), every corruption and info kind injected
+  alone (exactly one issue, correct severity) and in random combinations —
+  the detector reports EXACTLY the injected set, no more, no fewer,
+  deterministic under row shuffling; both directions of the done/status
+  coupling; the exact 24h far-future boundary (23h clean, 25h flagged,
+  optional fields included); live picks are NOT dead picks.
+- IO shell (`collect-snapshot.test.ts`): rows written through the REAL
+  repositories collect cleanly; a raw behind-the-repo write is seen.
+- Zones: the two files pass in default, Europe/Helsinki, America/Los_Angeles,
+  Pacific/Kiritimati, Pacific/Auckland, Asia/Kolkata (exit 0 each).
+- Mutants: 10/10 killed (each check dropped/inverted/mis-severitied, the
+  threshold flipped, the sort removed, the DATE_SPECS field list trimmed).
