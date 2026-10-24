@@ -9,6 +9,12 @@ import { useTasks } from '@/hooks/useTasks';
 import { useTodayKey } from '@/hooks/usePlanning';
 import { useTimeline, useFixedBlockMutations, useApplyLayout, TIMELINE_STEP_MIN } from '@/hooks/useTimeline';
 import { toLocalDateString } from '@/lib/utils/date';
+import { addDays } from '@/lib/pacing/days';
+import { localWallClockToEpoch } from '@/lib/planning/time';
+import { blockRepo } from '@/lib/db/block.repo';
+import { blocksToIcs } from '@/lib/ics/ics-export';
+import { offerTextFile } from '@/lib/journal/handoff';
+import { dispatchToast } from '@/components/ui/Toast';
 import { useNow } from '@/hooks/useNow';
 import { assignLanes, detectConflicts, snapToStep } from '@/lib/planning/layout';
 import { Timeline, toTimelineBlocks, type TimelineBlock } from './Timeline';
@@ -26,6 +32,7 @@ interface Props {
  * blocks, a now line, and an "apply a proposed layout" flow. Drag/resize is PR 3.
  */
 export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
+  const exportingRef = useRef(false); // double-click guard for the export
   const liveDay = useTodayKey();
   const dayKey = injectedDayKey ?? liveDay;
   const { settings } = useSettings();
@@ -213,6 +220,36 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
     }
   }
 
+  // The day's commitments as an .ics file, using the shared hand-off chain
+  // (share sheet -> download -> clipboard; a dismissed sheet is not a message).
+  async function exportDay() {
+    if (exportingRef.current) return;
+    exportingRef.current = true;
+    try {
+      const start = localWallClockToEpoch(dayKey, '00:00');
+      const end = localWallClockToEpoch(addDays(dayKey, 1), '00:00');
+      // Fresh read at event time, never the render-time cache.
+      const blocks = (await blockRepo.range(new Date(start), new Date(end))).filter(
+        (block) => block.kind === 'fixed',
+      );
+      if (blocks.length === 0) {
+        dispatchToast('No commitments on this day to export yet.', 'info');
+        return;
+      }
+      const text = blocksToIcs(blocks, { now: new Date() });
+      const result = await offerTextFile(`chrono-kata-${dayKey}.ics`, text, 'text/calendar;charset=utf-8');
+      if (result === 'cancelled') return;
+      dispatchToast(
+        result === 'shared' ? 'Shared the calendar file.' : result === 'copied' ? 'Calendar text copied.' : 'Calendar file downloaded.',
+        'success',
+      );
+    } catch {
+      dispatchToast('Could not hand off the calendar file.', 'error');
+    } finally {
+      exportingRef.current = false;
+    }
+  }
+
   return (
     <div className="space-y-4 pb-24">
       <div className="flex items-start justify-between gap-3">
@@ -228,6 +265,13 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
       <div className="flex flex-wrap gap-2">
         <Button variant="ghost" className="min-h-11 border border-border bg-surface text-sm" onClick={openNew}>
           Add a commitment
+        </Button>
+        <Button
+          variant="ghost"
+          className="min-h-11 border border-border bg-surface text-sm"
+          onClick={() => void exportDay()}
+        >
+          Export this day
         </Button>
         <Button
           variant="ghost"
