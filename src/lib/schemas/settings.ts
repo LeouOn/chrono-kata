@@ -169,6 +169,12 @@ export const SettingsSchema = z.object({
   anchors: z.array(AnchorSchema).optional(),
   /** Remembered .ics subscription address (https only); stored only when the user opts in. */
   icsSubscriptionUrl: IcsSubscriptionUrlSchema.nullable().optional(),
+  /**
+   * The markdown scaffold a new journal entry starts from (roadmap W12). It is
+   * the user's own text, so it is bounded and optional; absent means the app's
+   * default template.
+   */
+  journalTemplate: z.string().max(20_000).optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
