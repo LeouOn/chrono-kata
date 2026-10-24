@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DataTransfer } from '@/components/settings/DataTransfer';
 import { ToastProvider } from '@/components/ui/Toast';
@@ -13,7 +13,7 @@ import { resetDbForTesting } from '@/lib/db/db';
 import { settingsRepo } from '@/lib/db/settings.repo';
 import { diffTable } from './oracle/compare';
 import { buildDataset } from './oracle/dataset';
-import { SECRET, plantSecrets, primaryKeys, readDb, seedDb } from './oracle/harness';
+import { SECRET, backupTextOf, plantSecrets, primaryKeys, readDb, seedDb } from './oracle/harness';
 
 const saved = vi.hoisted(() => ({ calls: [] as { text: string; name: string }[] }));
 vi.mock('@/lib/data-transfer/export', async (importOriginal) => ({
@@ -374,5 +374,148 @@ describe('the passphrase is nowhere but the field', () => {
     expect(document.body.innerHTML).not.toContain('STORAGE-CHECK');
     for (const spy of spies) expect(JSON.stringify(spy.mock.calls)).not.toContain('STORAGE-CHECK');
     setItem.mockRestore();
+  });
+});
+
+describe('choosing another file while one is still being read or opened', () => {
+  /** An encrypted file of a fresh dataset, made through the real form. Leaves the device empty and the card unmounted. */
+  async function encryptedFileOf(seed: number, pass = PASS) {
+    await resetDbForTesting();
+    await settingsRepo.setFlag('taskInbox', true);
+    const data = await deviceWithSecrets(seed);
+    await mountEnhanced();
+    const call = await saveEncrypted(pass, false);
+    cleanup();
+    await resetDbForTesting();
+    await settingsRepo.setFlag('taskInbox', true);
+    saved.calls = [];
+    return { data, text: call.text };
+  }
+
+  /** Makes the next key derivation (the slow part of opening a file) wait until `release()` is called. */
+  function holdTheNextOpen() {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const original = crypto.subtle.deriveKey.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, 'deriveKey').mockImplementationOnce((async (...args: Parameters<SubtleCrypto['deriveKey']>) => {
+      await gate;
+      return original(...args);
+    }) as never);
+    return release;
+  }
+
+  const pause = (ms = 200) => act(async () => new Promise((r) => setTimeout(r, ms)));
+
+  it('a slow open of the OLD encrypted file cannot put its preview over the NEWER plain file', async () => {
+    const older = await encryptedFileOf(701);
+    const newer = buildDataset(702, 'full', keys());
+    newer.tasks = newer.tasks!.slice(0, 6); // so "It holds N tasks" tells the two files apart
+    expect(newer.tasks.length).not.toBe(older.data.tasks!.length);
+    await mountEnhanced();
+    await chooseText(older.text);
+    const prompt = await screen.findByTestId('passphrase-prompt');
+    type('Passphrase', PASS);
+    const release = holdTheNextOpen();
+    fireEvent.click(within(prompt).getByRole('button', { name: 'Open backup' }));
+
+    await chooseText(backupTextOf(newer)); // the person changes their mind while the first is still opening
+    const preview = await screen.findByTestId('import-preview');
+    expect(within(preview).getByText(new RegExp(`It holds ${newer.tasks!.length} tasks`))).toBeTruthy();
+
+    release(); // the old open now finishes
+    await pause();
+    const after = screen.getByTestId('import-preview');
+    expect(within(after).getByText(new RegExp(`It holds ${newer.tasks!.length} tasks`))).toBeTruthy(); // still the NEWER file's
+    expect(within(after).queryByText(/This file also holds/)).toBeNull(); // nothing of the older file's secrets
+    expect(screen.queryByTestId('passphrase-prompt')).toBeNull();
+
+    // And Replace restores the file on screen, not the older one.
+    await waitFor(() => expect(within(after).queryByText('Looking at what is on this device…')).toBeNull());
+    fireEvent.click(within(after).getByRole('radio', { name: 'Replace everything on this device' }));
+    fireEvent.click(within(after).getByRole('button', { name: 'Replace everything…' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace everything' }));
+    await screen.findByTestId('backup-outcome');
+    const restored = await readDb();
+    expect(diffTable('tasks', 'id', newer.tasks!, restored.tasks!)).toEqual([]);
+  });
+
+  it('a slow open of one encrypted file does not touch the prompt of the NEXT one', async () => {
+    const first = await encryptedFileOf(703, 'first file passphrase');
+    const second = await encryptedFileOf(704, 'second file passphrase');
+    await mountEnhanced();
+    await chooseText(first.text);
+    const firstPrompt = await screen.findByTestId('passphrase-prompt');
+    type('Passphrase', 'first file passphrase');
+    const release = holdTheNextOpen();
+    fireEvent.click(within(firstPrompt).getByRole('button', { name: 'Open backup' }));
+
+    await chooseText(second.text);
+    const prompt = await screen.findByTestId('passphrase-prompt');
+    expect((within(prompt).getByLabelText('Passphrase') as HTMLInputElement).value).toBe(''); // a fresh prompt, nothing carried over
+
+    release();
+    await pause();
+    expect(screen.queryByTestId('import-preview')).toBeNull(); // the first file did not open itself
+    expect(within(screen.getByTestId('passphrase-prompt')).queryByRole('alert')).toBeNull();
+
+    type('Passphrase', 'second file passphrase');
+    fireEvent.click(within(screen.getByTestId('passphrase-prompt')).getByRole('button', { name: 'Open backup' }));
+    const preview = await screen.findByTestId('import-preview');
+    expect(within(preview).getByText(new RegExp(`It holds ${second.data.tasks!.length} tasks`))).toBeTruthy();
+  });
+
+  it('a slow READ of the older file cannot replace the newer file either', async () => {
+    const older = buildDataset(705, 'full', keys());
+    const newer = buildDataset(706, 'full', keys());
+    newer.tasks = newer.tasks!.slice(0, 6); // so "It holds N tasks" tells the two files apart
+    expect(newer.tasks.length).not.toBe(older.tasks!.length);
+    await mountEnhanced();
+    const original = FileReader.prototype.readAsText;
+    let finishOlder: (() => void) | undefined;
+    vi.spyOn(FileReader.prototype, 'readAsText').mockImplementationOnce(function (this: FileReader, blob: Blob) {
+      finishOlder = () => original.call(this, blob); // the first file's read is delayed until we say
+    });
+    await chooseText(backupTextOf(older));
+    await chooseText(backupTextOf(newer));
+    const preview = await screen.findByTestId('import-preview');
+    expect(within(preview).getByText(new RegExp(`It holds ${newer.tasks.length} tasks`))).toBeTruthy();
+
+    finishOlder!(); // the older file has now been read
+    await pause();
+    expect(within(screen.getByTestId('import-preview')).getByText(new RegExp(`It holds ${newer.tasks.length} tasks`))).toBeTruthy();
+  });
+
+  it('and a read of the older file that FAILS late does not put a refusal over the newer file', async () => {
+    const newer = buildDataset(708, 'full', keys());
+    await mountEnhanced();
+    let failOlder: (() => void) | undefined;
+    vi.spyOn(FileReader.prototype, 'readAsText').mockImplementationOnce(function (this: FileReader) {
+      failOlder = () => this.onerror?.(new ProgressEvent('error') as never);
+    });
+    await chooseText('{"anything": 1}');
+    await chooseText(backupTextOf(newer));
+    await screen.findByTestId('import-preview');
+    failOlder!();
+    await pause(100);
+    expect(screen.getByTestId('import-preview')).toBeTruthy();
+    expect(screen.queryByTestId('backup-outcome')).toBeNull();
+  });
+
+  it('"Not now" while an open is still running does not bring the file back', async () => {
+    const file = await encryptedFileOf(707);
+    await mountEnhanced();
+    await chooseText(file.text);
+    const prompt = await screen.findByTestId('passphrase-prompt');
+    type('Passphrase', PASS);
+    const release = holdTheNextOpen();
+    fireEvent.click(within(prompt).getByRole('button', { name: 'Open backup' }));
+    // (While it opens the prompt's own "Not now" is disabled; the file can still be dismissed by choosing none: a
+    // later choice of a refused file stands in for the person moving on.)
+    await chooseText('not a backup');
+    expect((await screen.findByTestId('backup-outcome')).textContent).toMatch(/isn't valid JSON/);
+    release();
+    await pause();
+    expect(screen.queryByTestId('import-preview')).toBeNull();
+    expect(screen.getByTestId('backup-outcome').textContent).toMatch(/isn't valid JSON/); // the refusal stands
   });
 });

@@ -29,6 +29,10 @@ export function DataTransfer() {
   // Wave 18 part 2 (behind `taskInbox`): a preview with merge or replace instead of the one-line dialog.
   const enhanced = useFlag('taskInbox');
   const [backup, setBackup] = useState<ParsedBackup | null>(null);
+  // Which file the person chose LAST. Reading a file and opening an encrypted one both take time; whatever
+  // finishes after a newer choice was made is stale and must change nothing (it would otherwise put the OLD
+  // file's preview on screen, and Replace would restore it).
+  const selection = useRef(0);
   const [encryptedText, setEncryptedText] = useState<string | null>(null);
   const [encryptingExport, setEncryptingExport] = useState(false);
   const [outcome, setOutcome] = useState<{ kind: 'refused' | 'done' | 'saved'; text: string } | null>(null);
@@ -82,6 +86,7 @@ export function DataTransfer() {
   }
 
   function handleEnhancedFile(file: File) {
+    const mine = ++selection.current;
     setBackup(null);
     setOutcome(null);
     setEncryptedText(null);
@@ -93,6 +98,7 @@ export function DataTransfer() {
     }
     const reader = new FileReader();
     reader.onload = () => {
+      if (selection.current !== mine) return; // a newer file was chosen while this one was being read
       const text = String(reader.result);
       if (isEncryptedBackup(text)) {
         setEncryptedText(text); // asks for the passphrase; nothing is read until it opens
@@ -105,14 +111,20 @@ export function DataTransfer() {
       }
       setBackup(result);
     };
-    reader.onerror = () => setOutcome({ kind: 'refused', text: refusalMessage('This file could not be read.') });
+    reader.onerror = () => {
+      if (selection.current === mine) setOutcome({ kind: 'refused', text: refusalMessage('This file could not be read.') });
+    };
     reader.readAsText(file);
   }
 
   /** Resolves with a message when the file did not open (the prompt stays), null when it did. */
   async function openEncrypted(passphrase: string): Promise<string | null> {
     if (!encryptedText) return null;
+    const mine = selection.current;
     const opened = await decryptBackup(encryptedText, passphrase);
+    // Opening takes a moment (deliberately). If another file was chosen meanwhile, this result belongs to a
+    // file that is no longer the one on screen: say nothing and change nothing.
+    if (selection.current !== mine) return null;
     if (!opened.ok) return opened.message;
     const parsed = parseEnvelope(JSON.stringify(opened.backup));
     setEncryptedText(null);
@@ -217,8 +229,14 @@ export function DataTransfer() {
           }}
         />
       )}
-      {enhanced && encryptedText && <PassphrasePrompt onOpen={openEncrypted} onCancel={() => setEncryptedText(null)} />}
-      {enhanced && backup && <ImportPreview backup={backup} onDone={importDone} onCancel={() => setBackup(null)} />}
+      {enhanced && encryptedText && <PassphrasePrompt
+          onOpen={openEncrypted}
+          onCancel={() => {
+            selection.current += 1; // an open still running for this file must not bring it back
+            setEncryptedText(null);
+          }}
+        />}
+      {enhanced && backup && <ImportPreview backup={backup} onDone={importDone} onCancel={() => { selection.current += 1; setBackup(null); }} />}
 
       <ConfirmDialog
         open={!enhanced && !!pendingImport}
