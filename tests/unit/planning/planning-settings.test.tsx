@@ -116,6 +116,61 @@ describe('PlanningSettings', () => {
     });
   });
 
+  it('a removal and an addition that overlap keep both changes', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const morning = {
+      id: '11111111-1111-4111-8111-111111111111',
+      title: 'Morning routine',
+      weekdays: [6],
+      start: '22:00',
+      end: '02:00',
+    };
+    const evening = {
+      id: '22222222-2222-4222-8222-222222222222',
+      title: 'Deep work',
+      weekdays: [2],
+      start: '09:00',
+      end: '11:00',
+    };
+    await settingsRepo.patch({ anchors: [morning, evening] });
+
+    // Make the removal's save slow so the addition starts while it is in flight.
+    const realPatchWith = settingsRepo.patchWith.bind(settingsRepo);
+    let first = true;
+    vi.spyOn(settingsRepo, 'patchWith').mockImplementation(async (merge) => {
+      if (first) {
+        first = false;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      return realPatchWith(merge);
+    });
+
+    renderWithProviders(<PlanningSettings />);
+
+    fireEvent.click(await screen.findByRole('button', { name: `Remove ${morning.title}` }));
+    fireEvent.click(screen.getByRole('button', { name: /^Remove$/ }));
+
+    // While that save is still in flight, add a third window.
+    fireEvent.click(screen.getByRole('button', { name: 'Add window' }));
+    await screen.findByRole('dialog', { name: /New protected window/i });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Weekly review' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tue' }));
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '15:00' } });
+    fireEvent.change(screen.getByLabelText('Until'), { target: { value: '16:00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save window' }));
+
+    // Both changes survive, in either write order: the removal is not resurrected
+    // by the addition's list, and the addition is not dropped by the removal.
+    await waitFor(async () => {
+      const stored = await settingsRepo.get();
+      expect((stored.anchors ?? []).map((anchor) => anchor.title).sort()).toEqual(
+        [evening.title, 'Weekly review'].sort(),
+      );
+      expect(SettingsSchema.safeParse(stored).success).toBe(true);
+    });
+    vi.restoreAllMocks();
+  });
+
   it('never writes an invalid waking-hours row when the field is cleared', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     const patch = vi.spyOn(settingsRepo, 'patchWith');

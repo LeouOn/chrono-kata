@@ -11,6 +11,7 @@ import { useDomains } from '@/hooks/useDomains';
 import { dispatchToast } from '@/components/ui/Toast';
 import { resolveAnchors, resolveWakingHours } from '@/lib/planning/resolve';
 import { AnchorSchema, WakingHoursSchema, type Anchor, type WakingHours } from '@/lib/schemas/settings';
+import { z } from 'zod';
 import { newId } from '@/lib/utils/id';
 
 const DAYS: { value: number; label: string }[] = [
@@ -33,14 +34,14 @@ function minutesOf(clock: string): number {
 }
 
 /**
- * The waking-hours inputs fire with '' every time somebody clears one to retype
- * it. That is an incomplete edit, not a failure: it must abort the write quietly
- * (no red toast), unlike a real storage error.
+ * An edit that is not finished yet (a cleared time input fires '' while somebody
+ * retypes it). It aborts the write quietly: no red toast for an edit in
+ * progress, unlike a real storage error.
  */
-export class IncompleteWakingHours extends Error {
-  constructor() {
-    super('Waking hours need a valid start and end time.');
-    this.name = 'IncompleteWakingHours';
+export class IncompletePlanningInput extends Error {
+  constructor(message = 'That change is not complete yet.') {
+    super(message);
+    this.name = 'IncompletePlanningInput';
   }
 }
 
@@ -51,7 +52,7 @@ export class IncompleteWakingHours extends Error {
  */
 export function PlanningSettings() {
   const enabled = useFlag('taskInbox');
-  const { settings, updateSettings, updateSettingsWith } = useSettings();
+  const { settings, updateSettingsWith } = useSettings();
   const { data: domains = [] } = useDomains({ enabled });
   const [editing, setEditing] = useState<{ anchor: Anchor; isNew: boolean } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Anchor | null>(null);
@@ -78,21 +79,33 @@ export function PlanningSettings() {
       await updateSettingsWith((current) => {
         const next = { ...resolveWakingHours(current), ...change };
         const parsed = WakingHoursSchema.safeParse(next);
-        if (!parsed.success) throw new IncompleteWakingHours();
+        if (!parsed.success) throw new IncompletePlanningInput('Waking hours need a valid start and end time.');
         return { wakingHours: parsed.data };
       });
     } catch (error) {
       // A cleared field is an edit in progress: the transaction aborted, so
       // nothing was written, and the user does not need an error for it.
-      if (error instanceof IncompleteWakingHours) return;
+      if (error instanceof IncompletePlanningInput) return;
       dispatchToast(error instanceof Error ? error.message : 'Could not save waking hours', 'error');
     }
   }
 
-  async function saveAnchors(next: Anchor[]) {
+  /**
+   * Add, edit or remove one protected window.
+   *
+   * Same shape as the waking hours: the change is applied to the list as it is
+   * INSIDE the transaction, so a removal and an addition that overlap cannot
+   * resurrect each other (a list built from render state would).
+   */
+  async function saveAnchors(change: (current: readonly Anchor[]) => Anchor[]) {
     try {
-      await updateSettings({ anchors: next });
+      await updateSettingsWith((current) => {
+        const parsed = z.array(AnchorSchema).safeParse(change(resolveAnchors(current)));
+        if (!parsed.success) throw new IncompletePlanningInput('A protected window needs a title and valid times.');
+        return { anchors: parsed.data };
+      });
     } catch (error) {
+      if (error instanceof IncompletePlanningInput) return;
       dispatchToast(error instanceof Error ? error.message : 'Could not save protected windows', 'error');
     }
   }
@@ -206,10 +219,12 @@ export function PlanningSettings() {
           domains={domains}
           onCancel={() => setEditing(null)}
           onSave={async (anchor) => {
-            const next = editing.isNew
-              ? [...anchors, anchor]
-              : anchors.map((existing) => (existing.id === anchor.id ? anchor : existing));
-            await saveAnchors(next);
+            const isNew = editing.isNew;
+            await saveAnchors((current) =>
+              isNew
+                ? [...current, anchor]
+                : current.map((existing) => (existing.id === anchor.id ? anchor : existing)),
+            );
             setEditing(null);
           }}
         />
@@ -224,7 +239,7 @@ export function PlanningSettings() {
         onConfirm={() => {
           const target = deleteTarget;
           setDeleteTarget(null);
-          if (target) void saveAnchors(anchors.filter((anchor) => anchor.id !== target.id));
+          if (target) void saveAnchors((current) => current.filter((anchor) => anchor.id !== target.id));
         }}
         onCancel={() => setDeleteTarget(null)}
       />
