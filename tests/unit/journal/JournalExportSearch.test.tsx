@@ -100,6 +100,40 @@ describe('JournalExportCard', () => {
     expect(offer.mock.calls[0]![1]).toBe(exportMonthMarkdown('2026-06-15', await storedInput()));
   });
 
+  it('says nothing when the person dismisses the share sheet', async () => {
+    await seedDays();
+    offer.mockResolvedValueOnce('cancelled');
+    const plan = await journalRepo.findByDate('2026-06-15');
+    renderWithProviders(<JournalExportCard dayKey="2026-06-15" plan={plan} />);
+
+    const download = (await screen.findByRole('button', { name: 'Download markdown' })) as HTMLButtonElement;
+    await waitFor(() => expect(download.disabled).toBe(false));
+    fireEvent.click(download);
+
+    await waitFor(() => expect(offer).toHaveBeenCalledTimes(1));
+    // A cancelled share is a decision: no error, no "downloaded" claim.
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('reads the journal fresh at click time, not from the cache', async () => {
+    await seedDays();
+    const plan = await journalRepo.findByDate('2026-06-15');
+    renderWithProviders(<JournalExportCard dayKey="2026-06-15" plan={plan} />);
+    const download = (await screen.findByRole('button', { name: 'Download markdown' })) as HTMLButtonElement;
+    await waitFor(() => expect(download.disabled).toBe(false));
+
+    // A day written after the cache loaded, with no invalidation: the month file
+    // must still contain it, because the card reads the repository at click time.
+    await dayPlanRepo.upsert('2026-06-18', { picks: [], capacityMin: 0 });
+    await journalRepo.saveDayFields('2026-06-18', { journal: 'A late entry.' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'This month: export month' }));
+    fireEvent.click(download);
+    await waitFor(() => expect(offer).toHaveBeenCalledTimes(1));
+    expect(String(offer.mock.calls[0]![1])).toContain('A late entry.');
+  });
+
   it('says calmly when the hand-off fails, and keeps the button usable', async () => {
     await seedDays();
     offer.mockRejectedValueOnce(new Error('no download here'));

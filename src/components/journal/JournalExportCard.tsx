@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { useJournalList } from '@/hooks/useJournal';
+import { readJournalExportSource, useJournalList } from '@/hooks/useJournal';
 import { offerTextFile } from '@/lib/journal/handoff';
 import {
   exportDayMarkdown,
@@ -10,8 +10,6 @@ import {
   exportWeekMarkdown,
   formatLongDate,
 } from '@/lib/journal/export';
-import { useTasks } from '@/hooks/useTasks';
-import { useDomains } from '@/hooks/useDomains';
 import type { DayPlan } from '@/lib/schemas/day-plan';
 
 interface Props {
@@ -37,15 +35,15 @@ export function JournalExportCard({ dayKey, plan }: Props) {
   const [range, setRange] = useState<Range>('day');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { data: plans = [], isLoading: plansLoading } = useJournalList();
-  const { data: tasks = [] } = useTasks();
-  const { data: domains = [] } = useDomains();
+  const { isLoading: plansLoading } = useJournalList();
 
   async function exportNow() {
     setError(null);
     setStatus(null);
     try {
-      const input = { plans, tasks, domains };
+      // Fresh read at event time: the caches may be stale between a write and
+      // its refetch, and a journal saved a moment ago must be in the file.
+      const input = await readJournalExportSource();
       const text =
         range === 'day'
           ? exportDayMarkdown(dayKey, input)
@@ -54,6 +52,11 @@ export function JournalExportCard({ dayKey, plan }: Props) {
             : exportMonthMarkdown(dayKey, input);
       const suffix = range === 'day' ? dayKey : range === 'week' ? `week-${dayKey}` : dayKey.slice(0, 7);
       const how = await offerTextFile(`chrono-kata-journal-${range}-${suffix}.md`, text);
+      if (how === 'cancelled') {
+        // The person closed the share sheet: a decision, not a failure.
+        setStatus(null);
+        return;
+      }
       setStatus(
         how === 'shared'
           ? 'Shared the journal file.'

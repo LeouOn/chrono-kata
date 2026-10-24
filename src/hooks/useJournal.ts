@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { journalRepo } from '@/lib/db/journal.repo';
+import { taskRepo } from '@/lib/db/task.repo';
+import { domainRepo } from '@/lib/db/domain.repo';
 import type { DayPlan } from '@/lib/schemas/day-plan';
 import type { ShutdownDecision } from '@/lib/journal/shutdown';
 
@@ -26,6 +28,22 @@ export function useJournalList(options: { enabled?: boolean } = {}) {
     queryFn: () => journalRepo.listAll(),
     enabled: options.enabled ?? true,
   });
+}
+
+/**
+ * Everything a markdown export needs, read from the repositories at CALL time.
+ *
+ * The export must not be built from react-query caches: a journal saved a moment
+ * ago (here or in another tab) may not have refetched yet, and the file would
+ * miss it. The button's loading guard still covers the first paint.
+ */
+export async function readJournalExportSource() {
+  const [plans, tasks, domains] = await Promise.all([
+    journalRepo.listAll(),
+    taskRepo.getAll(),
+    domainRepo.getAll(),
+  ]);
+  return { plans, tasks, domains };
 }
 
 export interface ShutdownInput {
