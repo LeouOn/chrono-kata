@@ -60,9 +60,13 @@ async function seedFlagged(data: ReturnType<typeof buildDataset>) {
 describe('flag off: nothing', () => {
   it('shows no card, makes no copy, and does not even open the copies database', async () => {
     await seedDb(buildDataset(601, 'sparse', keys()));
+    const queued: (() => void)[] = [];
+    vi.stubGlobal('requestIdleCallback', (cb: () => void) => queued.push(cb));
     wrap(<><CopiesSettings /><AutoCopyRunner /></>);
-    await new Promise((r) => setTimeout(r, 60));
+    await new Promise((r) => setTimeout(r, 150));
     expect(screen.queryByText('Copies on this device')).toBeNull();
+    expect(queued, 'the runner must not even schedule work with the flag off').toHaveLength(0);
+    queued.forEach((cb) => cb());
     expect(await Dexie.getDatabaseNames()).not.toContain(COPIES_DB_NAME);
   });
 });
