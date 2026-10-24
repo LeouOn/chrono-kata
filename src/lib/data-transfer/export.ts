@@ -65,10 +65,10 @@ export async function collectAll(): Promise<ExportEnvelopeV2> {
     providers: Object.fromEntries(browserProviders.map(([name, cfg]) => [name, { ...cfg, apiKey: '' }])),
   };
   if (keysLeftOut > 0) {
-    leftOut.push({ id: 'llmSettings.apiKey', what: 'API keys', why: 'Keys are secrets. A plain backup never holds them; re-enter them on the new device.', count: keysLeftOut });
+    leftOut.push({ id: 'llmSettings.apiKey', what: 'your API keys', why: 'Keys are secrets. A plain backup never holds them; re-enter them on the new device.', count: keysLeftOut });
   }
   if (environmentProviders > 0) {
-    leftOut.push({ id: 'llmSettings.environmentProviders', what: 'AI providers set up by the device itself', why: 'They are found again on the device they came from.', count: environmentProviders });
+    leftOut.push({ id: 'llmSettings.environmentProviders', what: 'AI providers the device set up itself', why: 'They are found again on the device they came from.', count: environmentProviders });
   }
 
   // The private calendar link is a bearer token: anyone holding it can read the calendar.
@@ -77,15 +77,15 @@ export async function collectAll(): Promise<ExportEnvelopeV2> {
     const { icsSubscriptionUrl, ...rest } = settings;
     safeSettings = rest;
     if (icsSubscriptionUrl) {
-      leftOut.push({ id: 'settings.icsSubscriptionUrl', what: 'The private calendar link', why: 'The link works like a password for your calendar, so it stays on this device.', count: 1 });
+      leftOut.push({ id: 'settings.icsSubscriptionUrl', what: 'your private calendar link', why: 'The link works like a password for your calendar, so it stays on this device.', count: 1 });
     }
   }
 
   if (tokenCount > 0) {
-    leftOut.push({ id: 'tokens', what: 'Google Calendar sign-in', why: 'Sign-in tokens are secrets. Connect again on the new device.', count: tokenCount });
+    leftOut.push({ id: 'tokens', what: 'your Google Calendar sign-in', why: 'Sign-in tokens are secrets. Connect again on the new device.', count: tokenCount });
   }
   if (pendingOpCount > 0) {
-    leftOut.push({ id: 'pendingCalendarOps', what: 'Calendar updates waiting to be sent', why: 'They belong to this device and its sign-in.', count: pendingOpCount });
+    leftOut.push({ id: 'pendingCalendarOps', what: 'calendar updates waiting to be sent', why: 'They belong to this device and its sign-in.', count: pendingOpCount });
   }
 
   return {

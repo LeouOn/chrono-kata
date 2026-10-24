@@ -26,9 +26,9 @@ different: a file that gets emailed, synced or lost must not be a way into an ac
   Calendar sign-in tokens** (`tokens`), and the **private calendar link** (`settings.icsSubscriptionUrl`,
   which works like a password for the calendar: whoever holds the link can read it).
 - **It never drops one silently.** The file carries `leftOut`, a list of `{ id, what, why, count }`:
-  "API keys (3)", "Google Calendar sign-in (1)", "The private calendar link (1)", "AI providers set up
-  by the device itself (1)" (those are found again on their own device), "Calendar updates waiting to be
-  sent (5)". Only things that exist are listed. `parseEnvelope` reads the list back, so the import
+  "your API keys (3)", "your Google Calendar sign-in", "your private calendar link", "AI providers the
+  device set up itself" (those are found again on their own device), "calendar updates waiting to be
+  sent (5)" (the `what` text reads inside a sentence). Only things that exist are listed. `parseEnvelope` reads the list back, so the import
   preview (PR 2) can show what a file does not carry, and the export screen can say it too.
 - **A restore never takes a secret away from the device it runs on.** Because the file does not carry
   them, replacing data must not remove them: the Google sign-in is kept, an API key is kept for every

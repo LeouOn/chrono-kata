@@ -20,6 +20,7 @@ import { ReviewSchema, ReviewDraftSchema, type Review, type ReviewDraft } from '
 import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
 import { LeftOutItemSchema, type ExportEnvelope, type ExportEnvelopeV2, type LeftOutItem } from './types';
 import { migrateEnvelope } from './migrate';
+import { refuseIfHostile, refuseIfTooLarge, refuseIfTooManyRows } from './guard';
 
 export type ParseResult =
   | {
@@ -164,11 +165,17 @@ const REVIEW_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const REVIEW_DRAFT_DATE_FIELDS = ['updatedAt'];
 
 export function parseEnvelope(json: string): ParseResult {
+  const tooLarge = refuseIfTooLarge(json.length);
+  if (!tooLarge.ok) return tooLarge;
   try {
     const parsed = JSON.parse(json) as unknown;
-    if (typeof parsed !== 'object' || parsed === null) {
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       return { ok: false, error: 'Not a JSON object.' };
     }
+    const hostile = refuseIfHostile(parsed);
+    if (!hostile.ok) return hostile;
+    const tooMany = refuseIfTooManyRows(parsed as Record<string, unknown>);
+    if (!tooMany.ok) return tooMany;
     const migrated = migrateEnvelope(parsed as Record<string, unknown>);
     if (!migrated.ok) {
       return { ok: false, error: migrated.error };
@@ -465,7 +472,8 @@ export function parseEnvelope(json: string): ParseResult {
     };
     return { ok: true, envelope, skipped, snapshotsDropped };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    // Never echo the engine's message: for malformed JSON it quotes the start of the file.
+    return { ok: false, error: e instanceof SyntaxError ? "This file isn't valid JSON." : 'This file could not be read.' };
   }
 }
 
@@ -723,13 +731,14 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
         await db.reviewDrafts.clear();
         if (envelope.reviewDrafts.length > 0) await db.reviewDrafts.bulkAdd(envelope.reviewDrafts);
       }
+
+      // Session-derived habit logs: a backup that carries habit logs already holds the logs the app
+      // made, with their ids and times, so they are restored exactly as they were. Only a backup
+      // WITHOUT them (a legacy file) has them derived again from the sessions and habits that are now
+      // here. Inside the same transaction: a failure here undoes the whole restore, not half of it.
+      if (envelope.habitLogs === undefined) await rebuildSessionHabitLogs();
     }
   );
-
-  // Session-derived habit logs: a backup that carries habit logs already holds the logs the app made,
-  // with their ids and times, so they are restored exactly as they were. Only a backup WITHOUT them
-  // (a legacy file) has them derived again from the sessions and habits that are now here.
-  if (envelope.habitLogs === undefined) await rebuildSessionHabitLogs();
 }
 
 // Type re-exports for compatibility with imports in callers
