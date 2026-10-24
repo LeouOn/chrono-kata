@@ -241,17 +241,21 @@ describe('a file that is not what it says', () => {
   });
   const refused = async (value: unknown) => decryptBackup(typeof value === 'string' ? value : JSON.stringify(value), 'any passphrase');
 
-  const NOT_A_BACKUP = /isn't a Chrono Kata backup\. Nothing on this device was changed\.$/;
-
-  it('refuses text that is not JSON, and shapes that are not an object, without a hint of why', async () => {
-    for (const text of ['', 'hello', '{', '[]', 'null', '12', '"x"']) {
-      const result = await refused(text);
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.message).toMatch(NOT_A_BACKUP);
+  it('meets text that is not JSON, and shapes that are not an object, with the one sentence and no hint of why', async () => {
+    for (const text of ['', 'hello', '{', '[]', 'null', '12', '"x"', '{"format":"chrono-kata-encrypted-backup","ver']) {
+      expect(await refused(text), JSON.stringify(text)).toEqual({ ok: false, message: CANNOT_OPEN });
     }
   });
 
-  it('refuses extra, missing and mistyped fields', async () => {
+  it('meets a file cut off anywhere with the one sentence', async () => {
+    const made = await encryptBackup({ sessions: [] }, 'long enough passphrase', { iterations: MIN_ITERATIONS });
+    if (!made.ok) throw new Error(made.message);
+    for (const cut of [1, 20, 60, 120, made.text.length - 30, made.text.length - 2, made.text.length - 1]) {
+      expect(await decryptBackup(made.text.slice(0, cut), 'long enough passphrase'), `cut at ${cut}`).toEqual({ ok: false, message: CANNOT_OPEN });
+    }
+  });
+
+  it('meets extra, missing and mistyped fields with the one sentence', async () => {
     const bad: unknown[] = [
       header({ extra: 1 }),
       header({ kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations: 600_000, salt: toBase64(SALT), more: 1 } }),
@@ -263,11 +267,7 @@ describe('a file that is not what it says', () => {
       (() => { const h = header(); delete (h as any).cipher; return h; })(),
       (() => { const h = header(); delete (h as any).kdf; return h; })(),
     ];
-    for (const value of bad) {
-      const result = await refused(value);
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.message).toMatch(NOT_A_BACKUP);
-    }
+    for (const value of bad) expect(await refused(value)).toEqual({ ok: false, message: CANNOT_OPEN });
   });
 
   it('refuses a number of rounds outside what a backup can use, BEFORE computing anything', async () => {
@@ -307,10 +307,43 @@ describe('a file that is not what it says', () => {
 
   it('tells an encrypted backup from everything else without throwing', () => {
     expect(isEncryptedBackup(JSON.stringify(header()))).toBe(true);
-    for (const text of ['', 'nope', '{"version":2,"sessions":[]}', '[]', 'null', `${ENCRYPTED_FORMAT}`, `{"format":"${ENCRYPTED_FORMAT}"`, '{"format":"other"}']) {
+    for (const text of ['', 'nope', '{"version":2,"sessions":[]}', '[]', 'null', `${ENCRYPTED_FORMAT}`, '{"format":"other"}', `{"version":2,"note":"${ENCRYPTED_FORMAT}"}`]) {
       expect(isEncryptedBackup(text), text.slice(0, 30)).toBe(false);
     }
+    // A file that begins as ours does is treated as ours even if it is cut short: it gets the prompt and the one sentence.
+    expect(isEncryptedBackup(`{"format":"${ENCRYPTED_FORMAT}","ver`)).toBe(true);
+    expect(isEncryptedBackup(`  {\n  "format" : "${ENCRYPTED_FORMAT}", "version": 1 }`)).toBe(true);
     expect(isEncryptedBackup('x'.repeat(MAX_BACKUP_CHARS + 1))).toBe(false);
+  });
+});
+
+describe('what the file shows', () => {
+  it('holds no field name and no word of the data, in the text or in the bytes (a full seeded dataset, sealed with a fixed salt and IV so the check never depends on luck)', async () => {
+    const { buildDataset } = await import('./oracle/dataset');
+    const { primaryKeys } = await import('./oracle/harness');
+    const data = buildDataset(77, 'full', primaryKeys());
+    const plain = JSON.stringify({ backup: data });
+    const names = new Set<string>(['tasks', 'title', 'journal', 'sessions', 'projects', 'habits', 'dayPlans', 'reviews', 'settings', 'llmSettings']);
+    const walk = (value: unknown) => {
+      if (Array.isArray(value)) value.forEach(walk);
+      else if (value && typeof value === 'object') {
+        for (const [k, v] of Object.entries(value)) {
+          if (k.length >= 5) names.add(k);
+          walk(v);
+        }
+      }
+    };
+    walk(data);
+    expect(names.size).toBeGreaterThan(80);
+    expect(plain).toContain('journal'); // the words really are in the plaintext
+    const file = await sealBytes(utf8(plain), 'a long enough passphrase', { salt: SALT, iv: IV, iterations: MIN_ITERATIONS });
+    const parsed = JSON.parse(file) as { data: string };
+    const bytes = Buffer.from(fromBase64(parsed.data)!).toString('latin1');
+    const headerWords = new Set(['format', 'version', 'iterations', 'cipher', 'chrono']); // the header's own words, by name
+    const leaked = [...names].filter((n) => !headerWords.has(n) && (file.includes(n) || bytes.includes(n)));
+    expect(leaked).toEqual([]);
+    // ...and the header is the only readable text.
+    expect(Object.keys(JSON.parse(file))).toEqual(['format', 'version', 'kdf', 'cipher', 'data']);
   });
 });
 

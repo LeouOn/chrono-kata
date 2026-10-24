@@ -112,6 +112,7 @@ describe('saving an encrypted backup', () => {
       expect(field.type).toBe('password');
       expect(field.getAttribute('autocomplete')).toBe('new-password');
     }
+    expect(screen.getByText(/a forgotten passphrase cannot be recovered: nobody can open the file without it, and there is no reset\./)).toBeTruthy();
   });
 
   it('the secrets box is OFF, clearly worded, and off again every time the form is opened', async () => {
@@ -266,5 +267,112 @@ describe('opening an encrypted backup', () => {
     expect(within(form).getByRole('checkbox').closest('label')!.className).toMatch(/min-h-11/);
     void text;
     void MIN_ITERATIONS;
+  });
+});
+
+
+describe('the box says what it would include, by count', () => {
+  it('lists the secrets on this device with their counts, changes its sentence when ticked, and is off each time', async () => {
+    const data = await deviceWithSecrets(403);
+    const llm = data.llmSettings![0]! as { providers: Record<string, { apiKey: string; credentialSource?: string }> };
+    const keyCount = Object.values(llm.providers).filter((p) => p.credentialSource !== 'environment' && p.apiKey).length;
+    await mountEnhanced();
+    fireEvent.click(screen.getByRole('button', { name: 'Export encrypted…' }));
+    const inventory = await screen.findByTestId('secrets-inventory');
+    await waitFor(() => expect(inventory.textContent).toMatch(/^On this device:/));
+    expect(inventory.textContent).toContain(`On this device: API keys (${keyCount}), Google Calendar sign-in (1), Private calendar link (1).`);
+    expect(inventory.textContent).toContain('They stay out of the file unless you tick this.');
+    const box = screen.getByRole('checkbox') as HTMLInputElement;
+    expect(box.getAttribute('aria-describedby')).toBe(inventory.id);
+    fireEvent.click(box);
+    expect(inventory.textContent).toContain('These will be inside the file.');
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export encrypted…' }));
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('says there is nothing to include when there is nothing', async () => {
+    await mountEnhanced();
+    fireEvent.click(screen.getByRole('button', { name: 'Export encrypted…' }));
+    const inventory = await screen.findByTestId('secrets-inventory');
+    await waitFor(() => expect(inventory.textContent).toContain('There are none of these on this device, so there is nothing to include.'));
+  });
+});
+
+describe('every way a file can fail to open is the same sentence', () => {
+  async function promptFor(text: string) {
+    await mountEnhanced();
+    await chooseText(text);
+    return screen.findByTestId('passphrase-prompt');
+  }
+
+  it('wrong passphrase, one changed byte, a truncated file, a header that is not ours, rounds out of range: all CANNOT_OPEN, none opens a preview', async () => {
+    await deviceWithSecrets(404);
+    await mountEnhanced();
+    const good = (await saveEncrypted(PASS, false)).text;
+    cleanup();
+    const file = JSON.parse(good);
+    const flipped = { ...file, data: `${file.data[0] === 'A' ? 'B' : 'A'}${file.data.slice(1)}` };
+    const cases: [string, string, string][] = [
+      ['wrong passphrase', good, 'not the passphrase'],
+      ['one changed byte', JSON.stringify(flipped), PASS],
+      ['truncated in the middle', good.slice(0, Math.floor(good.length / 2)), PASS],
+      ['truncated just before the end', good.slice(0, -3), PASS],
+      ['an extra header field', JSON.stringify({ ...file, extra: 1 }), PASS],
+      ['a missing header field', JSON.stringify({ format: file.format, version: file.version, kdf: file.kdf, data: file.data }), PASS],
+      ['rounds out of range', JSON.stringify({ ...file, kdf: { ...file.kdf, iterations: 5 } }), PASS],
+    ];
+    for (const [name, text, pass] of cases) {
+      await resetDbForTesting();
+      await settingsRepo.setFlag('taskInbox', true);
+      const prompt = await promptFor(text);
+      type('Passphrase', pass);
+      fireEvent.click(within(prompt).getByRole('button', { name: 'Open backup' }));
+      expect((await within(prompt).findByRole('alert')).textContent, name).toBe(CANNOT_OPEN);
+      expect(screen.queryByTestId('import-preview'), name).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('the prompt says plainly that a forgotten passphrase cannot be recovered, and is not a login field', async () => {
+    await deviceWithSecrets(405);
+    await mountEnhanced();
+    const good = (await saveEncrypted(PASS, false)).text;
+    cleanup();
+    const prompt = await promptFor(good);
+    expect(within(prompt).getByText('A forgotten passphrase cannot be recovered. There is no reset.')).toBeTruthy();
+    const field = within(prompt).getByLabelText('Passphrase') as HTMLInputElement;
+    expect(field.type).toBe('password');
+    expect(field.getAttribute('autocomplete')).toBe('off');
+  });
+});
+
+describe('the passphrase is nowhere but the field', () => {
+  it('is in no storage, no database table, no URL and no console line after saving and after opening', async () => {
+    const SECRET_PASS = 'PASSPHRASE-STORAGE-CHECK-5e1';
+    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => undefined));
+    const writes: string[] = [];
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation((k, v) => { writes.push(`${k}=${v}`); });
+    await deviceWithSecrets(406);
+    await mountEnhanced();
+    const call = await saveEncrypted(SECRET_PASS, true);
+    cleanup();
+    await resetDbForTesting();
+    await settingsRepo.setFlag('taskInbox', true);
+    await mountEnhanced();
+    await chooseText(call.text);
+    const prompt = await screen.findByTestId('passphrase-prompt');
+    type('Passphrase', SECRET_PASS);
+    fireEvent.click(within(prompt).getByRole('button', { name: 'Open backup' }));
+    await screen.findByTestId('import-preview');
+
+    expect(JSON.stringify(writes)).not.toContain('STORAGE-CHECK');
+    expect(JSON.stringify({ ...localStorage })).not.toContain('STORAGE-CHECK');
+    expect(JSON.stringify({ ...sessionStorage })).not.toContain('STORAGE-CHECK');
+    expect(JSON.stringify(await readDb())).not.toContain('STORAGE-CHECK');
+    expect(window.location.href).not.toContain('STORAGE-CHECK');
+    expect(document.body.innerHTML).not.toContain('STORAGE-CHECK');
+    for (const spy of spies) expect(JSON.stringify(spy.mock.calls)).not.toContain('STORAGE-CHECK');
+    setItem.mockRestore();
   });
 });

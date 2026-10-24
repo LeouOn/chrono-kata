@@ -52,6 +52,15 @@ export const BackupSecretsSchema = z.object({
 });
 export type BackupSecrets = z.infer<typeof BackupSecretsSchema>;
 
+/** What the secrets box would put in the file, by count, for the form to show. */
+export function countSecrets(secrets: BackupSecrets): { apiKeys: number; googleSignIn: number; calendarLink: number } {
+  return {
+    apiKeys: Object.keys(secrets.llmApiKeys).length,
+    googleSignIn: secrets.googleToken ? 1 : 0,
+    calendarLink: secrets.icsSubscriptionUrl ? 1 : 0,
+  };
+}
+
 export function hasAnySecret(secrets: BackupSecrets | null | undefined): boolean {
   return !!secrets && (Object.keys(secrets.llmApiKeys).length > 0 || secrets.googleToken !== null || secrets.icsSubscriptionUrl !== null);
 }
@@ -161,15 +170,15 @@ export async function encryptBackup(
   }
 }
 
-/** True for text that claims to be an encrypted backup (it may still not open). Never throws. */
+/**
+ * True for text that CLAIMS to be an encrypted backup, judged by how the file begins (our files start with
+ * the `format` key), not by whether it parses: a truncated or damaged encrypted file must still be met with
+ * the passphrase prompt and the one failure sentence, not with a different message that tells a stranger
+ * what kind of damage it is. Never throws.
+ */
 export function isEncryptedBackup(text: string): boolean {
-  if (!refuseIfTooLarge(text.length).ok || !text.includes(ENCRYPTED_FORMAT)) return false;
-  try {
-    const parsed = JSON.parse(text) as unknown;
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && (parsed as Record<string, unknown>).format === ENCRYPTED_FORMAT;
-  } catch {
-    return false;
-  }
+  if (!refuseIfTooLarge(text.length).ok) return false;
+  return new RegExp(`"format"\\s*:\\s*"${ENCRYPTED_FORMAT}"`).test(text.slice(0, 2000));
 }
 
 const FileSchema = z
@@ -202,19 +211,24 @@ export async function decryptBackup(text: string, passphrase: string): Promise<D
   if (!encryptionAvailable()) return { ok: false, message: "Encryption isn't available in this browser, so this file can't be opened here. Nothing on this device was changed." };
   const tooLarge = refuseIfTooLarge(text.length);
   if (!tooLarge.ok) return { ok: false, message: `${tooLarge.error} Nothing on this device was changed.` };
+  // From here on every failure is the same sentence: a wrong passphrase, a changed file, a truncated one, a
+  // header that is not ours. (The one exception is a version this app does not know: that says so, because
+  // trying the passphrase again would be no help, and it reveals nothing about any contents.)
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, message: "This file isn't a Chrono Kata backup. Nothing on this device was changed." };
+    return { ok: false, message: CANNOT_OPEN };
   }
-  const hostile = refuseIfHostile(raw);
-  if (!hostile.ok) return { ok: false, message: `${hostile.error} Nothing on this device was changed.` };
-  if (typeof raw === 'object' && raw !== null && (raw as Record<string, unknown>).format === ENCRYPTED_FORMAT && (raw as Record<string, unknown>).version !== ENCRYPTED_VERSION) {
-    return { ok: false, message: 'This encrypted backup was made by a version of the app that this one does not know. Nothing on this device was changed.' };
+  if (!refuseIfHostile(raw).ok) return { ok: false, message: CANNOT_OPEN };
+  if (typeof raw === 'object' && raw !== null && (raw as Record<string, unknown>).format === ENCRYPTED_FORMAT) {
+    const version = (raw as Record<string, unknown>).version;
+    if (typeof version === 'number' && Number.isInteger(version) && version > ENCRYPTED_VERSION) {
+      return { ok: false, message: 'This encrypted backup was made by a version of the app that this one does not know. Nothing on this device was changed.' };
+    }
   }
   const file = FileSchema.safeParse(raw);
-  if (!file.success) return { ok: false, message: "This file isn't a Chrono Kata backup. Nothing on this device was changed." };
+  if (!file.success) return { ok: false, message: CANNOT_OPEN };
 
   const salt = fromBase64(file.data.kdf.salt);
   const iv = fromBase64(file.data.cipher.iv);

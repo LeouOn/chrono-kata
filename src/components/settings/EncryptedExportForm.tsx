@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { describeSecrets, encryptBackup, MIN_PASSPHRASE_CHARS, withoutIncludedSecrets } from '@/lib/data-transfer/encrypted';
+import { countSecrets, describeSecrets, encryptBackup, MIN_PASSPHRASE_CHARS, withoutIncludedSecrets, type BackupSecrets } from '@/lib/data-transfer/encrypted';
 import { collectAll, collectSecrets, downloadText } from '@/lib/data-transfer/export';
 import { toLocalDateString } from '@/lib/utils/date';
 
@@ -29,10 +29,30 @@ export function EncryptedExportForm({ onSaved, onCancel }: Props) {
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [onDevice, setOnDevice] = useState<BackupSecrets | null>(null);
 
   useEffect(() => {
     firstRef.current?.focus();
   }, []);
+
+  // What the box WOULD put in the file, by count, read when the form opens (reading changes nothing).
+  useEffect(() => {
+    let live = true;
+    void collectSecrets().then((found) => {
+      if (live) setOnDevice(found);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const counts = onDevice ? countSecrets(onDevice) : null;
+  const inventory = counts
+    ? [
+        ...(counts.apiKeys > 0 ? [`API keys (${counts.apiKeys})`] : []),
+        ...(counts.googleSignIn > 0 ? [`Google Calendar sign-in (${counts.googleSignIn})`] : []),
+        ...(counts.calendarLink > 0 ? [`Private calendar link (${counts.calendarLink})`] : []),
+      ]
+    : [];
 
   const longEnough = [...passphrase.normalize('NFKC')].length >= MIN_PASSPHRASE_CHARS;
   const matches = passphrase === again;
@@ -69,7 +89,8 @@ export function EncryptedExportForm({ onSaved, onCancel }: Props) {
         Save an encrypted backup
       </h3>
       <p className="text-sm text-text-muted">
-        The file can only be opened with the passphrase you choose. It is not saved anywhere: if it is lost, the file cannot be opened.
+        The file can only be opened with the passphrase you choose. The passphrase is not saved anywhere, so a forgotten passphrase cannot be
+        recovered: nobody can open the file without it, and there is no reset.
       </p>
       <form
         className="space-y-3"
@@ -113,11 +134,23 @@ export function EncryptedExportForm({ onSaved, onCancel }: Props) {
         </div>
         <div>
           <label htmlFor={boxId} className="flex min-h-11 items-start gap-3 text-sm text-text">
-            <input id={boxId} type="checkbox" className="mt-1 size-5 shrink-0" checked={includeSecrets} onChange={(event) => setIncludeSecrets(event.target.checked)} />
+            <input
+              id={boxId}
+              type="checkbox"
+              className="mt-1 size-5 shrink-0"
+              aria-describedby={`${boxId}-what`}
+              checked={includeSecrets}
+              onChange={(event) => setIncludeSecrets(event.target.checked)}
+            />
             Also include my API keys, Google sign-in and private calendar link in this encrypted file
           </label>
-          <p className="ml-8 text-xs text-text-muted">
-            Left unticked, they stay out of the file, as in a plain backup. Ticked, anyone who has both this file and the passphrase can use them.
+          <p id={`${boxId}-what`} className="ml-8 text-xs text-text-muted" data-testid="secrets-inventory">
+            {onDevice === null
+              ? 'Looking at what is on this device…'
+              : inventory.length > 0
+                ? `On this device: ${inventory.join(', ')}.${includeSecrets ? ' These will be inside the file.' : ' They stay out of the file unless you tick this.'}`
+                : 'There are none of these on this device, so there is nothing to include.'}{' '}
+            Ticked, anyone who has both this file and the passphrase can use them.
           </p>
         </div>
         {problem && (

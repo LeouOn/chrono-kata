@@ -40,6 +40,7 @@ export function PassphrasePrompt({ onOpen, onCancel }: Props) {
       <h3 id={headingId} className="text-base font-medium text-text">
         This backup is encrypted
       </h3>
+      <p className="text-sm text-text-muted">A forgotten passphrase cannot be recovered. There is no reset.</p>
       <form
         className="space-y-3"
         onSubmit={(event) => {
@@ -55,7 +56,7 @@ export function PassphrasePrompt({ onOpen, onCancel }: Props) {
             id={inputId}
             ref={inputRef}
             type="password"
-            autoComplete="current-password"
+            autoComplete="off"
             className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-text"
             value={passphrase}
             onChange={(event) => setPassphrase(event.target.value)}
