@@ -49,10 +49,13 @@ states and first-run · **Roadmap:** Wave 19 · **Lane:** B
   390px wide, and making each cell 44px would destroy the view. The cells are marked
   `data-a11y-exempt="dense-grid"`, keep their `aria-label` and `title`, and the exemption is one
   named attribute, not a blanket rule.
-- **One known defect is allow-listed, not fixed**: the `/timeline` header's "Plan" link is 25px wide
-  and lives in `src/components/timeline/**`, which is frozen while Wave 7 settles. The sweep lists it
-  explicitly (`KNOWN_BLOCKED`) so it fails if anything else regresses, and the entry is removed when
-  the freeze lifts.
+- **The dense year grid carries a text alternative**: a visible summary line ("N sessions this year ·
+  busiest month June (4h 30m)") and a visually hidden month table, so a screen-reader user reads the
+  year in words instead of 371 squares; the grid itself is `aria-hidden` and its cells are out of the
+  tab order, because 371 stops is not navigation.
+- **The `/timeline` "Plan" link is fixed, not allow-listed** (44px wide as well as tall). It was the
+  one blocking defect in a file that was frozen while Wave 7 settled; the lead lifted that for the one
+  link, and the sweep's temporary `KNOWN_BLOCKED` list is gone.
 - **Subtle 1px dividers are not treated as UI-component boundaries**: WCAG 1.4.11 asks 3:1 for
   boundaries needed to identify a control, and a decorative card divider is not one. The sweep checks
   the text and accent pairs that carry meaning.
@@ -74,6 +77,7 @@ in dark and red in light for the accent pairs.
 - The reduced-motion media query neutered → reduced-motion test red.
 - The light amber accent restored to the bright value → contrast test red.
 - The heatmap exemption removed → sweep red (371 target-size failures).
+- The `/timeline` "Plan" link back to 25px wide → sweep red (`target-size`, the named link).
 
 ## Gates (part 1)
 
@@ -86,7 +90,6 @@ in dark and red in light for the accent pairs.
 
 - High-contrast mode (part 2), the command palette and cheat sheet (part 3), virtualisation and the
   10k-task budget (part 4), empty states and first-run (part 5).
-- The `/timeline` "Plan" link stays 25px wide until Wave 7's freeze lifts (allow-listed above).
 - The sweep covers the routes that need no seeded data; `/sessions/detail` and `/projects/detail`
   (which need an id) are covered by their own specs, not by this sweep.
 - The sweep's name computation is an approximation of the accessibility tree (aria-label,

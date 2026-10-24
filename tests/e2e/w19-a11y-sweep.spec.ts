@@ -231,15 +231,6 @@ async function auditPage(page: Page): Promise<Violation[]> {
   });
 }
 
-/**
- * One known defect the wave cannot fix yet: the /timeline header's "Plan" link
- * is 25px wide, and that file (src/components/timeline/**) is frozen while W7
- * settles. It is listed here rather than silently skipped, so the sweep fails
- * if ANYTHING else regresses and the entry is removed the moment the freeze
- * lifts.
- */
-const KNOWN_BLOCKED = [/\/timeline \[target-size\] a\.text-xs\.text-accent\.min-h-11 /];
-
 test('every route passes the in-house a11y sweep at 390x844', async ({ page }) => {
   await enableTaskInbox(page);
   const failures: string[] = [];
@@ -250,9 +241,7 @@ test('every route passes the in-house a11y sweep at 390x844', async ({ page }) =
     await page.waitForTimeout(250);
     const violations = await auditPage(page);
     for (const violation of violations) {
-      const line = `${route} [${violation.kind}] ${violation.element}: ${violation.detail}`;
-      if (KNOWN_BLOCKED.some((pattern) => pattern.test(line))) continue;
-      failures.push(line);
+      failures.push(`${route} [${violation.kind}] ${violation.element}: ${violation.detail}`);
     }
   }
 
@@ -354,6 +343,23 @@ test('theme tokens meet WCAG AA in light and dark', async ({ page }) => {
     }
   }
   expect(failures, `\n${failures.join('\n')}\n`).toEqual([]);
+});
+
+test('the dense year grid has a readable text alternative', async ({ page }) => {
+  await enableTaskInbox(page);
+  await page.goto('/insights');
+  // The visualisation is not the only way to read the year: a summary line in
+  // words, plus a table a screen reader can walk month by month.
+  await expect(page.getByText(/\d+ sessions? this year/)).toBeVisible();
+  await expect(page.getByRole('table', { name: /practice by month/i })).toBeAttached();
+  // And the grid itself stays out of the tab order: 371 stops is not navigation.
+  const tabbableCells = await page.evaluate(
+    () =>
+      Array.from(document.querySelectorAll('[data-a11y-exempt="dense-grid"]')).filter(
+        (cell) => (cell as HTMLElement).tabIndex >= 0,
+      ).length,
+  );
+  expect(tabbableCells).toBe(0);
 });
 
 test('focus is visible on every route', async ({ page }) => {
