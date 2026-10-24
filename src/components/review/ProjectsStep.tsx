@@ -88,7 +88,7 @@ export function ProjectsStep({ projects, weekByProject, decisions, busy, onSave 
             <div className="mt-2 flex flex-wrap gap-2">
               <Button
                 className="min-h-11"
-                aria-label={`Save the next step for “${project.title}”`}
+                aria-label={`Save next step: “${project.title}”`}
                 disabled={busy}
                 onClick={() => {
                   const value = saved.trim();
@@ -105,7 +105,7 @@ export function ProjectsStep({ projects, weekByProject, decisions, busy, onSave 
                 <Button
                   variant="ghost"
                   className="min-h-11"
-                  aria-label={`Pause “${project.title}”`}
+                  aria-label={`Pause for now: “${project.title}”`}
                   disabled={busy}
                   onClick={() => void onSave(project.id, { status: 'paused' }, { status: 'paused' })}
                 >
@@ -115,7 +115,7 @@ export function ProjectsStep({ projects, weekByProject, decisions, busy, onSave 
                 <Button
                   variant="ghost"
                   className="min-h-11"
-                  aria-label={`Make “${project.title}” active again`}
+                  aria-label={`Make active again: “${project.title}”`}
                   disabled={busy}
                   onClick={() => void onSave(project.id, { status: 'active' }, { status: 'active' })}
                 >

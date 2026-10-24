@@ -10,6 +10,9 @@ import { reviewRepo } from '@/lib/db/review.repo';
 import { projectRepo } from '@/lib/db/project.repo';
 import { taskRepo } from '@/lib/db/task.repo';
 import { weekBefore, weekKeyFor } from '@/lib/review/week';
+import { addDays } from '@/lib/pacing/days';
+import { toLocalDateString } from '@/lib/utils/date';
+import { localDayKeyToDate } from '@/lib/capture/task-input';
 import { DOMAIN_SEED_IDS } from '@/lib/db/seed-domains';
 import type { Task } from '@/lib/schemas/task';
 
@@ -18,7 +21,10 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace: vi.fn(), prefetch: vi.fn() }),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 beforeEach(async () => {
   push.mockClear();
   await resetDbForTesting();
@@ -142,7 +148,7 @@ describe('ReviewWizard', () => {
     renderWizard();
 
     await goToStep(1);
-    const letGo = screen.getByRole('button', { name: /Let go of/ });
+    const letGo = screen.getByRole('button', { name: /^Let it go:/ });
     act(() => {
       fireEvent.click(letGo);
       fireEvent.click(letGo);
@@ -164,7 +170,7 @@ describe('ReviewWizard', () => {
     renderWizard();
 
     await goToStep(1);
-    fireEvent.click(screen.getByRole('button', { name: /Name a new next step/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^New next step:/ }));
     fireEvent.change(await screen.findByLabelText(/The next small step for/), {
       target: { value: 'ask the editor for the receipt' },
     });
@@ -180,23 +186,91 @@ describe('ReviewWizard', () => {
 
   it('deferring writes the day and the scheduled status together', async () => {
     await seedWaitingTask();
+    const future = addDays(toLocalDateString(new Date()), 7);
     renderWizard();
 
     await goToStep(1);
-    fireEvent.click(screen.getByRole('button', { name: /Defer “Find the warranty email”/ }));
-    fireEvent.change(await screen.findByLabelText(/Day to look at/), {
-      target: { value: '2026-07-01' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: /^Defer:/ }));
+    fireEvent.change(await screen.findByLabelText(/Day to look at/), { target: { value: future } });
     fireEvent.click(screen.getByRole('button', { name: /^Defer$/ }));
 
     await waitFor(async () => {
       const task = await taskRepo.getById(WAITING_ID);
       expect(task?.status).toBe('scheduled');
       expect(task?.deferUntil ? task.deferUntil.getTime() : null).toBe(
-        new Date(2026, 6, 1, 12).getTime(),
+        localDayKeyToDate(future).getTime(),
       );
     });
-    expect(await screen.findByText('Deferred to 2026-07-01.')).toBeTruthy();
+    expect(await screen.findByText(`Deferred to ${future}.`)).toBeTruthy();
+  });
+
+  it('refuses to schedule a task for nowhere: an empty or past day writes nothing', async () => {
+    await seedWaitingTask();
+    renderWizard();
+    await goToStep(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Defer:/ }));
+    const dayInput = (await screen.findByLabelText(/Day to look at/)) as HTMLInputElement;
+    const deferButton = screen.getByRole('button', { name: /^Defer$/ }) as HTMLButtonElement;
+
+    fireEvent.change(dayInput, { target: { value: '' } });
+    expect(deferButton.disabled).toBe(true);
+    expect(screen.getByText('Pick a day from today onwards.')).toBeTruthy();
+    fireEvent.click(deferButton);
+
+    fireEvent.change(dayInput, { target: { value: '2020-01-01' } });
+    expect(deferButton.disabled).toBe(true);
+    fireEvent.click(deferButton);
+
+    await waitFor(async () => {
+      const task = await taskRepo.getById(WAITING_ID);
+      expect(task?.status).toBe('next');
+      expect(task?.deferUntil ?? null).toBeNull();
+      const draft = await reviewRepo.getDraft(WEEK);
+      expect(draft?.decisions.sweep ?? {}).toEqual({});
+    });
+  });
+
+  it('no sequence of clicks can reach an illegal transition', async () => {
+    await seedWaitingTask();
+    const future = addDays(toLocalDateString(new Date()), 3);
+    renderWizard();
+    await goToStep(1);
+
+    async function expectStatus(expected: string) {
+      await waitFor(async () => expect((await taskRepo.getById(WAITING_ID))?.status).toBe(expected));
+    }
+    // The row is written before React clears `busy`, so a click issued right
+    // after the status check can land on a disabled button. Wait for the
+    // control itself, the way a person would.
+    async function clickWhenEnabled(name: RegExp | string) {
+      const button = screen.getByRole('button', { name }) as HTMLButtonElement;
+      await waitFor(() => expect(button.disabled).toBe(false));
+      fireEvent.click(button);
+    }
+    async function deferTo(dayKey: string) {
+      await clickWhenEnabled(/^Defer:/);
+      fireEvent.change(await screen.findByLabelText(/Day to look at/), { target: { value: dayKey } });
+      await clickWhenEnabled(/^Defer$/);
+      await expectStatus('scheduled');
+    }
+
+    // keep -> defer -> let it go -> undo -> defer
+    await clickWhenEnabled(/^Keep:/);
+    await expectStatus('next');
+    await deferTo(future);
+
+    await clickWhenEnabled(/^Let it go:/);
+    await expectStatus('dropped');
+    // A dropped row offers Undo only, so dropped -> scheduled is not reachable.
+    expect(screen.queryByRole('button', { name: /^Defer:/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Undo let go' })).toBeTruthy();
+
+    await clickWhenEnabled('Undo let go');
+    await expectStatus('next');
+    await deferTo(future);
+
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('finishes a draft that belongs to the previous week under that week, not today', async () => {
@@ -208,6 +282,8 @@ describe('ReviewWizard', () => {
     });
     renderWizard();
 
+    // A draft from an earlier week is never resumed behind the user's back.
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue that review' }));
     await screen.findByText(/^Step 6 of 6:/);
     const notes = screen.getByLabelText('What stood out?') as HTMLTextAreaElement;
     expect(notes.value).toBe('carried over from Sunday night');
@@ -218,6 +294,62 @@ describe('ReviewWizard', () => {
     expect(reviews).toHaveLength(1);
     expect(reviews[0]?.weekOf).toBe(lastWeek);
     expect(reviews[0]?.notes).toBe('carried over from Sunday night');
+  });
+
+  it('offers a choice instead of silently resuming an older draft', async () => {
+    await seedWaitingTask();
+    const lastWeek = weekBefore(WEEK);
+    await reviewRepo.saveDraft(lastWeek, { step: 3, decisions: { notes: 'old notes' } });
+    renderWizard();
+
+    expect(await screen.findByText(/You have an unfinished review for the week of/)).toBeTruthy();
+    expect(screen.queryByText(/^Step 1 of 6:/)).toBeNull();
+    expect(screen.queryByText(/^Step 4 of 6:/)).toBeNull();
+
+    // Starting this week leaves the older draft exactly where it was.
+    fireEvent.click(screen.getByRole('button', { name: /Start this week/ }));
+    expect(await screen.findByText(/^Step 1 of 6:/)).toBeTruthy();
+    expect((await reviewRepo.getDraft(lastWeek))?.step).toBe(3);
+  });
+
+  it('discards an older draft only after a confirm', async () => {
+    await seedWaitingTask();
+    const lastWeek = weekBefore(WEEK);
+    await reviewRepo.saveDraft(lastWeek, { step: 3, decisions: { notes: 'old notes' } });
+    renderWizard();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Discard the unfinished review/ }));
+    expect(await screen.findByText(/Discard the unfinished review for the week of/)).toBeTruthy();
+    expect(await reviewRepo.getDraft(lastWeek)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard it' }));
+    await waitFor(async () => expect(await reviewRepo.getDraft(lastWeek)).toBeNull());
+    expect(await screen.findByText(/^Step 1 of 6:/)).toBeTruthy();
+  });
+
+  it('resumes a draft that lands on the sweep step with the undecided rows visible', async () => {
+    await seedWaitingTask();
+    await reviewRepo.saveDraft(WEEK, { step: 1, decisions: {} });
+
+    // Make the tasks arrive AFTER the wizard has landed on the sweep step, which
+    // is the real resume race: the draft read is fast and the task store is not.
+    const realGetAll = taskRepo.getAll.bind(taskRepo);
+    let firstCall = true;
+    vi.spyOn(taskRepo, 'getAll').mockImplementation(async () => {
+      if (firstCall) {
+        firstCall = false;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      return realGetAll();
+    });
+
+    renderWizard();
+
+    expect(await screen.findByText(/^Step 2 of 6:/)).toBeTruthy();
+    // The snapshot must be taken AFTER the tasks load; an empty one would hide
+    // the undecided waiting task for the whole visit.
+    expect(await screen.findByText('Find the warranty email')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Keep:/ })).toBeTruthy();
   });
 
   it('keeps the aim typed on the balance step in the draft', async () => {
@@ -232,6 +364,27 @@ describe('ReviewWizard', () => {
       const draft = await reviewRepo.getDraft(WEEK);
       expect(draft?.decisions.weekIntentions).toEqual({ [DOMAIN_SEED_IDS.trading]: 120 });
     });
+  });
+
+  it('uses calm vocabulary and keeps every visible label inside its accessible name', async () => {
+    await seedWaitingTask();
+    renderWizard();
+
+    for (let step = 0; step < 6; step += 1) {
+      await screen.findByText(new RegExp(`^Step ${step + 1} of 6:`));
+      const text = document.body.textContent ?? '';
+      // The project's vocabulary: waiting, let go. Never a failure word.
+      expect(text).not.toMatch(/\b(dropped|abandoned|failed|behind|overdue|late)\b/i);
+
+      for (const control of Array.from(document.querySelectorAll<HTMLElement>('button, a[href]'))) {
+        const visible = (control.textContent ?? '').trim().toLowerCase();
+        if (visible === '') continue;
+        const accessible = (control.getAttribute('aria-label') ?? control.textContent ?? '').trim().toLowerCase();
+        expect(accessible, `label-in-name: ${visible}`).toContain(visible);
+      }
+
+      if (step < 5) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    }
   });
 
   it('closing for now saves the draft step and returns home', async () => {

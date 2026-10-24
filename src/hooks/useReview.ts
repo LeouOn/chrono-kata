@@ -53,6 +53,14 @@ export function useReviewWrites() {
     },
   });
 
+  /** Drop one unfinished draft. Only called from the explicit discard choice. */
+  const discardDraft = useMutation({
+    mutationFn: (weekOf: string) => reviewRepo.deleteDraft(weekOf),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['review'] });
+    },
+  });
+
   const complete = useMutation({
     mutationFn: (input: { weekOf: string; patch: ReviewPatch }) =>
       reviewRepo.complete(input.weekOf, input.patch),
@@ -66,7 +74,7 @@ export function useReviewWrites() {
     },
   });
 
-  return { saveDraft, complete };
+  return { saveDraft, complete, discardDraft };
 }
 
 interface SweepWrite {

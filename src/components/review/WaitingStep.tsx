@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { addDays, daysBetweenDayKeys } from '@/lib/pacing/days';
 import { NEXT_ACTION_MAX } from '@/lib/review/limits';
-import type { SweepDecision } from '@/lib/review/decisions';
+import { isValidDeferDay, type SweepDecision } from '@/lib/review/decisions';
 import type { Task } from '@/lib/schemas/task';
 import { toLocalDateString } from '@/lib/utils/date';
 
@@ -81,6 +81,10 @@ export function WaitingStep({ tasks, decisions, now, busy, onDecide, onUndo }: P
         const decision = decisions[task.id];
         const rowMode = mode[task.id];
         const days = untouchedDays(task, now);
+        // `dropped` can only go back to the inbox or to `next` (TASK_TRANSITIONS),
+        // so once a row is let go the only possible action is Undo. Showing the
+        // other three would offer a click that must fail.
+        const locked = decision?.action === 'drop';
         return (
           <Card key={task.id}>
             <div className="flex items-start justify-between gap-3">
@@ -130,47 +134,59 @@ export function WaitingStep({ tasks, decisions, now, busy, onDecide, onUndo }: P
               </form>
             ) : null}
 
-            {rowMode === 'defer' ? (
-              <form
-                className="mt-3 space-y-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const value = day[task.id] ?? addDays(todayKey, 7);
-                  void onDecide(task.id, { action: 'defer', deferUntil: value });
-                  setMode((current) => ({ ...current, [task.id]: undefined }));
-                }}
-              >
-                <label className="block text-xs text-text-muted" htmlFor={`defer-${task.id}`}>
-                  Day to look at “{task.title}” again
-                </label>
-                <input
-                  id={`defer-${task.id}`}
-                  type="date"
-                  value={day[task.id] ?? addDays(todayKey, 7)}
-                  onChange={(event) => setDay((current) => ({ ...current, [task.id]: event.target.value }))}
-                  className="w-full min-h-11 rounded-xl border border-border bg-surface px-3 py-3 text-text"
-                />
-                <div className="flex flex-wrap gap-2">
-                  <Button type="submit" disabled={busy}>
-                    Defer
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setMode((current) => ({ ...current, [task.id]: undefined }))}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            ) : null}
+            {rowMode === 'defer' ? (() => {
+              const value = day[task.id] ?? addDays(todayKey, 7);
+              const valid = isValidDeferDay(value, todayKey);
+              return (
+                <form
+                  className="mt-3 space-y-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!valid) return;
+                    void onDecide(task.id, { action: 'defer', deferUntil: value });
+                    setMode((current) => ({ ...current, [task.id]: undefined }));
+                  }}
+                >
+                  <label className="block text-xs text-text-muted" htmlFor={`defer-${task.id}`}>
+                    Day to look at “{task.title}” again
+                  </label>
+                  <input
+                    id={`defer-${task.id}`}
+                    type="date"
+                    required
+                    aria-invalid={!valid}
+                    aria-describedby={valid ? undefined : `defer-hint-${task.id}`}
+                    value={value}
+                    onChange={(event) => setDay((current) => ({ ...current, [task.id]: event.target.value }))}
+                    className="w-full min-h-11 rounded-xl border border-border bg-surface px-3 py-3 text-text"
+                  />
+                  {valid ? null : (
+                    <p id={`defer-hint-${task.id}`} className="text-xs text-text-muted">
+                      Pick a day from today onwards.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="submit" disabled={busy || !valid}>
+                      Defer
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setMode((current) => ({ ...current, [task.id]: undefined }))}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              );
+            })() : null}
 
-            {rowMode === undefined ? (
+            {rowMode === undefined && !locked ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   variant="ghost"
                   className="min-h-11"
-                  aria-label={`Keep “${task.title}” as it is`}
+                  aria-label={`Keep: “${task.title}”`}
                   disabled={busy}
                   onClick={() => void onDecide(task.id, { action: 'keep' })}
                 >
@@ -179,7 +195,7 @@ export function WaitingStep({ tasks, decisions, now, busy, onDecide, onUndo }: P
                 <Button
                   variant="ghost"
                   className="min-h-11"
-                  aria-label={`Name a new next step for “${task.title}”`}
+                  aria-label={`New next step: “${task.title}”`}
                   disabled={busy}
                   onClick={() => setMode((current) => ({ ...current, [task.id]: 'next-action' }))}
                 >
@@ -188,7 +204,7 @@ export function WaitingStep({ tasks, decisions, now, busy, onDecide, onUndo }: P
                 <Button
                   variant="ghost"
                   className="min-h-11"
-                  aria-label={`Defer “${task.title}”`}
+                  aria-label={`Defer: “${task.title}”`}
                   disabled={busy}
                   onClick={() => setMode((current) => ({ ...current, [task.id]: 'defer' }))}
                 >
@@ -197,7 +213,7 @@ export function WaitingStep({ tasks, decisions, now, busy, onDecide, onUndo }: P
                 <Button
                   variant="ghost"
                   className="min-h-11"
-                  aria-label={`Let go of “${task.title}”`}
+                  aria-label={`Let it go: “${task.title}”`}
                   disabled={busy}
                   onClick={() => void onDecide(task.id, { action: 'drop' })}
                 >
@@ -215,7 +231,7 @@ export function WaitingStep({ tasks, decisions, now, busy, onDecide, onUndo }: P
         );
       })}
       <p className="text-xs text-text-muted">
-        Letting go keeps the task in your data with the status `dropped`; it can come back at any time.
+        Letting go keeps the task in your data; it can come back at any time.
       </p>
     </div>
   );

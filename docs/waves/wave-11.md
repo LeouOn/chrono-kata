@@ -70,6 +70,23 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
   the same step. `latestDraft()` is what makes Monday's resume find Friday's
   draft after the week key moved. "Close for now" saves first and goes home; the
   Home card says "Resume your weekly review — in progress: step N of 6".
+- **An older draft never hijacks the entry.** When the newest draft belongs to a
+  past week the wizard opens a choice instead of resuming it: continue that
+  review, start this week's, or discard the old one (discarding needs a second
+  confirm). Starting this week's leaves the old draft untouched — nothing the
+  user paused is destroyed without an explicit discard.
+- **The sweep list is snapshotted only after the tasks have loaded.** A resume
+  that lands on the sweep step renders once with an empty task store; taking the
+  snapshot then would hide every undecided waiting row for the whole visit.
+- **Defer can never write a dateless scheduled task.** The day input must be a
+  real day key on or after today (the button stays disabled and says why), and
+  the write path refuses anything else as well.
+- **A decided row cannot offer an illegal move.** Once a task is let go the row
+  shows only Undo, because `dropped` may only return to the inbox or `next`;
+  keep → defer → let go → undo → defer is exercised as a sequence.
+- **Labels name their control.** Every visible label is contained in its
+  accessible name ("Let it go: “…”", "Pause for now: “…”"), and the wizard's
+  rendered text never uses dropped/abandoned/failed/behind/overdue/late.
 - **Finish** calls `reviewRepo.complete(...)`: the review (notes, snapshot,
   next-week intentions) and the draft removal land in one transaction. A
   rejected save says so calmly, keeps the wizard usable, and the guard resets so
@@ -165,7 +182,7 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
   land together, `touchedAt` moves (so a kept task leaves the waiting window),
   `doneAt` is set exactly on `done`, an illegal transition refuses and leaves
   the row untouched, a missing task is reported instead of written.
-- `tests/unit/review/wizard.test.tsx` (9, real Dexie + react-query, only the
+- `tests/unit/review/wizard.test.tsx` (15, real Dexie + react-query, only the
   router mocked): a saved draft resumes at its step; **two Finish clicks in one
   act() call `complete` exactly once** and store one review; a rejected finish
   shows "nothing was changed" and the button works again on the next press
@@ -174,16 +191,38 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
   week finishes under that week, not today** (the week-rollover resume); an aim
   typed on the balance step is in the draft immediately; redefining a next step
   clears a stale defer date exactly like the inbox's next-action outcome;
-  "Close for now" saves the step and navigates home.
-- `tests/e2e/w11-review.spec.ts` (6): the Home card opens step 1 and the inbox
+  an older draft raises the choice and each branch behaves (continue, start this
+  week keeping the old draft, discard after a confirm); a resume onto the sweep
+  step shows undecided rows after a deliberately delayed task read; an empty or
+  past defer day writes nothing; the keep → defer → let go → undo → defer
+  sequence never hits an illegal transition; no failure vocabulary appears in
+  any step and every visible label is inside its accessible name; "Close for
+  now" saves the step and navigates home.
+- `tests/e2e/w11-review.spec.ts` (7): the Home card opens step 1 and the inbox
   sheet opens/closes inside the step; letting a waiting task go changes only its
   status (read back from IndexedDB), keeps the row on screen, and survives a
   reload at the same step; Back keeps state and "Close for now" resumes at the
   same step from Home; the project step saves a breadcrumb and pauses without
   deleting; finishing writes notes/intentions/snapshot and clears the draft;
-  every step fits 390×844 with no horizontal scroll, every control has an
-  accessible name, the footer targets are ≥44px and the practice FAB does not
-  cover them.
+  an unfinished review from an earlier week asks before taking over and starting
+  this week keeps it; every step fits 390×844 with no horizontal scroll, every
+  control has an accessible name and a label-in-name that matches its visible
+  text, no failure vocabulary is rendered, the footer targets are ≥44px and the
+  practice FAB does not cover them. Screenshots: /tmp/qa-w11-shots/.
+
+### Gates actually run (this PR)
+
+- `tsc --noEmit` exit 0 (main is green after #49), `eslint .` exit 0.
+- Unit files (71 tests across review + task updateStatus): exit 0.
+- `npm run build` exit 0 (the `/review` route prerenders).
+- `tests/e2e/w11-review.spec.ts` alone at workers=1: 7/7, exit 0.
+- The same spec `--repeat-each=10 --workers=2` solo: 70/70, exit 0.
+- Full Playwright suite at workers=1, twice: 56/56 exit 0 and 56/56 exit 0 (an
+  earlier intermediate run hit a flake in the untouched
+  `tests/e2e/w6-planning-settings.spec.ts` — see the PR message).
+- Not run here: full vitest in all six zones (dev-lead's gate covers it); this
+  PR's changed code is zone-free except the week helpers, already covered by
+  the six-zone stats tests in #45.
 
 ## Deferred / known gaps
 

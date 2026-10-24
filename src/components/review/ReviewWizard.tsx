@@ -21,6 +21,7 @@ import { summarizeWeek } from '@/lib/review/stats';
 import { formatWeekLabel, weekBefore, weekKeyFor } from '@/lib/review/week';
 import {
   EMPTY_DECISIONS,
+  isValidDeferDay,
   parseDecisions,
   serialiseDecisions,
   withProjectDecision,
@@ -31,8 +32,9 @@ import {
   type SweepDecision,
 } from '@/lib/review/decisions';
 import { localDayKeyToDate } from '@/lib/capture/task-input';
+import { toLocalDateString } from '@/lib/utils/date';
 import type { Project, ProjectInput } from '@/lib/schemas/project';
-import type { Review } from '@/lib/schemas/review';
+import type { Review, ReviewDraft } from '@/lib/schemas/review';
 import type { Task } from '@/lib/schemas/task';
 
 const SWEEP_FAILED = 'That change was not saved, so nothing was altered. Try again.';
@@ -53,7 +55,7 @@ export function ReviewWizard() {
   const currentWeek = weekKeyFor(now);
 
   const { data: latestDraft, isLoading: draftLoading } = useLatestDraft();
-  const { saveDraft, complete } = useReviewWrites();
+  const { saveDraft, complete, discardDraft } = useReviewWrites();
   const sweepTask = useSweepTask();
   const saveProject = useSaveProject();
 
@@ -62,6 +64,9 @@ export function ReviewWizard() {
   const [decisions, setDecisions] = useState<ReviewDecisions>(EMPTY_DECISIONS);
   const [waitingSnapshot, setWaitingSnapshot] = useState<{ weekOf: string; ids: string[] } | null>(null);
   const [savedReview, setSavedReview] = useState<Review | null>(null);
+  const [pastDraft, setPastDraft] = useState<ReviewDraft | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [discardError, setDiscardError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,16 +74,23 @@ export function ReviewWizard() {
   const finishingRef = useRef(false);
   const seededRef = useRef<string | null>(null);
 
-  // Resume the most recent draft (any week), otherwise start this week.
+  // Resume this week's draft silently. A draft from an earlier week is never
+  // resumed behind the user's back: it would file a review under the wrong week
+  // forever. The choice below lets them continue it, start this week, or let it go.
   useEffect(() => {
     if (weekOf !== null || draftLoading) return;
-    if (latestDraft) {
-      setWeekOf(latestDraft.weekOf);
-      setStep(clampStep(latestDraft.step));
-      setDecisions(parseDecisions(latestDraft.decisions));
-    } else {
+    if (!latestDraft) {
       setWeekOf(currentWeek);
+      return;
     }
+    if (latestDraft.weekOf !== currentWeek) {
+      setPastDraft(latestDraft);
+      setWeekOf(currentWeek);
+      return;
+    }
+    setWeekOf(latestDraft.weekOf);
+    setStep(clampStep(latestDraft.step));
+    setDecisions(parseDecisions(latestDraft.decisions));
   }, [weekOf, draftLoading, latestDraft, currentWeek]);
 
   const activeWeek = weekOf ?? currentWeek;
@@ -100,7 +112,7 @@ export function ReviewWizard() {
     }));
   }, [existingReview]);
 
-  const { data: tasks = [] } = useTasks();
+  const { data: tasks = [], isLoading: tasksLoading } = useTasks();
   const { data: projects = [] } = useProjects();
   const { data: domains = [] } = useDomains();
   const { sessions } = useSessions();
@@ -125,9 +137,13 @@ export function ReviewWizard() {
   // make its own row vanish; decisions recorded in an earlier visit stay listed.
   useEffect(() => {
     if (step !== 1) return;
+    // Wait for the tasks to arrive: a resume that lands on this step renders
+    // once with an empty store, and snapshotting that would lock in an empty
+    // list for the whole visit.
+    if (tasksLoading) return;
     if (waitingSnapshot?.weekOf === activeWeek) return;
     setWaitingSnapshot({ weekOf: activeWeek, ids: stats.waitingTaskIds });
-  }, [step, waitingSnapshot, activeWeek, stats.waitingTaskIds]);
+  }, [step, tasksLoading, waitingSnapshot, activeWeek, stats.waitingTaskIds]);
 
   const waitingIds = useMemo(() => {
     const ids = new Set<string>(waitingSnapshot?.weekOf === activeWeek ? waitingSnapshot.ids : []);
@@ -175,6 +191,92 @@ export function ReviewWizard() {
           >
             Back to today
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (pastDraft) {
+    const draft = pastDraft;
+    return (
+      <div className="space-y-4">
+        <header>
+          <h1 className="font-serif text-2xl text-text">Weekly review</h1>
+          <p className="text-sm text-text-muted">Today is in the week of {formatWeekLabel(currentWeek)}.</p>
+        </header>
+        <Card>
+          <p className="font-serif text-lg text-text">
+            You have an unfinished review for the week of {formatWeekLabel(draft.weekOf)}.
+          </p>
+          <p className="mt-1 text-sm text-text-muted">
+            It is saved on this device at step {clampStep(draft.step) + 1} of {REVIEW_STEPS.length}. Continue it, or
+            start this week&apos;s review.
+          </p>
+        </Card>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className="min-h-11"
+            onClick={() => {
+              setWeekOf(draft.weekOf);
+              setStep(clampStep(draft.step));
+              setDecisions(parseDecisions(draft.decisions));
+              setPastDraft(null);
+            }}
+          >
+            Continue that review
+          </Button>
+          <Button
+            variant="ghost"
+            className="min-h-11"
+            onClick={() => {
+              setStep(0);
+              setDecisions(EMPTY_DECISIONS);
+              setPastDraft(null);
+            }}
+          >
+            Start this week&apos;s review
+          </Button>
+        </div>
+        <div className="border-t border-border pt-3">
+          {confirmDiscard ? (
+            <div className="space-y-2">
+              <p className="text-sm text-text">Discard the unfinished review for the week of {formatWeekLabel(draft.weekOf)}? Nothing else is touched.</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="ghost"
+                  className="min-h-11"
+                  onClick={() => {
+                    setDiscardError(null);
+                    void (async () => {
+                      try {
+                        await discardDraft.mutateAsync(draft.weekOf);
+                        setConfirmDiscard(false);
+                        setPastDraft(null);
+                        setStep(0);
+                        setDecisions(EMPTY_DECISIONS);
+                      } catch {
+                        setDiscardError('That draft could not be discarded just now, so it is still here.');
+                      }
+                    })();
+                  }}
+                >
+                  Discard it
+                </Button>
+                <Button variant="ghost" className="min-h-11" onClick={() => setConfirmDiscard(false)}>
+                  Keep it
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="ghost" className="min-h-11" onClick={() => setConfirmDiscard(true)}>
+              Discard the unfinished review
+            </Button>
+          )}
+          {discardError ? (
+            <p role="alert" className="mt-2 text-sm text-text">
+              {discardError}
+            </p>
+          ) : null}
         </div>
       </div>
     );
@@ -240,9 +342,16 @@ export function ReviewWizard() {
           status: 'next',
         });
       } else if (decision.action === 'defer') {
+        const todayKey = toLocalDateString(now);
+        if (!decision.deferUntil || !isValidDeferDay(decision.deferUntil, todayKey)) {
+          // Never write a scheduled task without a real day: the input guards
+          // this, and the write path refuses it too.
+          setError('Pick a day from today onwards, then try again.');
+          return;
+        }
         await sweepTask.mutateAsync({
           taskId,
-          patch: { deferUntil: decision.deferUntil ? localDayKeyToDate(decision.deferUntil) : null },
+          patch: { deferUntil: localDayKeyToDate(decision.deferUntil) },
           status: 'scheduled',
         });
       } else {

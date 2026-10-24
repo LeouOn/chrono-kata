@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isDayKey } from '@/lib/pacing/days';
 import {
   BREADCRUMB_MAX,
   INTENTION_MAX_MINUTES,
@@ -71,6 +72,17 @@ function intentionsOf(raw: unknown): Intentions {
 /** Normalise one intentions record, dropping entries that are no longer valid. */
 export function normaliseIntentions(raw: unknown): Intentions {
   return IntentionsSchema.parse(intentionsOf(raw));
+}
+
+/**
+ * A defer day must be a real local day key on or after `todayKey`.
+ *
+ * Validation lives here (not only in the input) because a scheduled task
+ * without a date is a row the UI must never write: a cleared date field is the
+ * classic "cleared input persists garbage" case.
+ */
+export function isValidDeferDay(value: string, todayKey: string): boolean {
+  return isDayKey(value) && value >= todayKey;
 }
 
 /** Read a stored `decisions` value, keeping every valid part. */

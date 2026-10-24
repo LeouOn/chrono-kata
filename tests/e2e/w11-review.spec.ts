@@ -181,6 +181,7 @@ test('the home card opens the wizard at step 1 and names every step', async ({ p
   const dialog = page.getByRole('dialog', { name: 'Process inbox' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('sort the paper pile')).toBeVisible();
+  await page.screenshot({ path: '/tmp/qa-w11-shots/inbox-in-step.png' });
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Clear the inbox' })).toBeVisible();
@@ -195,8 +196,9 @@ test('letting a waiting task go changes only its status, and the draft resumes a
   await expect(page.getByText('Find the warranty email')).toBeVisible();
   await expect(page.getByText(/untouched \d+ days/)).toBeVisible();
 
-  await page.getByRole('button', { name: /Let go of/ }).click();
+  await page.getByRole('button', { name: /^Let it go:/ }).click();
   await expect(page.getByText('Let go. Nothing was deleted.')).toBeVisible();
+  await page.screenshot({ path: '/tmp/qa-w11-shots/waiting-let-go.png' });
   // The row stays on screen: a decision must never look like a deletion.
   await expect(page.getByText('Find the warranty email')).toBeVisible();
   await waitForDraftStep(page, 1);
@@ -214,7 +216,7 @@ test('letting a waiting task go changes only its status, and the draft resumes a
 test('back keeps state, and closing mid-flow resumes at the same step', async ({ page }) => {
   await openReview(page);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByRole('button', { name: /Keep “Find the warranty email”/ }).click();
+  await page.getByRole('button', { name: /^Keep:/ }).click();
   await expect(page.getByText('Kept as it is.')).toBeVisible();
   await waitForDraftStep(page, 1);
 
@@ -240,14 +242,14 @@ test('projects step saves a breadcrumb and pausing is a status change, not a del
 
   const breadcrumb = page.getByLabel(/After this, the next step for “Rebuild the portfolio”/);
   await breadcrumb.fill('draft the case study outline');
-  await page.getByRole('button', { name: /Save the next step for “Rebuild the portfolio”/ }).click();
+  await page.getByRole('button', { name: /^Save next step:/ }).click();
   await expect
     .poll(async () => (await readRow(page, 'projects', PROJECT))?.breadcrumb)
     .toBe('draft the case study outline');
 
-  await page.getByRole('button', { name: /Pause “Rebuild the portfolio”/ }).click();
+  await page.getByRole('button', { name: /^Pause for now:/ }).click();
   await expect.poll(async () => (await readRow(page, 'projects', PROJECT))?.status).toBe('paused');
-  await expect(page.getByRole('button', { name: /Make “Rebuild the portfolio” active again/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Make active again:/ })).toBeVisible();
 });
 
 test('finishing writes the review, its intentions and the snapshot, and clears the draft', async ({
@@ -261,8 +263,10 @@ test('finishing writes the review, its intentions and the snapshot, and clears t
   await expect(intention).toBeVisible();
   await intention.fill('120');
   await page.getByLabel('What stood out?').fill('A steady week; the trading journal helped.');
+  await page.screenshot({ path: '/tmp/qa-w11-shots/shape-next-week.png', fullPage: true });
   await page.getByRole('button', { name: 'Finish review' }).click();
   await expect(page.getByRole('heading', { name: 'Review saved' })).toBeVisible();
+  await page.screenshot({ path: '/tmp/qa-w11-shots/review-saved.png' });
 
   const reviews = await readAll(page, 'reviews');
   expect(reviews).toHaveLength(1);
@@ -279,6 +283,44 @@ test('finishing writes the review, its intentions and the snapshot, and clears t
   // A saved review does not leave a "resume" affordance behind.
   await page.goto('/');
   await expect(page.getByRole('link', { name: 'Start your weekly review' })).toBeVisible();
+});
+
+test('an unfinished review from an earlier week asks before it takes over', async ({ page }) => {
+  const lastMonday = await page.evaluate(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 7 - ((date.getDay() + 6) % 7));
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  });
+  await openDb(page);
+  await page.evaluate(
+    async ({ weekOf }) => {
+      const db = (window as unknown as { __reviewDb: IDBDatabase }).__reviewDb;
+      const tx = db.transaction('reviewDrafts', 'readwrite');
+      tx.objectStore('reviewDrafts').put({
+        weekOf,
+        step: 2,
+        decisions: { notes: 'left over from last week' },
+        updatedAt: new Date(),
+      });
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    },
+    { weekOf: lastMonday },
+  );
+
+  await openReview(page);
+  await expect(page.getByText(/You have an unfinished review for the week of/)).toBeVisible();
+  await expect(page.getByText(/^Step 1 of 6:/)).toHaveCount(0);
+
+  await page.getByRole('button', { name: /Start this week/ }).click();
+  await expect(page.getByText('Step 1 of 6: Clear the inbox')).toBeVisible();
+  // Starting this week does not destroy the older draft.
+  const kept = await readRow(page, 'reviewDrafts', lastMonday);
+  expect(kept?.step).toBe(2);
 });
 
 test('every wizard step fits the phone, names its controls and keeps a 44px target', async ({ page }) => {
@@ -311,6 +353,24 @@ test('every wizard step fits the phone, names its controls and keeps a 44px targ
     });
     expect(unnamed, `unnamed controls on step ${step + 1}`).toEqual([]);
 
+    const pageText = (await page.evaluate(() => document.body.textContent ?? '')).toLowerCase();
+    expect(pageText, `failure vocabulary on step ${step + 1}`).not.toMatch(
+      /\b(dropped|abandoned|failed|behind|overdue|late)\b/,
+    );
+
+    const notInName = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>('button, a[href]')).flatMap((control) => {
+        const visible = (control.textContent ?? '').trim().toLowerCase();
+        if (visible === '') return [];
+        const accessible = (control.getAttribute('aria-label') ?? control.textContent ?? '')
+          .trim()
+          .toLowerCase();
+        return accessible.includes(visible) ? [] : [`${visible} => ${accessible}`];
+      }),
+    );
+    expect(notInName, `label-in-name on step ${step + 1}`).toEqual([]);
+
+    await page.screenshot({ path: `/tmp/qa-w11-shots/step-${step + 1}.png`, fullPage: true });
     if (step < 5) await page.getByRole('button', { name: 'Next', exact: true }).click();
   }
 
