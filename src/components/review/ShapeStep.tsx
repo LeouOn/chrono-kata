@@ -8,6 +8,8 @@ import type { Domain } from '@/lib/schemas/domain';
 import type { Project } from '@/lib/schemas/project';
 import { formatWeekLabel } from '@/lib/review/week';
 import { addDays } from '@/lib/pacing/days';
+import { ReviewSummary } from './ReviewSummary';
+import type { Session } from '@/lib/schemas/session';
 
 interface Props {
   weekOf: string;
@@ -15,6 +17,8 @@ interface Props {
   projects: Project[];
   intentions: Intentions;
   notes: string;
+  /** The reviewed week's sessions; the optional AI summary is built from these. */
+  sessions: readonly Session[];
   busy: boolean;
   onIntentionChange: (domainId: string, minutes: number | null) => void;
   onCadenceChange: (projectId: string, cadence: number | null) => void;
@@ -32,6 +36,7 @@ export function ShapeStep({
   projects,
   intentions,
   notes,
+  sessions,
   busy,
   onIntentionChange,
   onCadenceChange,
@@ -131,6 +136,8 @@ export function ShapeStep({
           {notes.length} / {NOTES_MAX}
         </p>
       </Card>
+
+      <ReviewSummary sessions={sessions} notes={notes} onNotesChange={onNotesChange} />
     </div>
   );
 }

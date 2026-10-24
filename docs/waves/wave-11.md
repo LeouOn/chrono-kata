@@ -99,6 +99,36 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
 - **Entry point**: a Home card (`ReviewLink`) that names the week and, with a
   draft in progress, the step to resume.
 
+## What shipped (the optional AI summary)
+
+- The last step carries an optional summary card. It **reuses the existing weekly
+  reflection** (`generateWeeklyReflection`, `buildWeeklyReflectionUserText`)
+  rather than adding a second summarizer, and it reuses the decomposition
+  sheet's disclosure contract through the now-shared `useProviderPreview`.
+- **The disclosure is exact, both messages**: before anything is sent the panel
+  names the destination (provider, model, and whether that is this device, the
+  local network, or remote) and shows the precise user text AND the shared coach
+  instruction that would leave (the instruction is collapsed, like the
+  decomposition sheet's). The request is built once, at preview time, and carries
+  the coach and both texts; the send uses those values, so changing the coach or
+  the display name between opening and pressing Send cannot swap the text
+  underneath the user. No display name is sent from this surface at all.
+- **Aggregates only**: each session's `note` is removed before the text is built.
+  Task and project titles are never part of a session row, so they cannot leak;
+  the practice vocabulary (activity label, length, rating) is what the summary
+  is about. Private mode blocks the send and says what is allowed instead.
+  A wire test runs the REAL generation call over a stubbed HTTP boundary and
+  compares the two outgoing messages with the two texts the panel shows, with a
+  display name set and a session note marker that must appear nowhere.
+- **Nothing is saved without an explicit press**: the reply (observations + one
+  question) is shown, and "Add to my notes" is a second action that appends below
+  the user's writing. At the notes bound the **summary** is trimmed, never the
+  notes; with no room for a heading the notes are returned untouched and the UI
+  says the summary did not fit.
+- A failed call says nothing was added and can be retried; a week with no
+  sessions says there is nothing to summarise. The review remains complete and
+  useful with the card unused.
+
 ## Decisions where the roadmap was silent
 
 - **One review per week**, keyed by the Monday day key rather than by an id: the
@@ -209,6 +239,35 @@ optional AI summary · **Roadmap:** Wave 11 · **Lane:** B
   control has an accessible name and a label-in-name that matches its visible
   text, no failure vocabulary is rendered, the footer targets are ≥44px and the
   practice FAB does not cover them. Screenshots: /tmp/qa-w11-shots/.
+
+### AI summary tests
+
+- `tests/unit/review/summary.test.ts` (8): notes never in the wire text;
+  preview == wire text; rows not mutated; blank/6-item observations; trim the
+  summary, not the notes; the no-room case; nothing to add for an empty summary.
+- `tests/unit/review/review-summary-hook.test.ts` (4): preview sends nothing;
+  two confirms in one act() = one request; failure returns to the disclosure and
+  retries; closing an in-flight call ends idle, not error.
+- `tests/unit/review/ReviewSummary.test.tsx` (5): exact wire text shown and
+  nothing sent; one send, result shown, notes untouched until asked; private mode
+  disables send; failure then retry; empty week.
+- `tests/unit/review/review-summary-wire.test.ts` (1): the real
+  `generateWeeklyReflection` over a stubbed fetch; the system and user messages
+  equal the panel's two texts byte for byte, and the note marker and display
+  name appear nowhere. Mutants: put the note back, send the name again, re-read
+  the coach at send time - all red.
+- `tests/e2e/w11-review.spec.ts`: a browser case opens the panel on step 6, sees
+  the exact wire text for the seeded week, finds Send disabled with no provider,
+  leaves it, and still finishes with notes untouched; a second case configures a
+  provider, asserts zero requests before Send, records the POST body and compares
+  its two messages with the two `pre` texts byte for byte (no note marker, no
+  display name), and a third turns private mode on and sees Send disabled with
+  zero requests.
+- Mutants killed: keep session notes, cut the notes instead of the summary,
+  preview drift, no in-flight guard, auto-apply the summary, ignore the provider
+  preview.
+- `DecomposeSheet` + decomposition suites stay green after the shared-hook
+  extraction (50 tests).
 
 ### Gates actually run (this PR)
 

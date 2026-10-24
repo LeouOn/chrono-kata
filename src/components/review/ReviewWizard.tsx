@@ -172,6 +172,17 @@ export function ReviewWizard() {
 
   const inboxCount = tasks.filter((task) => task.status === 'inbox').length;
 
+  // The summary is about the reviewed week only; a session from another week is
+  // not part of it, even when it is in the store.
+  const weekSessions = useMemo(
+    () =>
+      sessions.filter((session) => {
+        const at = session.startedAt.getTime();
+        return at >= stats.weekStart && at < stats.weekEnd;
+      }),
+    [sessions, stats.weekStart, stats.weekEnd],
+  );
+
   if (savedReview) {
     return (
       <div className="space-y-4">
@@ -491,6 +502,7 @@ export function ReviewWizard() {
             projects={visibleProjects}
             intentions={decisions.nextWeekIntentions}
             notes={decisions.notes}
+            sessions={weekSessions}
             busy={busy}
             onIntentionChange={(domainId, minutes) => {
               const nextWeekIntentions = { ...decisions.nextWeekIntentions };
