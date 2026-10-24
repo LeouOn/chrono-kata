@@ -135,6 +135,21 @@ journal/shutdown UI, then export and search · **Roadmap:** Wave 12 · **Lane:**
   the rollback proof (and four more); format-only day key → "refuses an invalid
   day key".
 
+## Known properties and deferred polish
+
+- **A deleted task's id stays in the record until the next write that changes
+  it.** `applyShutdown` drops an id only when that write would change the row;
+  a note-only call with nothing new returns the stored row untouched, so a task
+  deleted in another tab can still be listed until the next real change. The
+  export skips ids whose task is missing, and `picks` behaves the same way, so
+  the only visible effect is a stale id for at most one save. Accepted rather
+  than fixed in part 1: rewriting the row to prune would make every no-op write
+  a write.
+- **Bidi control characters (U+202E and friends) still pass through titles.**
+  They do not create markdown structure, but some viewers can visually reverse
+  text around them. Stripping them in `escapeInline` is queued for part 3, with
+  the inline-escaping tests.
+
 ## Gates (part 1)
 
 - `tsc --noEmit` 0, `eslint src tests` 0.

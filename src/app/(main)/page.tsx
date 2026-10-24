@@ -20,6 +20,7 @@ import { MorningCheckIn } from '@/components/checkin/MorningCheckIn';
 import { InboxLink } from '@/components/tasks/InboxLink';
 import { TodayPlanCard } from '@/components/planning/TodayPlanCard';
 import { ReviewLink } from '@/components/review/ReviewLink';
+import { JournalLink } from '@/components/journal/JournalLink';
 import { SessionCard } from '@/components/session/SessionCard';
 import { toLocalDateString } from '@/lib/utils/date';
 import type { SessionInput } from '@/lib/schemas/session';
@@ -92,6 +93,8 @@ export default function HomePage() {
       <TodayPlanCard />
 
       <ReviewLink />
+
+      <JournalLink />
 
       {TODAY_HABITS_ENABLED ? <TodayHabits /> : null}
 
