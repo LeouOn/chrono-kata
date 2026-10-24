@@ -329,6 +329,99 @@ describe('JournalScreen', () => {
     });
   });
 
+  it('disables Close the day while its write is in flight and re-enables it', async () => {
+    const finished = await taskRepo.create({ title: 'Fix the hose', status: 'next' });
+    await dayPlanRepo.upsert(TODAY, { picks: [finished.id], capacityMin: 180 });
+    const real = journalRepo.applyShutdown.bind(journalRepo);
+    let release: (() => void) | null = null;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(journalRepo, 'applyShutdown').mockImplementation(async (input) => {
+      await gate;
+      return real(input);
+    });
+    renderScreen();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Done: “Fix the hose”$/ }));
+    const button = screen.getByRole('button', { name: 'Close the day' }) as HTMLButtonElement;
+    fireEvent.click(button);
+
+    // A control that looks usable while its click would be dropped is a lie.
+    await waitFor(() => expect(button.disabled).toBe(true));
+    expect(button.getAttribute('aria-busy')).toBe('true');
+
+    release!();
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(button.getAttribute('aria-busy')).toBe('false');
+    expect(await screen.findByText(/The day is closed/)).toBeTruthy();
+  });
+
+  it('disables Save journal while its write is in flight and re-enables it', async () => {
+    await dayPlanRepo.upsert(TODAY, { picks: [], capacityMin: 120 });
+    const real = journalRepo.saveDayFields.bind(journalRepo);
+    let release: (() => void) | null = null;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(journalRepo, 'saveDayFields').mockImplementation(async (...args) => {
+      await gate;
+      return real(...args);
+    });
+    renderScreen();
+
+    fireEvent.change(await screen.findByLabelText('What happened today'), { target: { value: 'Journal text.' } });
+    const button = screen.getByRole('button', { name: 'Save journal' }) as HTMLButtonElement;
+    fireEvent.click(button);
+    await waitFor(() => expect(button.disabled).toBe(true));
+    expect(button.getAttribute('aria-busy')).toBe('true');
+
+    release!();
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved on this device.');
+  });
+
+  it('sends one save for two Save journal clicks in one act', async () => {
+    await dayPlanRepo.upsert(TODAY, { picks: [], capacityMin: 120 });
+    const save = vi.spyOn(journalRepo, 'saveDayFields');
+    renderScreen();
+
+    fireEvent.change(await screen.findByLabelText('What happened today'), { target: { value: 'Journal text.' } });
+    const button = screen.getByRole('button', { name: 'Save journal' });
+    // Both clicks land before React re-renders (one act), so the disabled state
+    // cannot be what limits it: the REF guard must.
+    act(() => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps the day’s domain ticks when the day is closed', async () => {
+    const finished = await taskRepo.create({ title: 'Fix the hose', status: 'next' });
+    await dayPlanRepo.upsert(TODAY, { picks: [finished.id], capacityMin: 180 });
+    renderScreen();
+
+    // Save the entry with a tick, then close the day.
+    fireEvent.change(await screen.findByLabelText('What happened today'), { target: { value: 'Ticked a domain.' } });
+    fireEvent.click(screen.getByLabelText('Trading'));
+    await clickWhenEnabled('Save journal');
+    await waitFor(async () =>
+      expect((await journalRepo.findByDate(TODAY))?.domainChecks).toEqual({ [DOMAIN_SEED_IDS.trading]: true }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Done: “Fix the hose”$/ }));
+    fireEvent.change(screen.getByLabelText('Shutdown note'), { target: { value: 'Closed.' } });
+    await clickWhenEnabled('Close the day');
+    await screen.findByText(/The day is closed/);
+
+    const stored = await journalRepo.findByDate(TODAY);
+    expect(stored?.domainChecks).toEqual({ [DOMAIN_SEED_IDS.trading]: true });
+    expect(stored?.picksDone).toEqual([finished.id]);
+    expect(stored?.shutdownNote).toBe('Closed.');
+  });
+
   it('says the day is opening instead of claiming it has no picks on first paint', async () => {
     const finished = await taskRepo.create({ title: 'Fix the hose', status: 'next' });
     await dayPlanRepo.upsert(TODAY, { picks: [finished.id], capacityMin: 180 });
