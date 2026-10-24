@@ -112,7 +112,10 @@ export function ProjectDetail({ projectId }: { projectId: string | null }) {
     .filter((day) => day.entries.length > 0);
 
   return (
-    <div className="space-y-4">
+    // pb-24: at the end of the page the practice button (80px up) and the
+    // capture pill (144px up, 44px tall) float over the last ~100px, so leave
+    // room for the last entry to scroll clear of both.
+    <div className="space-y-4 pb-24">
       {back}
 
       <div>

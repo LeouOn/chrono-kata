@@ -34,7 +34,8 @@ export function ProjectsScreen() {
   );
 
   return (
-    <div className="space-y-4">
+    // pb-24: the last row scrolls clear of the floating practice and capture buttons.
+    <div className="space-y-4 pb-24">
       <div>
         <h1 className="font-serif text-2xl text-text mb-1">Projects</h1>
         <p className="text-text-muted text-sm">

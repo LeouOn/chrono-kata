@@ -59,6 +59,21 @@ async function noSidewaysScroll(page: Page) {
   expect(overflow, 'no horizontal scroll at 390px').toBeLessThanOrEqual(0);
 }
 
+/**
+ * At the end of the scroll, the last content sits above the two floating
+ * buttons (practice and capture), so nothing - not even a long note - ends up
+ * underneath them.
+ */
+async function endClearsTheFloatingButtons(page: Page, last: Locator) {
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const lastBox = await last.boundingBox();
+  const practice = await page.getByRole('button', { name: 'New session' }).boundingBox();
+  const capture = await page.getByRole('button', { name: 'Capture a task' }).boundingBox();
+  expect(lastBox && practice && capture, 'all three are on the page').toBeTruthy();
+  const floatingTop = Math.min(practice!.y, capture!.y);
+  expect(lastBox!.y + lastBox!.height, 'last content ends above the floating buttons').toBeLessThanOrEqual(floatingTop);
+}
+
 /** A tap lands on the control itself, not on the practice button or the tab bar. */
 async function reachable(locator: Locator) {
   await locator.scrollIntoViewIfNeeded();
@@ -93,6 +108,7 @@ test('Home to the list to a project: the work done through its task shows up, ca
   await expect(row).toContainText('no rhythm set');
   await reachable(row);
   await noSidewaysScroll(page);
+  await endClearsTheFloatingButtons(page, row);
   await page.screenshot({ path: `${SHOTS}/projects-list.png` });
   await row.click();
 
@@ -119,6 +135,8 @@ test('Home to the list to a project: the work done through its task shows up, ca
   // Every action is a 44px target nothing covers (the practice button sits bottom right).
   for (const link of await page.getByRole('link', { name: /^Open session from / }).all()) await reachable(link);
   await reachable(page.getByRole('link', { name: 'All projects' }));
+  // The last history entry is the oldest session: its card must clear the floating buttons.
+  await endClearsTheFloatingButtons(page, page.getByRole('listitem').last());
   await page.screenshot({ path: `${SHOTS}/project-detail.png`, fullPage: true });
 
   // A session on the timeline opens its own page.
