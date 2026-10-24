@@ -11,10 +11,7 @@ import {
   type DecompositionTaskInput,
 } from '@/lib/decomposition/prompt';
 import { DECOMPOSITION_FEATURE, type DecompositionMode } from '@/lib/decomposition/schema';
-import { llmSettingsRepo } from '@/lib/db/llm-settings.repo';
-import { resolveProviderFor } from '@/lib/llm/llm-service';
-import { isLocalProvider, isLoopbackBaseUrl } from '@/lib/llm/local-provider';
-import { LLMException } from '@/lib/llm/types';
+import { useProviderPreview, previewDestination } from '@/hooks/useProviderPreview';
 import type { Decomposition } from '@/lib/decomposition/schema';
 import type { Task } from '@/lib/schemas/task';
 
@@ -51,7 +48,7 @@ export function DecomposeSheet({ task, projectTitle, triggers = ['break-it-down'
     run.result?.result.kind === 'ok' ? run.result.result.value : null;
   const fallbackText =
     run.result?.result.kind === 'fallback' ? run.result.result.value : null;
-  const preview = usePreviewProvider(open);
+  const preview = useProviderPreview(open, DECOMPOSITION_FEATURE);
 
   return (
     <>
@@ -106,15 +103,7 @@ export function DecomposeSheet({ task, projectTitle, triggers = ['break-it-down'
                 </details>
               </div>
               <p className="text-sm text-text" data-testid="wire-provider">
-                {preview.state === 'ready'
-                  ? `Goes to ${preview.providerName} (${preview.model}) — ${
-                      preview.local
-                        ? preview.loopback
-                          ? 'on this device'
-                          : 'on your local network'
-                        : 'a remote provider'
-                    }.`
-                  : preview.message}
+                {previewDestination(preview)}
               </p>
               <p className="text-xs text-text-muted">
                 If the reply can’t be read, one more request is sent with that
@@ -316,51 +305,5 @@ function Section({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-/** Which provider the call would use, resolved without sending anything. */
-type ProviderPreview =
-  | { state: 'ready'; providerName: string; model: string; local: boolean; loopback: boolean }
-  | { state: 'blocked' | 'unavailable'; message: string };
-
-function usePreviewProvider(active: boolean): ProviderPreview {
-  const [preview, setPreview] = useState<ProviderPreview>({
-    state: 'unavailable',
-    message: 'Checking the provider…',
-  });
-
-  useEffect(() => {
-    if (!active) {
-      // A privacy panel must never show a stale destination from a previous
-      // open: reset while hidden, re-resolve on the next open.
-      setPreview({ state: 'unavailable', message: 'Checking the provider…' });
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const settings = await llmSettingsRepo.get();
-        const config = await resolveProviderFor(settings, undefined, DECOMPOSITION_FEATURE);
-        if (!cancelled) {
-          setPreview({
-            state: 'ready',
-            providerName: config.providerName,
-            model: config.model,
-            local: isLocalProvider(config),
-            loopback: isLoopbackBaseUrl(config.baseUrl),
-          });
-        }
-      } catch (e) {
-        if (cancelled) return;
-        const message =
-          e instanceof LLMException ? e.message : 'No provider is ready for this yet.';
-        setPreview({ state: e instanceof LLMException && e.kind === 'privacyBlocked' ? 'blocked' : 'unavailable', message });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [active]);
-
-  return preview;
-}
 
 
