@@ -55,7 +55,7 @@ actually exists.
 | W15 | Practice and session modes | partial | M | B | focus guard, checklists, per-anchor modes |
 | W16 | Notifications and nudges | partial | M | C | 5 reminder kinds, quiet hours, snooze |
 | W17 | Android-native polish | partial | M | C/D | widget, ongoing notification, share sheet |
-| W18 | Backup, export, optional sync | partial (part 1 of 4) | M | A/C | import preview + merge/replace UI, encrypted backup, rotation, sync decision |
+| W18 | Backup, export, optional sync | partial (parts 1-3 of 4) | M | A/C | rotation + restore, sync decision |
 | W19 | UX, accessibility, performance | partial (part 1 of 5) | M | B | palette, high contrast, perf budget, first-run |
 | W20 | Hardening and release | partial | L | D | loop e2e, error boundary, integrity checker |
 
