@@ -37,12 +37,9 @@ export function RouteErrorScreen({
             Your data is safe on this device. Nothing was lost.
           </p>
           <div className="flex flex-wrap gap-2 justify-center pt-2">
-            <Button
-              variant="primary"
-              className="min-h-11 px-5"
-              onClick={reset}
-              aria-label="Try this screen again"
-            >
+            {/* No aria-label: the visible text is the accessible name, so
+                "click Try again" works by voice (WCAG 2.5.3). */}
+            <Button variant="primary" className="min-h-11 px-5" onClick={reset}>
               Try again
             </Button>
             <Link

@@ -57,7 +57,7 @@ test('a corrupt row that breaks /inbox shows the boundary; the rest of the app w
   await expect(page.getByText('Something went wrong on this screen.')).toBeVisible();
   await expect(page.getByText(/Your data is safe on this device/)).toBeVisible();
   await expect(page.getByText(/not-a-date|TypeError|getTime/)).toHaveCount(0);
-  const retry = page.getByRole('button', { name: 'Try this screen again' });
+  const retry = page.getByRole('button', { name: 'Try again' });
   await expect(retry).toBeVisible();
   const box = await retry.boundingBox();
   expect(box?.height).toBeGreaterThanOrEqual(44);

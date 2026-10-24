@@ -1,11 +1,20 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
+import { recordError } from '@/lib/errors/error-log';
 
 /**
  * The last-resort boundary: fires when the ROOT LAYOUT itself throws, so it
  * renders its own html/body (Next replaces the whole tree). Same calm copy
  * as the route boundaries; the error still goes to the local log.
+ *
+ * Recording happens in an effect keyed on the error, never during render:
+ * React may render a component more than once (StrictMode, concurrent
+ * re-renders), and one error must be one entry. It uses the shared
+ * `recordError` rather than a private copy of the ring buffer so the two can
+ * never drift; that module pulls in no UI and is built to never throw, which
+ * is what this file needs from a dependency.
  */
 export default function GlobalError({
   error,
@@ -14,28 +23,9 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  if (typeof window !== 'undefined') {
-    // Recorded inline (no shared component import here on purpose: the fewer
-    // modules this file pulls in, the fewer ways it can itself fail).
-    try {
-      const raw = window.localStorage.getItem('chrono-kata-error-log');
-      const existing = raw ? (JSON.parse(raw) as unknown[]) : [];
-      const entry = {
-        at: Date.now(),
-        route: window.location.pathname.split('?')[0],
-        name: String(error?.name ?? 'Error').slice(0, 100),
-        message: String(error?.message ?? '').slice(0, 200) + (error?.message && error.message.length > 200 ? '…' : ''),
-        messageTruncated: Boolean(error?.message && error.message.length > 200),
-        stack: String(error?.stack ?? '').slice(0, 2000),
-      };
-      window.localStorage.setItem(
-        'chrono-kata-error-log',
-        JSON.stringify([...existing, entry].slice(-50))
-      );
-    } catch {
-      // Private window / quota / corrupt storage: the boundary still renders.
-    }
-  }
+  useEffect(() => {
+    recordError(error, window.location.pathname);
+  }, [error]);
 
   return (
     <html lang="en">
@@ -62,7 +52,6 @@ export default function GlobalError({
             <button
               type="button"
               onClick={reset}
-              aria-label="Try this screen again"
               style={{
                 minHeight: 44,
                 padding: '0 1.25rem',

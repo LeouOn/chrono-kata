@@ -20,7 +20,7 @@ describe('RouteErrorScreen', () => {
     expect(screen.getByText('Something went wrong on this screen.')).toBeTruthy();
     expect(screen.getByText(/Your data is safe on this device/)).toBeTruthy();
     expect(screen.queryByText(/kaboom/)).toBeNull(); // no stack/message on screen
-    expect(screen.getByRole('button', { name: 'Try this screen again' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Go to the Home screen' })).toBeTruthy();
 
     const log = getErrorLog();
@@ -28,8 +28,24 @@ describe('RouteErrorScreen', () => {
     expect(log[0]!.message).toBe('kaboom at render');
     expect(log[0]!.name).toBe('Error');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Try this screen again' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(reset).toHaveBeenCalledTimes(1);
+  });
+
+  it('names each control by text that contains its visible text (WCAG 2.5.3)', () => {
+    render(<RouteErrorScreen error={new Error('x')} reset={() => {}} />);
+    const controls = [...screen.getAllByRole('button'), ...screen.getAllByRole('link')];
+    expect(controls.length).toBeGreaterThanOrEqual(2);
+    for (const control of controls) {
+      const visible = control.textContent!.trim();
+      expect(visible).not.toBe('');
+      const role = control.tagName === 'A' ? 'link' : 'button';
+      // "Click Try again" must reach the control: the visible text is inside its name.
+      expect(
+        screen.getByRole(role, { name: new RegExp(visible, 'i') }),
+        `"${visible}" must be inside its accessible name`,
+      ).toBe(control);
+    }
   });
 
   it('records the current route (pathname only)', () => {
