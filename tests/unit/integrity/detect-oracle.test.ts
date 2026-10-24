@@ -169,6 +169,7 @@ interface Injection {
 type IntegritySeverity = IntegrityIssue['severity'];
 
 const INJECTIONS: Injection[] = [
+  { apply: (s) => void (s.projects[0]!.domainId = GONE), kind: 'project-orphan-domain', severity: 'corruption' },
   { apply: (s) => void (s.sessions[0]!.taskId = GONE), kind: 'session-orphan-task', severity: 'corruption' },
   { apply: (s) => void (s.sessions[0]!.projectId = GONE), kind: 'session-orphan-project', severity: 'corruption' },
   { apply: (s) => void (s.sessions[0]!.blockId = GONE), kind: 'session-orphan-block', severity: 'corruption' },
@@ -464,6 +465,23 @@ describe('integrity detector oracle', () => {
       }
     }
   });
+
+  it('a calendarRef containing a pipe cannot break the duplicate rule (Q1)', () => {
+    const snap = coherentBase();
+    const first = snap.blocks[0]!;
+    const second = block({ calendarRef: first.calendarRef, start: first.start, end: first.end });
+    first.calendarRef = 'meeting|42@example.com';
+    second.calendarRef = 'meeting|42@example.com';
+    (snap.blocks as Block[]).push(second);
+    const issues = detectIntegrity(snap);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({
+      kind: 'block-duplicate-calendar-ref',
+      calendarRef: 'meeting|42@example.com',
+      startIso: first.start.toISOString(),
+    });
+  });
 });
+
 
 

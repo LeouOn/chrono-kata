@@ -9,7 +9,7 @@ import { collectIntegritySnapshot, detectIntegrity } from '@/lib/integrity/detec
 const DAY = 24 * 3_600_000;
 const kinds = async () => detectIntegrity(await collectIntegritySnapshot(getDb())).map((i) => `${i.kind}:${'field' in i ? (i as { field: string }).field : ''}`);
 
-describe('lead probe: ordinary use must be clean', () => {
+describe("ordinary use must be clean (from the lead's round-1 probe", () => {
   beforeEach(async () => { await resetDbForTesting(); await settingsRepo.get(); });
 
   it('P1 planned future dates (due in 30d, deferred a week, block in 3 days) are not corruption', async () => {
@@ -35,7 +35,7 @@ describe('lead probe: ordinary use must be clean', () => {
     const task = await taskRepo.create({ title: 'to delete' });
     await sessionRepo.save({ startedAt: new Date(Date.now() - 600_000), endedAt: new Date(), durationMinutes: 10, rating: 3, taskId: task.id } as never);
     await taskRepo.delete(task.id);
-    console.log('P4 after ordinary delete:', await kinds());
+
   });
 });
 
@@ -56,7 +56,7 @@ describe('lead probe: hostile rows must not crash the detector', () => {
     const db = getDb();
     await db.tasks.put({ id: '00000000-0000-4000-8000-0000000000d1', title: 'bad date', status: 'done', source: 'manual', createdAt: new Date('nope'), touchedAt: new Date(), doneAt: new Date('nope') } as never);
     const out = detectIntegrity(await collectIntegritySnapshot(db));
-    console.log('P6 invalid-date task ->', out.map((i) => i.kind));
+
     expect(out.length).toBeGreaterThan(0);
   });
 });

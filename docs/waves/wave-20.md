@@ -162,3 +162,21 @@ is the thin IO shell that reads the live Dexie tables. No UI, no repair here
 Part-3 copy note (from the review): orphan links must read as "links to
 something that is gone" in the UI — never "corruption", never red — and the
 info severity stays for the documented DayPlan properties.
+
+## Round 3 (lead review): two probe findings + housekeeping
+
+1. **A `|` inside a calendarRef crashed the duplicate rule** — the occurrence
+   key is now opaque (`JSON.stringify([ref, ms])`) and the parts are read
+   from the stored VALUE, never parsed back out of the key. An ICS UID with a
+   pipe (or any character) can no longer break the check (oracle case).
+2. **`project-orphan-domain`** — projects carry a `domainId` that analytics
+   follows; a dangling one is now reported like the task/habit equivalents
+   (oracle injection + mutant).
+3. Housekeeping: the lead's round-1 probe is committed as
+   `ordinary-use.test.ts` (renamed, console.logs removed, assertions kept);
+   the round-2 scenario + 300-round garbage fuzz is
+   `totality-and-ordinary-use.test.ts` (never throws, deterministic,
+   identical on reversed input).
+
+Mutant ledger now: 17 attempted, 16 killed, 1 equivalent-and-removed
+(new: project-orphan-domain dropped; occurrence-parts-re-parsed-from-key).

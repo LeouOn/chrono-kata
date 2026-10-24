@@ -99,6 +99,7 @@ export type IntegrityIssue =
       calendarRef: string;
       startIso: string;
     }
+  | { kind: 'project-orphan-domain'; severity: 'corruption'; projectId: string; domainId: string }
   | { kind: 'task-orphan-parent'; severity: 'corruption'; taskId: string; parentId: string }
   | { kind: 'task-orphan-project'; severity: 'corruption'; taskId: string; projectId: string }
   | { kind: 'task-orphan-domain'; severity: 'corruption'; taskId: string; domainId: string }
@@ -202,6 +203,9 @@ function issueKey(issue: IntegrityIssue): string {
     case 'block-bad-range':
       parts.push(issue.blockId);
       break;
+    case 'project-orphan-domain':
+      parts.push(issue.projectId, issue.domainId);
+      break;
     case 'task-orphan-parent':
       parts.push(issue.taskId, issue.parentId);
       break;
@@ -287,7 +291,7 @@ export function detectIntegrity(snapshot: IntegritySnapshot): IntegrityIssue[] {
   }
 
   /** calendarRef + start instant → block ids. The recurring-event key. */
-  const refs = new Map<string, string[]>();
+  const refs = new Map<string, { calendarRef: string; startMs: number; ids: string[] }>();
   for (const b of snapshot.blocks) {
     const raw = rowOf(b);
     const id = typeof raw.id === 'string' ? raw.id : '(no id)';
@@ -308,21 +312,20 @@ export function detectIntegrity(snapshot: IntegritySnapshot): IntegrityIssue[] {
     }
     const ref = linkOf(raw.calendarRef);
     if (ref && start) {
-      const key = `${ref}|${start.getTime()}`;
-      const list = refs.get(key) ?? [];
-      list.push(id);
-      refs.set(key, list);
+      const key = JSON.stringify([ref, start.getTime()]);
+      const occurrence = refs.get(key) ?? { calendarRef: ref, startMs: start.getTime(), ids: [] };
+      occurrence.ids.push(id);
+      refs.set(key, occurrence);
     }
   }
-  for (const [key, ids] of refs) {
-    if (ids.length > 1) {
-      const [calendarRef, startMs] = key.split('|');
+  for (const occurrence of refs.values()) {
+    if (occurrence.ids.length > 1) {
       issues.push({
         kind: 'block-duplicate-calendar-ref',
         severity: 'corruption',
-        blockIds: ids.slice().sort(),
-        calendarRef: calendarRef!,
-        startIso: new Date(Number(startMs)).toISOString(),
+        blockIds: occurrence.ids.slice().sort(),
+        calendarRef: occurrence.calendarRef,
+        startIso: new Date(occurrence.startMs).toISOString(),
       });
     }
   }
@@ -352,7 +355,12 @@ export function detectIntegrity(snapshot: IntegritySnapshot): IntegrityIssue[] {
 
   for (const p of snapshot.projects) {
     const raw = rowOf(p);
-    checkDates('projects', typeof raw.id === 'string' ? raw.id : '(no id)', raw);
+    const id = typeof raw.id === 'string' ? raw.id : '(no id)';
+    const domain = linkOf(raw.domainId);
+    if (domain && !domainIds.has(domain)) {
+      issues.push({ kind: 'project-orphan-domain', severity: 'corruption', projectId: id, domainId: domain });
+    }
+    checkDates('projects', id, raw);
   }
 
   for (const plan of snapshot.dayPlans) {
