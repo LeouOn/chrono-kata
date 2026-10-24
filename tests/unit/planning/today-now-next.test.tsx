@@ -79,6 +79,29 @@ describe('Today card Now/Next', () => {
     expect(openForLink).toHaveBeenCalledWith(expect.objectContaining({ estimateMin: 45 }));
   });
 
+  it('does not present tomorrow\'s focus block as today\'s Next', async () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    await seed('write tomorrow', tomorrow, new Date(tomorrow.getTime() + 3_600_000));
+    nowMs = at(10, 0).getTime();
+    const { client } = renderCard();
+    await waitForBlocks(client);
+    expect(screen.queryByText(/Next · 09:00/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Start next:/ })).toBeNull();
+  });
+
+  it('still shows an overnight window\'s after-midnight block as Next at 23:50', async () => {
+    await settingsRepo.patch({ wakingHours: { start: '20:00', end: '02:00' } });
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 30, 0, 0);
+    await seed('late call', tomorrow, new Date(tomorrow.getTime() + 3_600_000));
+    nowMs = at(23, 50).getTime();
+    renderCard();
+    await waitFor(() => expect(screen.getByText(/Next · 00:30/)).toBeTruthy());
+  });
+
   it('drops the Now strip once the block has ended, even with no other event', async () => {
     await seed('call bank', at(9), at(10));
     nowMs = at(10, 35).getTime();

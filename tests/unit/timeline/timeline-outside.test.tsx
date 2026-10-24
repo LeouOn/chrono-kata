@@ -20,13 +20,24 @@ afterEach(cleanup);
 
 function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <ToastProvider>
         <TimelineScreen dayKey={TODAY} />
       </ToastProvider>
     </QueryClientProvider>,
   );
+  return { ...view, client };
+}
+
+async function waitForBlocks(client: QueryClient) {
+  await waitFor(() => {
+    const loaded = client
+      .getQueryCache()
+      .getAll()
+      .some((query) => query.queryKey[0] === 'timelineBlocks' && query.state.status === 'success');
+    expect(loaded).toBe(true);
+  });
 }
 
 function at(hours: number, minutes = 0): Date {
@@ -70,6 +81,52 @@ describe('commitments outside the waking window', () => {
     expect(saved.start.getDate()).toBe(at(7, 30).getDate());
     expect(saved.start.getHours()).toBe(7);
     expect((await screen.findByRole('status')).textContent).toMatch(/outside your waking hours/i);
+  });
+
+  it('does not list tomorrow\'s commitment as outside today\'s waking hours', async () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(7, 30, 0, 0);
+    await blockRepo.create({
+      start: tomorrow,
+      end: new Date(tomorrow.getTime() + 3_600_000),
+      kind: 'fixed',
+      title: 'Tomorrow commute',
+    });
+    const { client } = renderScreen();
+    await waitForBlocks(client);
+    expect(screen.queryByRole('button', { name: /outside block Tomorrow commute/i })).toBeNull();
+  });
+
+  it('lists an outside block but does not also draw it on the timeline', async () => {
+    await blockRepo.create({
+      start: at(7, 30),
+      end: at(8, 30),
+      kind: 'fixed',
+      title: 'Commute',
+    });
+    renderScreen();
+    expect(await screen.findByRole('button', { name: /outside block Commute 07:30 to 08:30/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /fixed block Commute/i })).toBeNull();
+  });
+
+  it('clears the outside notice after the block is removed', async () => {
+    await blockRepo.create({
+      start: at(7, 30),
+      end: at(8, 30),
+      kind: 'fixed',
+      title: 'Commute',
+    });
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: /outside block Commute/i }));
+    fireEvent.submit((await screen.findByRole('button', { name: /save block/i })).closest('form')!);
+    expect((await screen.findByRole('status')).textContent).toMatch(/outside your waking hours/i);
+    fireEvent.click(screen.getByRole('button', { name: /outside block Commute/i }));
+    // Opening the next sheet clears the previous save notice immediately.
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+    fireEvent.click(await screen.findByRole('button', { name: /remove this block/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^remove$/i }));
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 
   it('lists an after-window commitment and saves it on today', async () => {

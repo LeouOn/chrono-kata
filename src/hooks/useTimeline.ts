@@ -30,7 +30,7 @@ export interface TimelineView {
 }
 
 /** Blocks that overlap a day's waking window (any kind). Flag-gated. */
-export function useDayBlocks(dayKey: string, wakingHours: WakingHours) {
+export function useDayBlocks(dayKey: string) {
   const enabled = useFlag('taskInbox');
   // Fetch a little beyond the waking window so a commitment outside it is
   // still visible (it is listed under the timeline, never silently hidden).
@@ -59,7 +59,7 @@ export function useTimeline(dayKey: string, settings: Settings | null | undefine
   const anchorDefs = useMemo(() => resolveAnchors(settings), [settings]);
   const window = useMemo(() => wakingWindow(dayKey, wakingHours), [dayKey, wakingHours]);
   const anchors = useMemo(() => anchorsWithinWindow(anchorDefs, dayKey, window), [anchorDefs, dayKey, window]);
-  const blocksQuery = useDayBlocks(dayKey, wakingHours);
+  const blocksQuery = useDayBlocks(dayKey);
   const plan = usePlanToday(dayKey);
 
   const blocks = blocksQuery.data ?? [];

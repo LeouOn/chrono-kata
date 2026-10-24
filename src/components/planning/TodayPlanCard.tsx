@@ -11,6 +11,7 @@ import { resolveWakingHours } from '@/lib/planning/resolve';
 import { useMemo } from 'react';
 import { usePlanToday, useTodayKey } from '@/hooks/usePlanning';
 import { useDayBlocks } from '@/hooks/useTimeline';
+import { wakingWindow } from '@/lib/planning/time';
 import { useNow } from '@/hooks/useNow';
 import { useSessionLauncher } from '@/components/session/SessionLauncher';
 import { DEFAULT_PICK_MINUTES } from '@/lib/planning/overcommit';
@@ -27,9 +28,13 @@ export function TodayPlanCard() {
   const { data: tasks = [] } = useTasks({ enabled });
   const { settings } = useSettings();
   const wakingHours = useMemo(() => resolveWakingHours(settings), [settings]);
-  const { data: blocks = [] } = useDayBlocks(dayKey, wakingHours);
+  const { data: blocks = [] } = useDayBlocks(dayKey);
   const sessionLauncher = useSessionLauncher();
   const now = useNow();
+  // The block query covers two days so outside-window commitments stay visible
+  // on the timeline; the Today strip must only speak about TODAY. An overnight
+  // window reaches into tomorrow morning, so overlap is the right test.
+  const todayWindow = useMemo(() => wakingWindow(dayKey, wakingHours), [dayKey, wakingHours]);
 
   if (!enabled) return null;
 
@@ -39,7 +44,14 @@ export function TodayPlanCard() {
     .filter((task): task is NonNullable<typeof task> => task !== undefined && task.status !== 'done' && task.status !== 'dropped');
 
   const focusWithTask = blocks
-    .filter((block) => block.kind === 'focus' && block.taskId && taskById.has(block.taskId))
+    .filter(
+      (block) =>
+        block.kind === 'focus' &&
+        block.taskId &&
+        taskById.has(block.taskId) &&
+        block.start.getTime() < todayWindow.end &&
+        block.end.getTime() > todayWindow.start,
+    )
     .filter((block) => {
       const task = taskById.get(block.taskId!);
       return task && task.status !== 'done' && task.status !== 'dropped';

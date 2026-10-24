@@ -106,6 +106,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   }
 
   function openNew() {
+    setOutsideNotice(null);
     const start = snapToStep(Math.max(now, timeline.window.start) + 60 * MIN, TIMELINE_STEP_MIN, 'up');
     setSheet({ mode: 'new', kind: 'fixed', start, end: start + 60 * MIN });
   }
@@ -116,6 +117,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
       return;
     }
     if (!entry.block) return;
+    setOutsideNotice(null);
     setSheet({ mode: 'edit', block: entry.block, kind: entry.block.kind === 'focus' ? 'focus' : 'fixed' });
   }
 
@@ -142,6 +144,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   async function removeBlock() {
     if (!sheet || sheet.mode !== 'edit') return;
     await deleteBlock(sheet.block.id);
+    setOutsideNotice(null);
     setSheet(null);
   }
 

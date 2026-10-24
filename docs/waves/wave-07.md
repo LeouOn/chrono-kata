@@ -117,7 +117,10 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   The edit sheet heading is "Focus block for <task>".
 - **Today card** gained a Now/Next line with until/at clock and Start (the
   block's duration becomes the session estimate) linked to the same session
-  launcher, plus a Timeline link. One shared `useNow()` hook (30 s tick plus
+  launcher, plus a Timeline link. The strip only considers focus blocks that
+  overlap TODAY'S waking window (so tomorrow 09:00 is never shown as Next,
+  while an overnight window's after-midnight block still is). One shared
+  `useNow()` hook (30 s tick plus
   focus/visibility) drives both that strip and the timeline's now line, so a
   block ending stops reading "Now" without needing another render.
 - Tests: `timeline-screen` (flag gate, add once under a double submit, empty
