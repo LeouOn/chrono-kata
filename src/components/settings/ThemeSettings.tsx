@@ -87,6 +87,23 @@ export function ThemeSettings() {
       </div>
 
       <div className="mt-4 pt-4 border-t border-border">
+        <label className="flex min-h-11 items-center justify-between gap-3 cursor-pointer">
+          <span className="min-w-0">
+            <span className="block text-sm text-text">High contrast</span>
+            <span className="block text-xs text-text-muted">
+              Stronger text, borders and accents on top of your theme.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={settings?.highContrast === true}
+            onChange={(event) => void updateSettings({ highContrast: event.target.checked })}
+            className="accent-accent h-5 w-5 shrink-0"
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-border">
         <div className="text-sm text-text mb-2">Rating style</div>
         <div className="grid grid-cols-2 gap-2">
           {RATING_OPTIONS.map(({ value, label }) => {

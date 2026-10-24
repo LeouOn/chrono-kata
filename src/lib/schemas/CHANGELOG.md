@@ -1,5 +1,17 @@
 # Schema Changelog
 
+## 2026-10-24 — High-contrast mode (roadmap W19, theming)
+
+`settings.ts` gains optional `highContrast` (boolean, default off): a stronger
+palette on top of the light or dark theme, applied as `data-contrast="high"` next
+to `data-theme`. Optional and non-indexed, so Dexie stays on **v8** and rows
+written before it exist read as off. It rides the v2 backup envelope as an
+ordinary settings field (the completeness oracle generates it from this schema).
+
+Also in this change, `settingsRepo.get()` creates the default row inside ONE
+transaction: a plain read-then-write could put the defaults back over a setting
+written in the same first-paint window (found while testing the toggle).
+
 ## 2026-10-24 — The time a project's note last changed (roadmap W10 part 2)
 
 `project.ts` gains optional, non-indexed `breadcrumbAt` (a date, nullable): when the

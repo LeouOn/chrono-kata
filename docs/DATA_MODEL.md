@@ -106,7 +106,8 @@ Schemas are the boundary: repos validate on write, import validates on read.
   goals, rest days, freeze tokens, recovery mode and low-energy threshold) and
   timestamps. Missing optionals fall back to `DEFAULT_SETTINGS` readers.
   It also carries `journalTemplate` (≤ 20,000, W12: the markdown scaffold a new
-  journal entry starts from) and `flags`: an optional, non-indexed object holding any subset
+  journal entry starts from), `highContrast` (W19: the high-contrast palette on
+  top of the light/dark theme) and `flags`: an optional, non-indexed object holding any subset
   of the closed flag set `FLAG_NAMES` (`privateMode`, `nativeCalendar`,
   `nudgeKinds`, `sync`). Flags are read/written only via
   `src/lib/settings/flags.ts` (`flagValue`, `withFlag`, `isFlagName`), so an

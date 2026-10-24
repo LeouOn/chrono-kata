@@ -56,7 +56,7 @@ actually exists.
 | W16 | Notifications and nudges | partial | M | C | 5 reminder kinds, quiet hours, snooze |
 | W17 | Android-native polish | partial | M | C/D | widget, ongoing notification, share sheet |
 | W18 | Backup, export, optional sync | partial (part 1 of 4) | M | A/C | import preview + merge/replace UI, encrypted backup, rotation, sync decision |
-| W19 | UX, accessibility, performance | partial (part 1 of 5) | M | B | palette, high contrast, perf budget, first-run |
+| W19 | UX, accessibility, performance | partial (part 2 of 5) | M | B | palette, perf budget, first-run |
 | W20 | Hardening and release | partial | L | D | loop e2e, error boundary, integrity checker |
 
 ---
@@ -698,7 +698,7 @@ migrate on import. Decide whether the round trip is identity or "migrated identi
 
 ## W19 — UX, accessibility, performance
 
-**Status:** partial (part 1 shipped 2026-10-24: the in-house a11y sweep and the fixes it found) ·
+**Status:** partial (parts 1–2 shipped 2026-10-24: the in-house a11y sweep and its fixes, then high-contrast mode) ·
 **Size:** M · **Lanes:** B · **Depends on:** W1 (data volume for perf)
 
 **Evidence**
@@ -714,7 +714,8 @@ migrate on import. Decide whether the round trip is identity or "migrated identi
   plus the fixes it found (`<main>`, the Home links' naming, chart SVG labels, target sizes across
   settings/insights/LLM/sessions, light-theme accent variants, reduced-motion CSS + MotionConfig).
 - Missing: command palette — `grep -rInE "palette|Ctrl\+K|metaKey && .*'k'" src tests` → **0 hits**.
-- Missing: keyboard-shortcut cheat sheet, high-contrast mode.
+- Shipped (part 2): high-contrast mode as an Appearance setting, with AAA text / AA accent tokens for light, dark and the OS-driven System theme, plus the transactional default-row fix in `settingsRepo.get()`.
+- Missing: keyboard-shortcut cheat sheet.
 - Missing: reduced-motion support — `grep -rIn "prefers-reduced-motion|useReducedMotion" src` → **0 hits**,
   while `motion/react` animates across the app.
 - Missing: virtualization and a 10k-task/5k-session perf test — no list virtualization library in
