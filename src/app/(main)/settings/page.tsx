@@ -17,6 +17,7 @@ import { GoalSettings } from '@/components/settings/GoalSettings';
 import { TaskInboxSettings } from '@/components/settings/TaskInboxSettings';
 import { PlanningSettings } from '@/components/settings/PlanningSettings';
 import { CalendarInteropSettings } from '@/components/settings/CalendarInteropSettings';
+import { ErrorLogSettings } from '@/components/settings/ErrorLogSettings';
 import {
   type CoachPersonality,
 } from '@/lib/schemas/coach-personality';
@@ -71,6 +72,7 @@ export default function SettingsPage() {
       <PlanningSettings />
 
       <CalendarInteropSettings />
+      <ErrorLogSettings />
 
       <Card>
         <label className="flex items-center justify-between gap-3 cursor-pointer min-h-11">
