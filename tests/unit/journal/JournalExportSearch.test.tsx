@@ -58,6 +58,13 @@ describe('journalRepo.listAll', () => {
 });
 
 describe('JournalExportCard', () => {
+  it('says plainly that the markdown is a readable copy, not a backup', async () => {
+    renderWithProviders(<JournalExportCard dayKey="2026-06-15" plan={null} />);
+    expect(
+      await screen.findByText(/This is a readable copy of your journal\. It is not a backup\./),
+    ).toBeTruthy();
+  });
+
   it('exports the day by default, and the file is exactly the pure export', async () => {
     await seedDays();
     const plan = await journalRepo.findByDate('2026-06-15');

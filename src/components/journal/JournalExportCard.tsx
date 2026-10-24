@@ -73,7 +73,8 @@ export function JournalExportCard({ dayKey, plan }: Props) {
           Export
         </h2>
         <p className="text-xs text-text-muted">
-          Markdown, built from what you wrote here. No AI text is ever added.
+          Markdown, built from what you wrote here. No AI text is ever added. This is a readable copy of your
+          journal. It is not a backup.
         </p>
       </div>
 
