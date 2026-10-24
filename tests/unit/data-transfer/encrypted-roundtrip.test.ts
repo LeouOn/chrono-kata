@@ -130,6 +130,29 @@ describe('the encrypted file and a device that already has credentials', () => {
   });
 });
 
+describe('which secrets an encrypted file may carry', () => {
+  it('collects keys only for providers set up in the browser (a provider found from the environment is not a secret of the file)', async () => {
+    const data = buildDataset(312, 'full', primaryKeys());
+    plantSecrets(data);
+    await seedDb(data);
+    const { collectSecrets } = await import('@/lib/data-transfer/export');
+    const secrets = await collectSecrets();
+    expect(Object.keys(secrets.llmApiKeys)).toContain('planted-browser');
+    expect(Object.keys(secrets.llmApiKeys)).toContain('planted-legacy');
+    expect(Object.keys(secrets.llmApiKeys)).not.toContain('planted-env');
+    expect(secrets.googleToken).toEqual(data.tokens![0]);
+    expect(secrets.icsSubscriptionUrl).toBe(data.settings![0]!.icsSubscriptionUrl ?? null);
+  });
+
+  it('a plain export on the same device still says the secrets are left out (an encrypted file is the only way they travel)', async () => {
+    const data = buildDataset(313, 'full', primaryKeys());
+    plantSecrets(data);
+    await seedDb(data);
+    const ids = ((await collectAll()).leftOut ?? []).map((i) => i.id);
+    expect(ids).toEqual(expect.arrayContaining(['llmSettings.apiKey', 'tokens']));
+  });
+});
+
 describe('a wrong passphrase changes nothing, anywhere', () => {
   it('leaves every table exactly as it was', async () => {
     const keys = primaryKeys();

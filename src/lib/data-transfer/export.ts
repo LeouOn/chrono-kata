@@ -138,12 +138,16 @@ export async function collectSecrets(): Promise<BackupSecrets> {
  * Trigger a JSON file download of the export envelope.
  */
 export function downloadExport(envelope: ExportEnvelopeV2): void {
-  const json = JSON.stringify(envelope, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
+  downloadText(JSON.stringify(envelope, null, 2), `chrono-kata-backup-${toLocalDateString(new Date())}.json`);
+}
+
+/** Hand a text file to the browser's download. */
+export function downloadText(text: string, filename: string): void {
+  const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `chrono-kata-backup-${toLocalDateString(new Date())}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

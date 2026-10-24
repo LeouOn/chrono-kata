@@ -10,6 +10,7 @@ import {
   deviceCounts,
   leftOutLine,
   mergeResultSentence,
+  mergeSecretsLine,
   mergeSentence,
   previewRows,
   repairedLine,
@@ -20,6 +21,7 @@ import {
   skippedLine,
   type DeviceCounts,
 } from '@/lib/data-transfer/preview';
+import type { BackupSecrets } from '@/lib/data-transfer/encrypted';
 import type { ExportEnvelope } from '@/lib/data-transfer/types';
 
 export interface ParsedBackup {
@@ -28,6 +30,8 @@ export interface ParsedBackup {
   snapshotsDropped: number;
   repaired: number;
   repairedBy: Record<string, number>;
+  /** From an encrypted file whose box was ticked: restored by a replace, never by an add. */
+  secrets?: BackupSecrets | null;
 }
 
 interface Props {
@@ -98,7 +102,7 @@ export function ImportPreview({ backup, onDone, onCancel }: Props) {
         onDone(mergeResultSentence(report));
       } else {
         const after = rows ?? [];
-        await replaceAll(envelope);
+        await replaceAll(envelope, { secrets: backup.secrets ?? null });
         onDone(replaceResultSentence(after));
       }
     } catch (e) {
@@ -132,7 +136,7 @@ export function ImportPreview({ backup, onDone, onCancel }: Props) {
             <input type="radio" name={groupName} className="size-5" checked={mode === 'merge'} onChange={() => setMode('merge')} />
             Add what is missing
           </label>
-          <p className="ml-8 text-sm text-text-muted">{plan ? mergeSentence(plan) : 'Looking at what is on this device…'}</p>
+          <p className="ml-8 text-sm text-text-muted">{plan ? `${mergeSentence(plan)}${mergeSecretsLine(backup.secrets)}` : 'Looking at what is on this device…'}</p>
         </div>
         <div>
           <label className="flex min-h-11 items-center gap-3 text-sm text-text">
@@ -141,7 +145,7 @@ export function ImportPreview({ backup, onDone, onCancel }: Props) {
           </label>
           <p className="ml-8 text-sm text-text-muted">
             {rows ? replaceSentence(rows) : 'Looking at what is on this device…'}
-            {swapped.length > 0 ? ` Your ${joinWords(swapped)} are replaced by the file's.` : ''} {replaceSecretsLine()}
+            {swapped.length > 0 ? ` Your ${joinWords(swapped)} are replaced by the file's.` : ''} {replaceSecretsLine(backup.secrets)}
           </p>
         </div>
       </fieldset>

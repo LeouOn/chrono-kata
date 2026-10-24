@@ -19,6 +19,7 @@
 import { z } from 'zod';
 import { IcsSubscriptionUrlSchema } from '@/lib/schemas/settings';
 import { refuseIfHostile, refuseIfTooLarge } from './guard';
+import type { LeftOutItem } from './types';
 
 export const ENCRYPTED_FORMAT = 'chrono-kata-encrypted-backup';
 export const ENCRYPTED_VERSION = 1;
@@ -244,4 +245,28 @@ export async function decryptBackup(text: string, passphrase: string): Promise<D
     parsedSecrets = hasAnySecret(result.data) ? result.data : null;
   }
   return { ok: true, backup, secrets: parsedSecrets };
+}
+
+/**
+ * The report of what a file leaves out, minus what an encrypted file carries after all: a ticked box
+ * means the keys, the sign-in and the calendar link are INSIDE the file, so it must not say they are not.
+ */
+export function withoutIncludedSecrets(leftOut: readonly LeftOutItem[] | undefined, secrets: BackupSecrets | null): LeftOutItem[] {
+  if (!secrets) return [...(leftOut ?? [])];
+  const carried = new Set<string>();
+  if (Object.keys(secrets.llmApiKeys).length > 0) carried.add('llmSettings.apiKey');
+  if (secrets.googleToken) carried.add('tokens');
+  if (secrets.icsSubscriptionUrl) carried.add('settings.icsSubscriptionUrl');
+  return (leftOut ?? []).filter((item) => !carried.has(item.id));
+}
+
+/** "2 API keys, your Google Calendar sign-in and your private calendar link" */
+export function describeSecrets(secrets: BackupSecrets): string {
+  const keys = Object.keys(secrets.llmApiKeys).length;
+  const parts = [
+    ...(keys > 0 ? [`${keys} API key${keys === 1 ? '' : 's'}`] : []),
+    ...(secrets.googleToken ? ['your Google Calendar sign-in'] : []),
+    ...(secrets.icsSubscriptionUrl ? ['your private calendar link'] : []),
+  ];
+  return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }

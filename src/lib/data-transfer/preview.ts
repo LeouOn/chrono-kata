@@ -8,6 +8,7 @@
 import { getDb } from '@/lib/db/db';
 import { COLLECTIONS, SINGLETONS, countOf, joinWords, type CollectionKey } from './collections';
 import type { MergeReport } from './merge';
+import { describeSecrets, type BackupSecrets } from './encrypted';
 import type { ExportEnvelope, LeftOutItem } from './types';
 
 export type DeviceCounts = Record<CollectionKey, number>;
@@ -65,8 +66,14 @@ export function singletonsReplaced(envelope: ExportEnvelope): string[] {
   return SINGLETONS.filter(({ key }) => envelope[key] != null).map(({ label }) => label);
 }
 
-export function replaceSecretsLine(): string {
+export function replaceSecretsLine(secrets?: BackupSecrets | null): string {
+  if (secrets) return `This file also holds ${describeSecrets(secrets)}: replacing restores them on this device.`;
   return 'Your API keys, Google Calendar sign-in and private calendar link stay on this device.';
+}
+
+/** Under "add what is missing": the secrets in the file are not brought across by that option. */
+export function mergeSecretsLine(secrets?: BackupSecrets | null): string {
+  return secrets ? ` The ${describeSecrets(secrets)} in this file are not added by this option; replacing brings them across.` : '';
 }
 
 /** What a merge adds, and what it leaves alone. */

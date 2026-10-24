@@ -11,7 +11,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useFlag } from '@/hooks/useFlags';
 import { refuseIfTooLarge } from '@/lib/data-transfer/guard';
 import { leftOutLine, refusalMessage } from '@/lib/data-transfer/preview';
+import { decryptBackup, encryptionAvailable, isEncryptedBackup } from '@/lib/data-transfer/encrypted';
+import { EncryptedExportForm } from './EncryptedExportForm';
 import { ImportPreview, type ParsedBackup } from './ImportPreview';
+import { PassphrasePrompt } from './PassphrasePrompt';
 import type { ExportEnvelope } from '@/lib/data-transfer/types';
 
 export function DataTransfer() {
@@ -26,6 +29,8 @@ export function DataTransfer() {
   // Wave 18 part 2 (behind `taskInbox`): a preview with merge or replace instead of the one-line dialog.
   const enhanced = useFlag('taskInbox');
   const [backup, setBackup] = useState<ParsedBackup | null>(null);
+  const [encryptedText, setEncryptedText] = useState<string | null>(null);
+  const [encryptingExport, setEncryptingExport] = useState(false);
   const [outcome, setOutcome] = useState<{ kind: 'refused' | 'done' | 'saved'; text: string } | null>(null);
 
   useEffect(() => {
@@ -79,6 +84,8 @@ export function DataTransfer() {
   function handleEnhancedFile(file: File) {
     setBackup(null);
     setOutcome(null);
+    setEncryptedText(null);
+    setEncryptingExport(false);
     const tooLarge = refuseIfTooLarge(file.size);
     if (!tooLarge.ok) {
       setOutcome({ kind: 'refused', text: refusalMessage(tooLarge.error) });
@@ -86,7 +93,12 @@ export function DataTransfer() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      const result = parseEnvelope(String(reader.result));
+      const text = String(reader.result);
+      if (isEncryptedBackup(text)) {
+        setEncryptedText(text); // asks for the passphrase; nothing is read until it opens
+        return;
+      }
+      const result = parseEnvelope(text);
       if (!result.ok) {
         setOutcome({ kind: 'refused', text: refusalMessage(result.error) });
         return;
@@ -95,6 +107,21 @@ export function DataTransfer() {
     };
     reader.onerror = () => setOutcome({ kind: 'refused', text: refusalMessage('This file could not be read.') });
     reader.readAsText(file);
+  }
+
+  /** Resolves with a message when the file did not open (the prompt stays), null when it did. */
+  async function openEncrypted(passphrase: string): Promise<string | null> {
+    if (!encryptedText) return null;
+    const opened = await decryptBackup(encryptedText, passphrase);
+    if (!opened.ok) return opened.message;
+    const parsed = parseEnvelope(JSON.stringify(opened.backup));
+    setEncryptedText(null);
+    if (!parsed.ok) {
+      setOutcome({ kind: 'refused', text: refusalMessage(parsed.error) });
+      return null;
+    }
+    setBackup({ ...parsed, secrets: opened.secrets });
+    return null;
   }
 
   function importDone(text: string) {
@@ -140,8 +167,9 @@ export function DataTransfer() {
       {enhanced ? (
         <p className="text-text-muted text-sm mb-4">
           Export everything you have saved as one JSON file. Your API keys, Google Calendar sign-in and private calendar link are not
-          included: they stay on this device. Importing shows you what will change first, and you choose whether to add only what is
-          missing or to replace everything.
+          included: they stay on this device. An encrypted export can only be opened with a passphrase you choose, and you decide whether it
+          also carries them. Importing shows you what will change first, and you choose whether to add only what is missing or to replace
+          everything.
         </p>
       ) : (
         <p className="text-text-muted text-sm mb-4">
@@ -153,6 +181,19 @@ export function DataTransfer() {
       <div className="flex flex-wrap gap-2">
         <Button variant="ghost" onClick={handleExport}>Export JSON</Button>
         <Button variant="ghost" onClick={() => fileInputRef.current?.click()}>Import JSON…</Button>
+        {enhanced && encryptionAvailable() && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setOutcome(null);
+              setBackup(null);
+              setEncryptedText(null);
+              setEncryptingExport(true);
+            }}
+          >
+            Export encrypted…
+          </Button>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -167,6 +208,16 @@ export function DataTransfer() {
           {outcome.text}
         </p>
       )}
+      {enhanced && encryptingExport && (
+        <EncryptedExportForm
+          onCancel={() => setEncryptingExport(false)}
+          onSaved={(text) => {
+            setEncryptingExport(false);
+            setOutcome({ kind: 'saved', text });
+          }}
+        />
+      )}
+      {enhanced && encryptedText && <PassphrasePrompt onOpen={openEncrypted} onCancel={() => setEncryptedText(null)} />}
       {enhanced && backup && <ImportPreview backup={backup} onDone={importDone} onCancel={() => setBackup(null)} />}
 
       <ConfirmDialog
