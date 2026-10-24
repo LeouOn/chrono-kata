@@ -29,6 +29,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
   cleanup();
 });
 
@@ -220,5 +222,102 @@ describe('CalendarInteropSettings', () => {
     expect(parsed.blocks[0]!.start.getTime()).toBe(
       new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0).getTime(),
     );
+  });
+});
+
+describe('CalendarInteropSettings — review follow-ups', () => {
+  it('rejects an address whose NORMALISED form exceeds the settings schema (fix 4)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+
+    // 123 raw chars with accents -> percent-encoded beyond 500.
+    const raw = 'https://example.com/cal?name=' + 'ä'.repeat(120) + '&x=1';
+    fireEvent.change(screen.getByLabelText(/calendar address/i), { target: { value: raw } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText(/too long once encoded/)).toBeInTheDocument();
+    const stored = await settingsRepo.get();
+    expect(stored.icsSubscriptionUrl ?? null).toBeNull();
+  });
+
+  it('an invalid address un-ticks Remember instead of lying (fix 5)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+
+    fireEvent.change(screen.getByLabelText(/calendar address/i), { target: { value: 'http://nope.example/a.ics' } });
+    fireEvent.click(screen.getByLabelText('Remember this address'));
+    expect(await screen.findByText(/Only https addresses/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Remember this address')).not.toBeChecked();
+  });
+
+  it('editing the address and Refreshing updates the stored value when Remember is on (fix 5)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    await settingsRepo.patch({ icsSubscriptionUrl: 'https://example.com/old.ics' });
+    const fetchMock = vi.fn(async () => new Response(SIMPLE_ICS, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+
+    fireEvent.change(screen.getByLabelText(/calendar address/i), { target: { value: 'https://example.com/new.ics' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(async () => {
+      expect((await settingsRepo.get()).icsSubscriptionUrl).toBe('https://example.com/new.ics');
+    });
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/new.ics', expect.anything());
+    vi.unstubAllGlobals();
+  });
+
+  it('a hung subscription fetch times out calmly and un-sticks Refresh (fix 6)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const hungFetch = vi.fn(() => new Promise<Response>(() => { /* never resolves */ }));
+    vi.stubGlobal('fetch', hungFetch);
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' }); // real timers until rendered
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(screen.getByLabelText(/calendar address/i), { target: { value: 'https://example.com/hang.ics' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_500);
+      });
+      // Synchronous lookup: findByText would hang under fake timers.
+      expect(screen.getByText(/took too long to answer/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it('refuses an oversized calendar before reading it (fix 6)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const fetchMock = vi.fn(async () => new Response('', {
+      status: 200,
+      headers: { 'content-length': String(3 * 1024 * 1024) },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+
+    fireEvent.change(screen.getByLabelText(/calendar address/i), { target: { value: 'https://example.com/big.ics' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText(/larger than the 2 MB limit/)).toBeInTheDocument();
+    expect(screen.queryByTestId('ics-preview')).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it('a network/CORS failure suggests importing a file instead (fix 6)', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    renderCard();
+    await screen.findByRole('heading', { name: 'Calendar' });
+
+    fireEvent.change(screen.getByLabelText(/calendar address/i), { target: { value: 'https://blocked.example/a.ics' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText(/import the file instead/)).toBeInTheDocument();
+    vi.unstubAllGlobals();
   });
 });

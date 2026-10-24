@@ -96,6 +96,13 @@ export class DexieBlockRepository implements BlockRepository {
     const db = getDb();
     await db.transaction('rw', db.blocks, async () => {
       for (const block of blocks) {
+        // Backstop for the preview's id-collision check: an id that lands on a
+        // row from a different calendar entry (e.g. a hand-made block) must
+        // abort the whole import, never silently overwrite it.
+        const current = await db.blocks.get(block.id);
+        if (current && (current.calendarRef ?? null) !== (block.calendarRef ?? null)) {
+          throw new Error('That calendar event collides with a block made in the app.');
+        }
         const parsed = BlockSchema.parse({ ...block, updatedAt: now });
         await db.blocks.put(parsed);
       }

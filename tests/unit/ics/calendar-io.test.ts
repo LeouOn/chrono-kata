@@ -9,6 +9,13 @@ import type { Block } from '@/lib/schemas/block';
 
 const T0 = new Date('2026-03-01T09:00:00Z');
 
+/** Deterministic UUID for a short key, so fixtures satisfy BlockSchema. */
+function uuid(key: string): string {
+  const hex = [...key].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  const body = hex.toString(16).padStart(8, '0');
+  return `00000000-0000-4000-8000-${body}${'0'.repeat(Math.max(0, 12 - body.length))}`.slice(0, 36);
+}
+
 function block(partial: Partial<Block> & { id: string }): Block {
   return {
     start: T0,
@@ -21,6 +28,7 @@ function block(partial: Partial<Block> & { id: string }): Block {
     createdAt: T0,
     updatedAt: T0,
     ...partial,
+    id: uuid(partial.id),
   } as Block;
 }
 
@@ -52,8 +60,8 @@ describe('buildImportPreview (calendarRef reconciliation)', () => {
     });
     const preview = buildImportPreview([moved], existing);
     expect(preview.counts).toEqual({ new: 0, updated: 1, unchanged: 0, skipped: 0 });
-    expect(preview.toWrite[0]!.id).toBe('local-1');
-    expect(preview.toWrite[0]!.createdAt).toBe(existing[0]!.createdAt);
+    expect(preview.toWrite[0]!.id).toBe(uuid('local-1'));
+    expect(preview.toWrite[0]!.createdAt.getTime()).toBe(existing[0]!.createdAt.getTime());
     expect(preview.toWrite[0]!.title).toBe('New title');
   });
 
@@ -87,13 +95,14 @@ describe('buildImportPreview (calendarRef reconciliation)', () => {
     expect(preview.counts.updated).toBe(0);
     expect(preview.counts.unchanged).toBe(0);
     // The write plan contains only the imported block.
-    expect(preview.toWrite.map((b) => b.id)).toEqual(['i-1']);
+    expect(preview.toWrite.map((b) => b.id)).toEqual([uuid('i-1')]);
   });
 
-  it('the same event twice in one file (same ref and id) appears once', () => {
+  it('the same occurrence twice in one file (same ref and id) appears once', () => {
     const twice = block({ id: 'i-1', calendarRef: 'evt-1@cal' });
     const preview = buildImportPreview([twice, { ...twice }], []);
     expect(preview.entries).toHaveLength(1);
+    expect(preview.counts.new).toBe(1);
   });
 
   it('withSkips carries the importer reasons into the counts', () => {

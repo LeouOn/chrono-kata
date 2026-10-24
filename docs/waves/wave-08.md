@@ -1,7 +1,7 @@
-# Wave 8 — Calendar interop (part 1: ICS core)
+# Wave 8 — Calendar interop (part 1: ICS core; part 2: the UI)
 
-**Status:** part 1 complete (this PR) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 8
-**Status map:** `docs/ROADMAP_STATUS.md` W8 (now "partial")
+**Status:** parts 1 and 2 complete · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 8
+**Status map:** `docs/ROADMAP_STATUS.md` W8
 
 Pure ICS export/import for `Block`s. No UI, no file picker, no network, no DB
 write, no Google Calendar changes — decision Q3 keeps Google Calendar exactly
@@ -183,3 +183,56 @@ not assume an id is stable across a move.
   IANA zone, otherwise the event is reported as unsupported rather than guessed.
 - Multi-calendar imports (`VCALENDAR` with several `VEVENT`s is supported, but
   per-calendar naming/`X-WR-CALNAME` is not carried onto blocks).
+
+
+---
+
+## Part 2 — the calendar interop UI (Settings > Calendar, behind `taskInbox`)
+
+**Shipped:** Settings > Calendar card — export today/this week fixed blocks as
+.ics (Web Share when `navigator.canShare({files})` says yes, download
+otherwise, clipboard last); import from a labelled file input or an https
+subscription address fetched only on an explicit Refresh; preview with
+new/updated/unchanged/skipped counts; confirm writes `kind:'fixed'` blocks in
+ONE Dexie transaction. The remembered address is opt-in ("Remember this
+address", off by default, https-validated against the stored value).
+
+### Reconciliation: occurrence identity first, calendar identity second
+
+A recurring event shares ONE `calendarRef` (the UID) across many occurrence
+blocks, so pass 1 matches by **id** (the importer derives a stable id per
+occurrence; our exports carry `X-CHRONO-KATA-BLOCK-ID`), and pass 2 pairs the
+leftovers one-to-one by nearest start time within each `calendarRef` group —
+a moved occurrence (RECURRENCE-ID override, fresh id) or an edited one-off
+updates in place and can never land on a sibling occurrence. An incoming id
+that collides with a hand-made block (no `calendarRef`, e.g. our own export
+re-imported after a local edit) is skipped as "already in your app", and the
+repo re-checks inside the transaction as a backstop. Only calendar-owned
+fields (start, end, title, kind) are compared and written; `taskId`/
+`projectId` always survive from the local row. A seeded 40-calendar oracle
+asserts: unchanged file re-imported → 0 writes and identical DB; one event
+moved → exactly one row changes; rows == distinct occurrences.
+
+### Choices where the roadmap was silent
+
+- Subscription fetch: own 15 s deadline plus `AbortSignal.timeout`; refuse on
+  declared Content-Length over the 2 MB cap before reading; CORS/network
+  failures say "Some calendar providers do not allow this from an app; import
+  the file instead."
+- "Remember" stores only after validation and reflects what is actually
+  stored; editing the address then Refreshing updates the stored value.
+- Preview reads the repository (not the query cache) at event time; export
+  reads fresh at click time.
+- Events removed from the source calendar are left untouched (imports never
+  delete; tombstones are a later wave's problem).
+
+### Known gaps
+
+- The timeline-screen "Export" button is deferred until the W7 timeline
+  rewrite lands.
+- A pre-existing unnamed control on the Settings page (`INPUT.accent-accent`
+  near the accent picker) fails a settings-wide a11y tripwire; the tripwire in
+  this wave is scoped to the Calendar card. Not fixed here (not this wave's
+  control).
+- No Android device run: the Web Share path is unit-tested with a stubbed
+  `navigator.canShare/share`; real WebView share-sheet behavior is unverified.

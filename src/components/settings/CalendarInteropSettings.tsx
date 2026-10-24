@@ -44,6 +44,20 @@ function localWeekWindow(now: Date): { start: Date; end: Date } {
   return { start, end };
 }
 
+const FETCH_TIMEOUT_MS = 15_000;
+
+/** Reject after `ms` regardless of the underlying promise (own deadline, so a
+ * hung server cannot pin busy/Refresh; testable under fake timers). */
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('deadline')), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
 /** Download (web) / share (WebView with Web Share) / clipboard, in that order. */
 async function offerIcsDownload(filename: string, text: string): Promise<'downloaded' | 'shared' | 'copied'> {
   const blob = new Blob([text], { type: 'text/calendar;charset=utf-8' });
@@ -113,7 +127,6 @@ export function CalendarInteropSettings() {
         setParseMessage(`That file is larger than the ${Math.round(ICS_MAX_FILE_BYTES / 1024 / 1024)} MB limit.`);
         return;
       }
-      console.log('PARSE', label, 'existing:', existing.length, 'cache:', (queryClient.getQueryData(['blocks']) as unknown[] | undefined)?.length);
       const result = icsToBlocks(text, { now: new Date(), defaultKind: 'fixed' });
       if (result.blocks.length > ICS_MAX_EVENTS) {
         setPreview(null);
@@ -134,14 +147,12 @@ export function CalendarInteropSettings() {
     [],
   );
 
-  /** Freshest blocks at event time — the cache is seeded on every write, so
-   * an event closure never sees a stale list (found in review of this very
-   * test: a captured `existing` array lagged one write behind). */
+  /** Fresh blocks at event time — read straight from the repository (cheap),
+   * never from the query cache, so a change made on another screen inside
+   * the cache lifetime cannot make the preview classify against old data. */
   const currentBlocks = useCallback(async (): Promise<Block[]> => {
-    const cached = queryClient.getQueryData<Block[]>(['blocks']);
-    if (cached) return cached;
     return blockRepo.getAll();
-  }, [queryClient]);
+  }, []);
 
   const onFile = useCallback(
     async (file: File | undefined) => {
@@ -171,7 +182,10 @@ export function CalendarInteropSettings() {
     const window = range === 'today'
       ? { start: startOfLocalDay(now), end: new Date(startOfLocalDay(now).getTime() + 24 * 3600 * 1000) }
       : localWeekWindow(now);
-    const inRange = existing.filter(
+    // Read fresh at click time, like the import path: the render-time cache
+    // may lag a change made on another screen.
+    const all = await currentBlocks();
+    const inRange = all.filter(
       (b) => b.end > window.start && b.start < window.end,
     );
     if (inRange.length === 0) {
@@ -231,15 +245,35 @@ export function CalendarInteropSettings() {
     applyingRef.current = true;
     setBusy(true);
     try {
-      const response = await fetch(check.url, { redirect: 'follow' });
+      // Deadline of our own (testable under fake timers) plus the wire-level
+      // abort, so a server that never answers cannot leave Refresh stuck.
+      const response = await withDeadline(
+        fetch(check.url, { redirect: 'follow', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+        FETCH_TIMEOUT_MS,
+      );
       if (!response.ok) {
         setParseMessage(`The calendar address answered ${response.status}. Nothing was changed.`);
         return;
       }
+      const declaredLength = Number(response.headers.get('content-length') ?? 0);
+      if (declaredLength > ICS_MAX_FILE_BYTES) {
+        setParseMessage(`That calendar is larger than the ${Math.round(ICS_MAX_FILE_BYTES / 1024 / 1024)} MB limit. Import a file instead.`);
+        return;
+      }
       const text = await response.text();
       parseAndPreview(text, check.url, await currentBlocks());
-    } catch {
-      setParseMessage('The calendar address could not be reached. Nothing was changed.');
+      // When Remember is on, keep the stored address in step with what was
+      // just fetched (editing the field then Refreshing updates the stored one).
+      if (remember && check.url !== remembered) {
+        await updateSettings({ icsSubscriptionUrl: check.url });
+      }
+    } catch (error) {
+      if (error instanceof TypeError) {
+        // Network/CORS class: browsers block most calendar providers.
+        setParseMessage('Some calendar providers do not allow this from an app; import the file instead.');
+      } else {
+        setParseMessage('The calendar address took too long to answer. Nothing was changed.');
+      }
     } finally {
       applyingRef.current = false;
       setBusy(false);
@@ -255,6 +289,8 @@ export function CalendarInteropSettings() {
     const check = validateSubscriptionUrl(raw);
     if (!check.ok) {
       setParseMessage(check.reason);
+      // The box must not claim something was stored when it was not.
+      setRemember(false);
       return;
     }
     await updateSettings({ icsSubscriptionUrl: check.url });
@@ -353,6 +389,9 @@ export function CalendarInteropSettings() {
                 <span className="shrink-0" title={skip.reason}>skipped</span>
               </li>
             ))}
+            {preview.entries.length + preview.skipped.length > 60 && (
+              <li className="text-text-muted">and {preview.entries.length + preview.skipped.length - 60} more</li>
+            )}
           </ul>
           {preview.toWrite.length > 0 && (
             <Button className="min-h-11 w-full" disabled={busy} onClick={() => void onConfirm()}>
