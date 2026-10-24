@@ -20,7 +20,11 @@ vi.mock('@/hooks/useTimeline', () => ({
     proposal: {
       blocks: [{ taskId: 't1', start: new Date(2026, 5, 15, 9, 15).getTime(), end: new Date(2026, 5, 15, 9, 45).getTime() }],
       unplaced: [],
+      replanned: false,
+      overflow: [],
+      keptCount: 0,
     },
+    pickIds: ['t1'],
   }),
   useFixedBlockMutations: () => ({ createBlock: vi.fn(), updateBlock: vi.fn(), deleteBlock: vi.fn() }),
   useApplyLayout: () => ({ mutateAsync: applyBlocks }),

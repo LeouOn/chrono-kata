@@ -138,6 +138,36 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   dependency-free; PR 3 adds pointer drag/resize on the same geometry and a
   keyboard/tap path for every move.
 
+## Shipped (part 3 — lanes, editing, conflicts, replan)
+
+- **Overlapping blocks sit in side-by-side lanes** (`assignLanes` interval
+  colouring in `layout.ts`, unit-tested: no overlap, two/three simultaneous,
+  lane reuse, touching blocks, shuffle independence). The render test asserts
+  both blocks are visible, have different left offsets and are tappable; a
+  touch E2E taps the lower block, which used to be covered.
+- **Pointer drag and resize**: one Pointer Events path for mouse and touch.
+  Moving a block body and dragging the top/bottom handles call `moveBlock` /
+  `resizeBlock` from the core (nearest snap, grid-safe edges, duration kept);
+  release commits, Escape or `pointercancel` writes nothing. A 5/15-minute snap
+  toggle is visible. Keyboard: Alt+Up/Down moves, Shift+Alt+Up/Down changes the
+  end; the tap-to-edit sheet still does everything, so drag is never the only
+  way.
+- **Conflicts** are named calmly ("One time overlap" / "Blocks share time
+  around 09:00–12:00"); nothing is auto-moved.
+- **Replan from now**: when focus blocks exist, the button becomes "Replan from
+  now" and calls `replanFromNow` — started blocks stay, future picks are
+  re-laid, overflow is shown before Apply ("N picks went back to your list")
+  and applied in ONE transaction (`commitLayout`: blocks + dayPlan picks +
+  task status `next`), so a failure rolls all of it back.
+- **Touch limits of the emulation**: the Playwright `hasTouch` run (390×844)
+  proves lane geometry, real tap targets on both overlapping blocks and on the
+  resize handles. It does NOT cover a real Android device: OS scroll handoff and
+  `pointercancel` during a body drag (body uses `touch-action: pan-y`, so a
+  vertical touch swipe scrolls rather than moving a block — moving on touch goes
+  through the sheet or keyboard), palm rejection, multi-touch, long-press
+  context menus, device pixel ratio/hit-slop, or native rendering performance.
+  Resize handles use `touch-action: none` and are the touch drag path.
+
 ## Known gaps
 
 - The step is **5 or 15 minutes**: the grid is anchored at the Unix epoch, which
@@ -148,15 +178,6 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   (v1 behaviour).
 - The 5-minute gap is enforced between proposed blocks and after kept blocks,
   not next to fixed commitments or anchors. By design.
-- **Propose after the morning blocks have happened lays the same picks
-  again** later in the day (3 morning + 3 afternoon blocks for 3 tasks). PR 3's
-  Replan button must call `replanFromNow`, and plain Propose should use the same
-  rule when focus blocks already exist.
-- **Overlapping blocks are drawn on top of each other** (all full-width), so
-  the covered block cannot be tapped. PR 2 lets a commitment be added over a
-  focus block, so this is reachable today. **PR 3 must lay overlaps out in
-  side-by-side lanes (interval-graph colouring in `layout.ts`, unit-tested) and
-  add the conflict UI.**
 
 ## Not in this part
 

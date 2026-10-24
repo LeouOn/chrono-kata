@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Block } from '@/lib/schemas/block';
 import type { AnchorInterval as DatedAnchor } from '@/lib/planning/anchors';
+import { moveBlock, resizeBlock, type Interval } from '@/lib/planning/layout';
 
 const MIN = 60_000;
 const PX_PER_MIN = 1.1;
@@ -31,6 +32,8 @@ export interface TimelineBlock {
   end: number;
   block?: Block;
   domainId?: string | null;
+  lane?: number;
+  laneCount?: number;
 }
 
 interface Props {
@@ -39,6 +42,16 @@ interface Props {
   ghostBlocks?: { taskId: string; start: number; end: number; title: string }[];
   now: number;
   onSelect: (entry: TimelineBlock) => void;
+  /** Commit a drag/resize. Without it, blocks are read-only and only tap works. */
+  onCommit?: (entry: TimelineBlock, next: Interval) => void | Promise<void>;
+  stepMin?: number;
+}
+
+interface DragState {
+  entry: TimelineBlock;
+  mode: 'move' | 'start' | 'end';
+  originY: number;
+  preview: Interval;
 }
 
 function clock(instant: number): string {
@@ -47,10 +60,92 @@ function clock(instant: number): string {
 }
 
 /**
- * One-column day timeline (roadmap W7 PR 2). Phase 2 is read + tap-to-edit; the
- * pointer drag/resize layer is PR 3, which will use this geometry.
+ * One-column day timeline. Blocks with `lane`/`laneCount` are drawn side by
+ * side so an overlapping block is never covered and always tappable (W7 PR 3).
+ * One Pointer Events path serves mouse and touch; moving is also possible from
+ * the keyboard (Alt+arrows) and the tap-to-edit sheet, so drag is never the
+ * only way. Resize handles carry `touch-action: none`; the block body keeps
+ * `pan-y` so a vertical swipe still scrolls the page on a phone.
  */
-export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect }: Props) {
+export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect, onCommit, stepMin = 15 }: Props) {
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const suppressClickRef = useRef(false);
+
+  function begin(event: React.PointerEvent, entry: TimelineBlock, mode: DragState['mode']) {
+    if (!onCommit || entry.kind === 'anchor') return;
+    // No preventDefault here: on touch, canceling pointerdown also suppresses the
+    // compatibility click, so a tap would not open the sheet. Movement is
+    // prevented once a drag actually starts.
+    (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+    const next: DragState = {
+      entry,
+      mode,
+      originY: event.clientY,
+      preview: { start: entry.start, end: entry.end },
+    };
+    // Write the ref synchronously: a fast tap can deliver pointerup before the
+    // next render, and touchscreen taps in particular may not wait for one.
+    dragRef.current = next;
+    setDrag(next);
+  }
+
+  function move(event: React.PointerEvent) {
+    const current = dragRef.current;
+    if (!current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const deltaMs = Math.round(((event.clientY - current.originY) / PX_PER_MIN) / 1) * MIN;
+    const base = { start: current.entry.start, end: current.entry.end };
+    const preview =
+      current.mode === 'move'
+        ? moveBlock(base, deltaMs, window, stepMin)
+        : resizeBlock(
+            base,
+            current.mode === 'start' ? 'start' : 'end',
+            (current.mode === 'start' ? base.start : base.end) + deltaMs,
+            window,
+            stepMin,
+          );
+    const next = { ...current, preview };
+    dragRef.current = next;
+    setDrag(next);
+  }
+
+  function finish(event: React.PointerEvent) {
+    const current = dragRef.current;
+    if (!current) return;
+    (event.currentTarget as Element).releasePointerCapture?.(event.pointerId);
+    dragRef.current = null;
+    setDrag(null);
+    suppressClickRef.current = true;
+    const changed =
+      current.preview.start !== current.entry.start || current.preview.end !== current.entry.end;
+    if (changed) void onCommit?.(current.entry, current.preview);
+    // Let the compatibility click pass through (and be swallowed above) before
+    // the sheet opens; otherwise that click lands on the new backdrop and
+    // closes it again.
+    else globalThis.setTimeout(() => onSelect(current.entry), 0);
+  }
+
+  function cancel() {
+    dragRef.current = null;
+    setDrag(null);
+  }
+
+  function keydown(event: React.KeyboardEvent, entry: TimelineBlock) {
+    if (!onCommit || entry.kind === 'anchor') return;
+    if (!event.altKey) return;
+    const direction = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+    if (direction === 0) return;
+    event.preventDefault();
+    const delta = direction * stepMin * MIN;
+    const base = { start: entry.start, end: entry.end };
+    const next = event.shiftKey
+      ? resizeBlock(base, 'end', base.end + delta, window, stepMin)
+      : moveBlock(base, delta, window, stepMin);
+    void onCommit(entry, next);
+  }
   const minutes = Math.max(1, (window.end - window.start) / MIN);
   const height = Math.round(minutes * PX_PER_MIN);
   const top = (instant: number) =>
@@ -88,8 +183,11 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect }: Pr
         ) : null}
 
         {blocks.map((entry) => {
-          const topPx = top(entry.start);
-          const heightPx = Math.max(18, top(entry.end) - topPx);
+          const active = drag && drag.entry.id === entry.id ? drag.preview : entry;
+          const topPx = top(active.start);
+          const heightPx = Math.max(18, top(active.end) - topPx);
+          const lane = entry.lane ?? 0;
+          const laneCount = Math.max(1, entry.laneCount ?? 1);
           const className =
             entry.kind === 'fixed'
               ? 'bg-surface-2 border-border'
@@ -97,19 +195,74 @@ export function Timeline({ window, blocks, ghostBlocks = [], now, onSelect }: Pr
                 ? 'bg-accent/10 border-accent/40'
                 : 'bg-accent/20 border-accent';
           return (
+            <React.Fragment key={entry.id}>
             <button
-              key={entry.id}
               type="button"
-              onClick={() => onSelect(entry)}
-              aria-label={`${entry.kind} block ${entry.title} ${clock(entry.start)} to ${clock(entry.end)}`}
-              className={`absolute left-1 right-1 overflow-hidden rounded-xl border px-2 py-1 text-left text-[11px] text-text min-h-11 ${className}`}
-              style={{ top: topPx, height: heightPx }}
+              onPointerDown={(event) => begin(event, entry, 'move')}
+              onPointerMove={move}
+              onPointerUp={finish}
+              onPointerCancel={cancel}
+              onClick={() => {
+                if (entry.kind !== 'anchor' && suppressClickRef.current) {
+                  suppressClickRef.current = false;
+                  return;
+                }
+                onSelect(entry);
+              }}
+              onKeyDown={(event) => keydown(event, entry)}
+              aria-label={`${entry.kind} block ${entry.title} ${clock(active.start)} to ${clock(active.end)}`}
+              aria-describedby="timeline-hint"
+              className={`absolute overflow-hidden rounded-xl border px-2 py-1 text-left text-[11px] text-text min-h-11 ${className}`}
+              style={{
+                top: topPx,
+                height: heightPx,
+                left: `calc(${(lane / laneCount) * 100}% + 2px)`,
+                width: `calc(${100 / laneCount}% - 4px)`,
+                touchAction: 'pan-y',
+              }}
             >
               <span className="block truncate font-medium">{entry.title}</span>
               <span className="block truncate text-text-muted">
-                {clock(entry.start)}–{clock(entry.end)}
+                {clock(active.start)}–{clock(active.end)}
               </span>
             </button>
+            {onCommit && entry.kind !== 'anchor' ? (
+              <>
+                <button
+                  type="button"
+                  aria-label={`Resize start of ${entry.title}`}
+                  onPointerDown={(event) => begin(event, entry, 'start')}
+                  onPointerMove={move}
+                  onPointerUp={finish}
+                  onPointerCancel={cancel}
+                  className="absolute z-10 rounded-full bg-accent/70"
+                  style={{
+                    left: `calc(${(lane / laneCount) * 100}% + 2px)`,
+                    width: `calc(${100 / laneCount}% - 4px)`,
+                    top: Math.max(0, topPx - 3),
+                    height: 10,
+                    touchAction: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label={`Resize end of ${entry.title}`}
+                  onPointerDown={(event) => begin(event, entry, 'end')}
+                  onPointerMove={move}
+                  onPointerUp={finish}
+                  onPointerCancel={cancel}
+                  className="absolute z-10 rounded-full bg-accent/70"
+                  style={{
+                    left: `calc(${(lane / laneCount) * 100}% + 2px)`,
+                    width: `calc(${100 / laneCount}% - 4px)`,
+                    top: Math.max(0, topPx + heightPx - 7),
+                    height: 10,
+                    touchAction: 'none',
+                  }}
+                />
+              </>
+            ) : null}
+            </React.Fragment>
           );
         })}
 

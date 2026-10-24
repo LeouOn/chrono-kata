@@ -23,7 +23,8 @@ vi.mock('@/hooks/useTimeline', async (importOriginal) => ({
     fixedBlocks: [],
     focusBlocks: [],
     anchors: [],
-    proposal: { blocks: proposed, unplaced: [] },
+    proposal: { blocks: proposed, unplaced: [], replanned: false, overflow: [], keptCount: 0 },
+    pickIds: [],
   }),
 }));
 vi.mock('@/hooks/useSettings', () => ({ useSettings: () => ({ settings: null }) }));

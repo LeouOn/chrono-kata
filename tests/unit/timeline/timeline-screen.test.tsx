@@ -91,6 +91,17 @@ describe('timeline screen', () => {
     expect(await db.blocks.filter((block) => block.title === 'Backwards').count()).toBe(0);
   });
 
+  it('names an overlap in plain words and still lets both blocks be tapped', async () => {
+    await settingsRepo.setFlag('taskInbox', true);
+    const start = new Date();
+    start.setHours(9, 0, 0, 0);
+    await blockRepo.create({ start, end: new Date(start.getTime() + 2 * 3_600_000), kind: 'fixed', title: 'A' });
+    await blockRepo.create({ start: new Date(start.getTime() + 3_600_000), end: new Date(start.getTime() + 3 * 3_600_000), kind: 'fixed', title: 'B' });
+    renderScreen();
+    expect(await screen.findByText(/One time overlap/i)).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /fixed block B/i })).toBeTruthy();
+  });
+
   it('edits and removes a commitment from its block sheet', async () => {
     await settingsRepo.setFlag('taskInbox', true);
     const start = new Date();
@@ -102,7 +113,9 @@ describe('timeline screen', () => {
       title: 'School run',
     });
     renderScreen();
-    fireEvent.click(await screen.findByRole('button', { name: /fixed block School run/i }));
+    const openSchool = await screen.findByRole('button', { name: /fixed block School run/i });
+    fireEvent.pointerDown(openSchool);
+    fireEvent.pointerUp(openSchool);
     const title = await screen.findByLabelText('Title');
     expect((title as HTMLInputElement).value).toBe('School run');
     fireEvent.change(title, { target: { value: 'School pickup' } });
@@ -112,7 +125,9 @@ describe('timeline screen', () => {
       expect(updated?.title).toBe('School pickup');
     });
 
-    fireEvent.click(await screen.findByRole('button', { name: /fixed block School pickup/i }));
+    const reopen = await screen.findByRole('button', { name: /fixed block School pickup/i });
+    fireEvent.pointerDown(reopen);
+    fireEvent.pointerUp(reopen);
     fireEvent.click(await screen.findByRole('button', { name: /remove this block/i }));
     fireEvent.click(await screen.findByRole('button', { name: /^remove$/i }));
     await waitFor(async () => {

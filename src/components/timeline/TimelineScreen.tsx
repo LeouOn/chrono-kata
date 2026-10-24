@@ -10,7 +10,7 @@ import { useTodayKey } from '@/hooks/usePlanning';
 import { useTimeline, useFixedBlockMutations, useApplyLayout, TIMELINE_STEP_MIN } from '@/hooks/useTimeline';
 import { toLocalDateString } from '@/lib/utils/date';
 import { useNow } from '@/hooks/useNow';
-import { snapToStep } from '@/lib/planning/layout';
+import { assignLanes, detectConflicts, snapToStep } from '@/lib/planning/layout';
 import { Timeline, toTimelineBlocks, type TimelineBlock } from './Timeline';
 import { BlockSheet } from './BlockSheet';
 import type { Block } from '@/lib/schemas/block';
@@ -29,7 +29,8 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   const liveDay = useTodayKey();
   const dayKey = injectedDayKey ?? liveDay;
   const { settings } = useSettings();
-  const timeline = useTimeline(dayKey, settings);
+  const [stepMin, setStepMin] = useState<number>(TIMELINE_STEP_MIN);
+  const timeline = useTimeline(dayKey, settings, stepMin);
   const { data: tasks = [] } = useTasks({ enabled: timeline.enabled });
   const { createBlock, updateBlock, deleteBlock } = useFixedBlockMutations(dayKey);
   const applyLayout = useApplyLayout(dayKey, timeline.wakingHours);
@@ -43,6 +44,7 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [anchorNotice, setAnchorNotice] = useState(false);
   const [outsideNotice, setOutsideNotice] = useState<string | null>(null);
+  const commitRef = useRef(false);
   const [applying, setApplying] = useState(false);
   const applyingRef = useRef(false);
 
@@ -63,8 +65,19 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
     [timeline.fixedBlocks, timeline.focusBlocks, timeline.anchors, taskById],
   );
   const entries = useMemo(
-    () => allEntries.filter((entry) => entry.end > timeline.window.start && entry.start < timeline.window.end),
+    () =>
+      assignLanes(
+        allEntries.filter((entry) => entry.end > timeline.window.start && entry.start < timeline.window.end),
+      ),
     [allEntries, timeline.window],
+  );
+  const conflicts = useMemo(
+    () =>
+      detectConflicts(
+        entries.map((entry) => ({ start: entry.start, end: entry.end })),
+        timeline.window,
+      ),
+    [entries, timeline.window],
   );
   // Never hide data: commitments that sit outside the waking window belong to
   // this day but cannot be drawn on the timeline. They are listed below it.
@@ -154,13 +167,41 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
     setApplying(true);
     setError(null);
     try {
-      await applyLayout.mutateAsync({ blocks: timeline.proposal.blocks });
+      const overflow = timeline.proposal.overflow;
+      const picks =
+        overflow.length > 0
+          ? timeline.pickIds.filter((id) => !overflow.includes(id))
+          : undefined;
+      await applyLayout.mutateAsync({
+        blocks: timeline.proposal.blocks,
+        overflowTaskIds: overflow,
+        picks,
+        now,
+      });
       setPreview(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not apply the layout.');
     } finally {
       applyingRef.current = false;
       setApplying(false);
+    }
+  }
+
+  async function commitTimes(entry: TimelineBlock, next: { start: number; end: number }) {
+    if (commitRef.current) return;
+    commitRef.current = true;
+    setError(null);
+    try {
+      if (entry.block) {
+        await updateBlock({
+          id: entry.block.id,
+          patch: { start: new Date(next.start), end: new Date(next.end) },
+        });
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not move the block.');
+    } finally {
+      commitRef.current = false;
     }
   }
 
@@ -185,26 +226,43 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
           className="min-h-11 border border-border bg-surface text-sm"
           onClick={() => setPreview((value) => !value)}
         >
-          {preview ? 'Hide proposed layout' : 'Propose a layout for today’s picks'}
+          {preview ? 'Hide proposed layout' : timeline.focusBlocks.length > 0 ? 'Replan from now' : 'Propose a layout for today’s picks'}
         </Button>
+        <div className="flex items-center gap-1 min-h-11" role="group" aria-label="Drag snap">
+          {[5, 15].map((step) => (
+            <button
+              key={step}
+              type="button"
+              aria-pressed={stepMin === step}
+              onClick={() => setStepMin(step)}
+              className={`min-h-11 rounded-xl border px-3 text-sm ${stepMin === step ? 'border-accent bg-accent/10 text-text' : 'border-border bg-surface text-text-muted'}`}
+            >
+              Snap {step}
+            </button>
+          ))}
+        </div>
       </div>
 
       {preview && timeline.proposal ? (
         <Card className="space-y-1">
           <p className="text-sm text-text">
             {timeline.proposal.blocks.length === 0
-              ? 'Nothing fits in the rest of today.'
-              : `${timeline.proposal.blocks.length} focus block${timeline.proposal.blocks.length === 1 ? '' : 's'} proposed for the rest of today.`}
+              ? timeline.proposal.replanned
+                ? 'Nothing left to move. Started blocks stay where they are.'
+                : 'Nothing fits in the rest of today.'
+              : timeline.proposal.replanned
+                ? `${timeline.proposal.blocks.length} block${timeline.proposal.blocks.length === 1 ? '' : 's'} will move after now${timeline.proposal.keptCount > 0 ? `; ${timeline.proposal.keptCount} already started and stay put` : ''}.`
+                : `${timeline.proposal.blocks.length} focus block${timeline.proposal.blocks.length === 1 ? '' : 's'} proposed for the rest of today.`}
           </p>
-          {timeline.proposal.unplaced.length > 0 ? (
+          {timeline.proposal.overflow.length > 0 ? (
             <p className="text-xs text-text-muted">
-              {timeline.proposal.unplaced.length} pick
-              {timeline.proposal.unplaced.length === 1 ? '' : 's'} do not fit and will stay on your list.
+              {timeline.proposal.overflow.length} pick
+              {timeline.proposal.overflow.length === 1 ? '' : 's'} went back to your list.
             </p>
           ) : null}
           <div className="flex gap-2 pt-1">
-            <Button onClick={() => void apply()} disabled={applying || timeline.proposal.blocks.length === 0}>
-              {applying ? 'Applying…' : 'Apply this layout'}
+            <Button onClick={() => void apply()} disabled={applying || (timeline.proposal.blocks.length === 0 && timeline.proposal.overflow.length === 0)}>
+              {applying ? 'Applying…' : timeline.proposal.replanned ? 'Apply replan' : 'Apply this layout'}
             </Button>
             <Button variant="ghost" onClick={() => setPreview(false)} disabled={applying}>
               Cancel
@@ -242,6 +300,23 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
         </div>
       ) : null}
 
+      {conflicts.length > 0 ? (
+        <Card className="space-y-1">
+          <h2 className="text-xs uppercase tracking-wide text-text-muted">
+            {conflicts.length === 1 ? 'One time overlap' : `${conflicts.length} time overlaps`}
+          </h2>
+          <ul className="space-y-1">
+            {conflicts.map((conflict, index) => (
+              <li key={`${conflict.kind}-${index}`} className="text-xs text-text-muted">
+                {conflict.kind === 'overlap'
+                  ? `Blocks share time around ${clock(conflict.blocks[0]!.start)}–${clock(conflict.blocks[1]!.end)}.`
+                  : 'A block sits partly outside your waking hours.'}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
       <Card>
         <Timeline
           window={timeline.window}
@@ -249,10 +324,13 @@ export function TimelineScreen({ dayKey: injectedDayKey }: Props) {
           ghostBlocks={ghosts}
           now={now}
           onSelect={openBlock}
+          onCommit={(entry, next) => commitTimes(entry, next)}
+          stepMin={stepMin}
         />
       </Card>
-      <p className="text-[11px] text-text-muted">
-        Tap a block to edit its times. Drag and resize come next; keyboard editing here always works.
+      <p id="timeline-hint" className="text-[11px] text-text-muted">
+        Tap a block to edit its times. Drag a block to move it, or use the top/bottom handles to resize;
+        with a block focused, Alt+Up/Down moves it and Shift+Alt+Up/Down changes its end. Escape cancels.
       </p>
 
       {outsideEntries.length > 0 ? (
