@@ -54,7 +54,7 @@ function expectedAfterRestoreOnAnotherDevice(data: Dataset): Dataset {
       .map(([name, entry]) => [name, { ...entry, apiKey: '' }]),
   );
   const settings = out.settings![0]!;
-  delete settings.icsSubscriptionUrl;
+  if (typeof settings.icsSubscriptionUrl === 'string') delete settings.icsSubscriptionUrl; // a stored null is not a secret and travels
   if (settings.googleCalendarConnectedAt != null) settings.googleCalendarConnectedAt = null; // no sign-in on a new device
   return out;
 }
