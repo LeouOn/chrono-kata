@@ -1,6 +1,6 @@
 # Wave 18 — Backup, export and optional sync
 
-**Status:** parts 1 and 2 of 4 (the completeness oracle and its fixes; the import preview with merge or replace, hostile-file refusal and date repair) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 18
+**Status:** parts 1 to 3 of 4 (the completeness oracle and its fixes; the import preview with merge or replace, hostile-file refusal and date repair; the encrypted backup) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 18
 **Status map:** `docs/ROADMAP_STATUS.md` W18
 
 Done when: export, wipe, import restores **everything identically**, proved by a deep-equal test.
@@ -190,6 +190,92 @@ no sideways scroll; every target at least 44 px).
   and restore (PR 4) are not here.
 - The phone is a 390-wide browser, not an Android device.
 
+## Part 3: the encrypted backup
+
+WebCrypto only: no dependency, and nothing here talks to any server. Behind `taskInbox`, in the same card:
+**Export encrypted…** saves a file that needs a passphrase to open; choosing such a file in **Import JSON…**
+asks for the passphrase first and only then shows the same preview as any other backup.
+
+### The file (`src/lib/data-transfer/encrypted.ts`)
+
+A small JSON document, so it survives email, sync and a text editor:
+
+```
+{ "format": "chrono-kata-encrypted-backup", "version": 1,
+  "kdf":    { "name": "PBKDF2", "hash": "SHA-256", "iterations": 600000, "salt": "<base64, 16 bytes>" },
+  "cipher": { "name": "AES-GCM", "iv": "<base64, 12 bytes>" },
+  "data":   "<base64 ciphertext + 16-byte tag>" }
+```
+
+- **Key**: PBKDF2-HMAC-SHA-256 of the NFKC-normalised passphrase (the same words typed on another keyboard or
+  in another Unicode form open the file), 600,000 rounds, a fresh random 16-byte salt per file, 256-bit key.
+- **Cipher**: AES-256-GCM, a fresh random 12-byte IV per file, 128-bit tag. The header (in one fixed spelling)
+  is bound to the ciphertext as the GCM additional data, so changing ANY byte of the file, header included,
+  fails to decrypt.
+- **Plaintext**: `{ "backup": <the envelope>, "secrets"?: { llmApiKeys, googleToken, icsSubscriptionUrl } }`.
+  `secrets` exists only when the person ticked the box.
+- **Reading is bounded**: the number of rounds must be 100,000 to 2,000,000 (a hostile file cannot make the
+  device compute for minutes, and it is refused BEFORE any key is derived), the header takes exactly the
+  documented fields, the salt and IV must be exactly 16 and 12 bytes, and the text limit (64 MB) and the
+  `__proto__` refusal of every other backup apply.
+
+### Failing closed
+
+A wrong passphrase and a changed file are the SAME failure with the SAME sentence ("That passphrase doesn't
+open this file, or the file has been changed. Nothing on this device was changed."), so nothing is learned
+about which, and nothing about the contents: only the file's size and the format name are visible. The
+passphrase is never stored, logged, put in an error message or in the page, and the field is emptied after a
+failed try. There is no recovery: if the passphrase is lost the file cannot be opened, and the form says so
+before the file is made.
+
+### The secrets box
+
+Its label is exactly "Also include my API keys, Google sign-in and private calendar link in this encrypted
+file", with "Ticked, anyone who has both this file and the passphrase can use them" under it. **It is off every
+time the form opens and is never remembered.** Unticked, an encrypted file follows the plain rule (nothing
+secret inside). Ticked, `collectSecrets()` puts in the keys of providers set up in the browser (not providers
+found from the device's environment), the Google sign-in, and the calendar link, and the file's own list of
+what it leaves out no longer claims it leaves those out (`withoutIncludedSecrets`).
+
+**Only Replace brings secrets across.** "Add what is missing" never changes settings or credentials, so it does
+not apply them and the preview says so. Replace restores them with the records they belong to: the file's
+keys, sign-in and calendar link win over the device's; unticked files change none of the device's.
+
+### Tests
+
+- `encrypted.test.ts`: **known answers made by an independent implementation** (Python `hashlib` +
+  `cryptography`): two complete files (100,000 and 600,000 rounds; one with a passphrase typed in decomposed
+  Unicode with a no-break space) are reproduced byte for byte and opened; NIST SP 800-38D test case 4 and the
+  published PBKDF2-HMAC-SHA-256 vectors against the runtime's primitives; 60 files of the same backup have 60
+  different salts, IVs and ciphertexts; **every byte of the salt, the IV and the ciphertext (tag included) is
+  flipped in turn** and each is refused with the one sentence; rounds ±1, a byte added or cut, swapped parts,
+  another file's ciphertext, and a ciphertext made without binding the header are refused; extra, missing and
+  mistyped header fields, out-of-range rounds (with a spy proving nothing was derived), malformed base64 and
+  wrong lengths are refused; the passphrase is not in any console call, error, outcome or file.
+- `encrypted-roundtrip.test.ts`: the plain oracle's datasets (every table, every optional field, six zones,
+  full and sparse) through **seed, export, encrypt, wipe, decrypt, import, compare**, with the box ticked
+  (everything identical, secrets included, except the two documented omissions: waiting calendar updates and
+  environment providers) and unticked (the plain rule); a device that already holds other credentials; a wrong
+  passphrase changes nothing anywhere.
+- `encrypted-ui.test.tsx` (the real card) and `tests/e2e/w18-encrypted.spec.ts` (a real browser at 390x844:
+  save with the box ticked, open on a brand-new device, wrong passphrase first, then both devices hold the
+  same data and the same secrets; a changed file and a wrong passphrase are the same refusal and change
+  nothing; password fields, no sideways scroll, every target at least 44 px; flag off has no encrypted
+  export).
+
+### What part 3 does NOT cover
+
+- **Offline guessing.** 600,000 PBKDF2 rounds slow a stranger who has the file, they do not stop one. A long
+  passphrase is the protection; the form asks for 8 characters and does not rate strength.
+- **Size.** The ciphertext is as long as the backup, so the file's size says roughly how much data there is.
+  No padding.
+- **Memory.** The passphrase is a JavaScript string while it is typed and used; a page cannot wipe it.
+  Browser autofill and the clipboard are the browser's business (the fields are `new-password` /
+  `current-password`).
+- **Argon2** is not in WebCrypto and a dependency was ruled out.
+- Engines other than Node's and Chromium's WebCrypto, and an Android device, are untested.
+- **Rotation and restore from automatic copies**, and `docs/SYNC_DECISION.md`, are part 4.
+
 ## Decisions for review
 
 1. **The private calendar link is treated as a secret.** It is the one place this changes what an
@@ -211,4 +297,14 @@ no sideways scroll; every target at least 44 px).
 8. **Limits**: 64 MB of text and 250,000 rows in any one collection. Far above years of daily use; a file
    above either is refused, not truncated.
 9. `check-ins.test.ts` changed meaning on purpose (see above).
+
+### Part 3 decisions, for review
+
+10. **600,000 PBKDF2-HMAC-SHA-256 rounds** (the current OWASP figure), accepted range 100,000 to 2,000,000 on reading.
+11. **Passphrase**: at least 8 characters, NFKC-normalised, asked twice, no strength meter, no recovery.
+12. **Only Replace applies secrets**; Add never changes settings or credentials.
+13. Providers found from the device's environment are never put in an encrypted file, even when the box is ticked.
+14. The file is named `chrono-kata-backup-DATE.encrypted.json` and is recognised by its `format` field, not its name.
+15. A stored `null` for the calendar link now travels as `null` in a plain backup (only the link itself is
+    stripped), so a round trip is identical for that field too.
 
