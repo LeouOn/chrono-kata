@@ -1,5 +1,25 @@
 # Schema Changelog
 
+## 2026-10-24 — Weekly review and resumable draft (roadmap W11, data core)
+
+New `review.ts`: `Review` (keyed by the local Monday `weekOf`, `notes` up to
+10,000 characters, an optional deterministic `statsSnapshot`) and `ReviewDraft`
+(`weekOf`, a zero-based `step` in 0–5, the decisions made so far). Dexie moves to
+**v8** with two new keyed tables, `reviews` (`weekOf`) and `reviewDrafts`
+(`weekOf, updatedAt`); new tables need no data upgrade, so rows written before
+v8 open unchanged. `weekOf` is validated as a real Monday day key rather than
+merely as `YYYY-MM-DD`, so a review cannot be filed under a day.
+
+`statsSnapshot` is `WeeklyStatsSchema` from `src/lib/review/stats.ts` — the same
+schema the pure summer produces and validates, so the stored shape and the
+computed shape cannot drift apart. `reviewRepo` adds a transactional `upsert`, an
+atomic `complete` (writes the review and clears its draft in one transaction),
+`getDraft`/`latestDraft` returning `null` rather than `undefined`, and
+`latestDraft` ordered by the new `updatedAt` index so a draft started last week
+is still found after the week key has changed. The v2 backup envelope carries
+`reviews` and `reviewDrafts` as optional fields; an absent key means "preserve
+local rows", and the envelope version stays 2.
+
 ## 2026-10-24 — Remembered .ics subscription address (roadmap W8 part 2)
 
 `settings.ts` gains optional `icsSubscriptionUrl` (https URL, <= 500 chars,

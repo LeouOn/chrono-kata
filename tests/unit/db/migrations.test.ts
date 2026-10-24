@@ -53,6 +53,10 @@ const HISTORICAL_STORES: Record<number, Record<string, string>> = {
     dayPlans: 'date',
     estimates: 'id, taskId, createdAt',
   },
+  8: {
+    reviews: 'weekOf',
+    reviewDrafts: 'weekOf, updatedAt',
+  },
 };
 
 type Fixtures = Record<string, unknown[]>;
@@ -141,7 +145,7 @@ describe('Dexie migrations', () => {
 
     const db = getDb();
     await db.open();
-    expect(db.verno).toBe(7);
+    expect(db.verno).toBe(8);
 
     const walkId = '123e4567-e89b-12d3-a456-426614174002';
     const session = await db.sessions.get('123e4567-e89b-12d3-a456-426614174001');
@@ -163,7 +167,7 @@ describe('Dexie migrations', () => {
   it('opens a fresh database at the current version', async () => {
     const db = await resetDbForTesting();
     await db.open();
-    expect(db.verno).toBe(7);
+    expect(db.verno).toBe(8);
     expect(db.tables.map((t) => t.name)).toContain('checkIns');
     expect(db.tables.map((t) => t.name)).toContain('tasks');
   });
@@ -275,7 +279,7 @@ describe('Dexie migrations', () => {
     await db.open();
     // Opened at the current version; v7 adds tables and seeds domains, but
     // every v6 row below must survive unchanged.
-    expect(db.verno).toBe(7);
+    expect(db.verno).toBe(8);
 
     for (const [table, rows] of Object.entries(DEXIE_V6_FIXTURES)) {
       expect(await db.table(table).count(), table).toBe(rows.length);
@@ -304,7 +308,7 @@ describe('Dexie migrations', () => {
 
     const db = getDb();
     await db.open();
-    expect(db.verno).toBe(7);
+    expect(db.verno).toBe(8);
 
     // Every existing row survives, counts intact.
     expect(await db.kataTemplates.count()).toBe(demo.templates.length);
@@ -348,7 +352,7 @@ describe('Dexie migrations', () => {
   it('seeds the default domains on a fresh install (populate path)', async () => {
     const db = await resetDbForTesting();
     await db.open();
-    expect(db.verno).toBe(7);
+    expect(db.verno).toBe(8);
     const domains = await db.domains.orderBy('order').toArray();
     expect(domains).toHaveLength(4);
     expect(domains.map((d) => d.name)).toEqual(['Trading', 'Practice', 'Career/Build', 'Life admin']);
@@ -356,5 +360,180 @@ describe('Dexie migrations', () => {
     // Seeding is idempotent: a second seed attempt adds nothing.
     await db.domains.bulkPut(DEFAULT_DOMAINS);
     expect(await db.domains.count()).toBe(4);
+  });
+
+  it('v7 → v8 preserves every row and adds empty review tables', async () => {
+    const T0 = new Date('2026-06-15T09:00:00Z');
+    const T1 = new Date('2026-06-16T10:00:00Z');
+    const activeProject = '123e4567-e89b-12d3-a456-4266141740b1';
+    const pausedProject = '123e4567-e89b-12d3-a456-4266141740b2';
+    const nextTask = '123e4567-e89b-12d3-a456-4266141740c1';
+    const waitingTask = '123e4567-e89b-12d3-a456-4266141740c2';
+    const doneTask = '123e4567-e89b-12d3-a456-4266141740c3';
+
+    await seedLegacyDb(7, {
+      sessions: [
+        {
+          id: '123e4567-e89b-12d3-a456-4266141740aa',
+          startedAt: T,
+          endedAt: null,
+          durationMinutes: 20,
+          rating: 4,
+          activityLabel: 'Walk',
+          createdAt: T,
+          updatedAt: T,
+        },
+        {
+          id: '123e4567-e89b-12d3-a456-4266141740ab',
+          startedAt: T0,
+          endedAt: T1,
+          durationMinutes: 60,
+          rating: 5,
+          taskId: nextTask,
+          projectId: activeProject,
+          outcome: 'progress',
+          breadcrumb: 'next: the second chapter',
+          createdAt: T0,
+          updatedAt: T1,
+        },
+      ],
+      domains: DEFAULT_DOMAINS,
+      projects: [
+        {
+          id: activeProject,
+          title: 'Trading journal',
+          domainId: DOMAIN_SEED_IDS.trading,
+          status: 'active',
+          cadencePerWeek: 3,
+          breadcrumb: 'after this: the second chapter',
+          lastTouchedAt: T1,
+          createdAt: T0,
+          updatedAt: T1,
+        },
+        {
+          id: pausedProject,
+          title: 'Portfolio site',
+          domainId: DOMAIN_SEED_IDS.career,
+          status: 'paused',
+          cadencePerWeek: null,
+          lastTouchedAt: T0,
+          createdAt: T0,
+          updatedAt: T0,
+        },
+      ],
+      tasks: [
+        {
+          id: nextTask,
+          title: 'Write the first chapter',
+          status: 'next',
+          source: 'manual',
+          domainId: DOMAIN_SEED_IDS.career,
+          projectId: activeProject,
+          estimateMin: 45,
+          actualMin: 60,
+          createdAt: T0,
+          touchedAt: T1,
+        },
+        {
+          id: waitingTask,
+          title: 'Reply to the editor',
+          status: 'waiting',
+          source: 'manual',
+          domainId: DOMAIN_SEED_IDS.lifeAdmin,
+          createdAt: T0,
+          touchedAt: T0,
+        },
+        {
+          id: doneTask,
+          title: 'Outline the chapter',
+          status: 'done',
+          source: 'manual',
+          domainId: DOMAIN_SEED_IDS.career,
+          projectId: activeProject,
+          estimateMin: 30,
+          actualMin: 25,
+          createdAt: T0,
+          touchedAt: T1,
+          doneAt: T1,
+        },
+      ],
+      blocks: [
+        {
+          id: '123e4567-e89b-12d3-a456-4266141740d1',
+          start: T0,
+          end: T1,
+          kind: 'focus',
+          title: 'Chapter one',
+          taskId: nextTask,
+          projectId: activeProject,
+          createdAt: T0,
+          updatedAt: T0,
+        },
+      ],
+      dayPlans: [
+        {
+          date: '2026-06-15',
+          picks: [nextTask, doneTask],
+          capacityMin: 180,
+          shutdownNote: 'kept it small',
+          createdAt: T0,
+          updatedAt: T1,
+        },
+      ],
+      estimates: [
+        {
+          id: '123e4567-e89b-12d3-a456-4266141740e1',
+          taskId: nextTask,
+          source: 'user',
+          minutes: 45,
+          createdAt: T0,
+          updatedAt: T0,
+        },
+      ],
+    });
+
+    const db = getDb();
+    await db.open();
+    expect(db.verno).toBe(8);
+
+    // Every v7 row survives the upgrade untouched.
+    expect(await db.sessions.count()).toBe(2);
+    expect(await db.domains.count()).toBe(4);
+    expect(await db.projects.count()).toBe(2);
+    expect(await db.tasks.count()).toBe(3);
+    expect(await db.blocks.count()).toBe(1);
+    expect(await db.dayPlans.count()).toBe(1);
+    expect(await db.estimates.count()).toBe(1);
+
+    const session = await db.sessions.get('123e4567-e89b-12d3-a456-4266141740ab');
+    expect(session?.taskId).toBe(nextTask);
+    expect(session?.outcome).toBe('progress');
+    expect(session?.breadcrumb).toBe('next: the second chapter');
+    const project = await db.projects.get(activeProject);
+    expect(project?.breadcrumb).toBe('after this: the second chapter');
+    expect(project?.status).toBe('active');
+    const task = await db.tasks.get(nextTask);
+    expect(task?.actualMin).toBe(60);
+    expect(task?.touchedAt.getTime()).toBe(T1.getTime());
+
+    // The new tables start empty, and are usable immediately.
+    expect(await db.reviews.count()).toBe(0);
+    expect(await db.reviewDrafts.count()).toBe(0);
+
+    await db.reviews.put({
+      weekOf: '2026-06-15',
+      notes: 'first review after upgrade',
+      createdAt: T1,
+      updatedAt: T1,
+    });
+    await db.reviewDrafts.bulkPut([
+      { weekOf: '2026-06-08', step: 1, decisions: {}, updatedAt: T0 },
+      { weekOf: '2026-06-15', step: 4, decisions: { kept: [nextTask] }, updatedAt: T1 },
+    ]);
+    expect(await db.reviews.count()).toBe(1);
+    // The `updatedAt` index (new in v8) can order drafts across weeks.
+    const drafts = await db.reviewDrafts.orderBy('updatedAt').toArray();
+    expect(drafts.map((draft) => draft.weekOf)).toEqual(['2026-06-08', '2026-06-15']);
+    db.close();
   });
 });

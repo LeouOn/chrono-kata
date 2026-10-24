@@ -17,6 +17,7 @@ import { TaskSchema, type Task } from '@/lib/schemas/task';
 import { BlockSchema, type Block } from '@/lib/schemas/block';
 import { DayPlanSchema, type DayPlan } from '@/lib/schemas/day-plan';
 import { EstimateSchema, type Estimate } from '@/lib/schemas/estimate';
+import { ReviewSchema, ReviewDraftSchema, type Review, type ReviewDraft } from '@/lib/schemas/review';
 import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
 import type { ExportEnvelope, ExportEnvelopeV2 } from './types';
 import { migrateEnvelope } from './migrate';
@@ -91,6 +92,8 @@ const TASK_DATE_FIELDS = ['dueAt', 'deferUntil', 'createdAt', 'touchedAt', 'done
 const BLOCK_DATE_FIELDS = ['start', 'end', 'createdAt', 'updatedAt'];
 const DAY_PLAN_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const ESTIMATE_DATE_FIELDS = ['createdAt', 'updatedAt'];
+const REVIEW_DATE_FIELDS = ['createdAt', 'updatedAt'];
+const REVIEW_DRAFT_DATE_FIELDS = ['updatedAt'];
 
 export function parseEnvelope(json: string): ParseResult {
   try {
@@ -106,7 +109,7 @@ export function parseEnvelope(json: string): ParseResult {
     if (!Array.isArray(p.sessions)) {
       return { ok: false, error: 'Missing or invalid sessions array.' };
     }
-    for (const field of ['reflections', 'kataTemplates', 'conversations', 'messages', 'habits', 'habitLogs', 'checkIns', 'domains', 'projects', 'tasks', 'blocks', 'dayPlans', 'estimates'] as const) {
+    for (const field of ['reflections', 'kataTemplates', 'conversations', 'messages', 'habits', 'habitLogs', 'checkIns', 'domains', 'projects', 'tasks', 'blocks', 'dayPlans', 'estimates', 'reviews', 'reviewDrafts'] as const) {
       if (p[field] !== undefined && !Array.isArray(p[field])) {
         return { ok: false, error: `Invalid ${field}: expected an array.` };
       }
@@ -335,6 +338,29 @@ export function parseEnvelope(json: string): ParseResult {
     );
     skipped += estimatesResult.skipped;
 
+    const reviewsResult = dedupeBy(
+      reviveRows(
+        p.reviews === undefined ? [] : p.reviews,
+        ReviewSchema,
+        (row) =>
+          hasValidDates(row, REVIEW_DATE_FIELDS)
+            ? { ...row, createdAt: reviveDate(row.createdAt), updatedAt: reviveDate(row.updatedAt) }
+            : null
+      ),
+      (review) => review.weekOf
+    );
+    skipped += reviewsResult.skipped;
+
+    const reviewDraftsResult = dedupeBy(
+      reviveRows(
+        p.reviewDrafts === undefined ? [] : p.reviewDrafts,
+        ReviewDraftSchema,
+        (row) => (hasValidDates(row, REVIEW_DRAFT_DATE_FIELDS) ? { ...row, updatedAt: reviveDate(row.updatedAt) } : null)
+      ),
+      (draft) => draft.weekOf
+    );
+    skipped += reviewDraftsResult.skipped;
+
     const streak = reviveStreak(p.streak);
     const settings = reviveSettings(p.settings);
     const llmSettings = reviveLLMSettings(p.llmSettings);
@@ -367,6 +393,8 @@ export function parseEnvelope(json: string): ParseResult {
       ...(p.blocks !== undefined ? { blocks: blocksResult.unique as Block[] } : {}),
       ...(p.dayPlans !== undefined ? { dayPlans: dayPlansResult.unique as DayPlan[] } : {}),
       ...(p.estimates !== undefined ? { estimates: estimatesResult.unique as Estimate[] } : {}),
+      ...(p.reviews !== undefined ? { reviews: reviewsResult.unique as Review[] } : {}),
+      ...(p.reviewDrafts !== undefined ? { reviewDrafts: reviewDraftsResult.unique as ReviewDraft[] } : {}),
     };
     return { ok: true, envelope, skipped };
   } catch (e) {
@@ -484,6 +512,8 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
       db.blocks,
       db.dayPlans,
       db.estimates,
+      db.reviews,
+      db.reviewDrafts,
     ],
     async () => {
       await Promise.all([
@@ -606,6 +636,16 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
           await db.estimates.bulkAdd(envelope.estimates);
         }
       }
+
+      if (envelope.reviews !== undefined) {
+        await db.reviews.clear();
+        if (envelope.reviews.length > 0) await db.reviews.bulkAdd(envelope.reviews);
+      }
+
+      if (envelope.reviewDrafts !== undefined) {
+        await db.reviewDrafts.clear();
+        if (envelope.reviewDrafts.length > 0) await db.reviewDrafts.bulkAdd(envelope.reviewDrafts);
+      }
     }
   );
 
@@ -615,4 +655,4 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
 }
 
 // Type re-exports for compatibility with imports in callers
-export type { Session, Reflection, Streak, Settings, LLMSettings, KataTemplate, Conversation, Message, Habit, HabitLog, CheckIn, Domain, Project, Task, Block, DayPlan, Estimate };
+export type { Session, Reflection, Streak, Settings, LLMSettings, KataTemplate, Conversation, Message, Habit, HabitLog, CheckIn, Domain, Project, Task, Block, DayPlan, Estimate, Review, ReviewDraft };
