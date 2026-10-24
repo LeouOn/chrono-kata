@@ -17,12 +17,23 @@ import { TaskSchema, type Task } from '@/lib/schemas/task';
 import { BlockSchema, type Block } from '@/lib/schemas/block';
 import { DayPlanSchema, type DayPlan } from '@/lib/schemas/day-plan';
 import { EstimateSchema, type Estimate } from '@/lib/schemas/estimate';
+import { ReviewSchema, ReviewDraftSchema, type Review, type ReviewDraft } from '@/lib/schemas/review';
 import { rebuildSessionHabitLogs } from '@/lib/habits/session-sync';
 import type { ExportEnvelope, ExportEnvelopeV2 } from './types';
 import { migrateEnvelope } from './migrate';
 
 export type ParseResult =
-  | { ok: true; envelope: ExportEnvelopeV2; skipped: number }
+  | {
+      ok: true;
+      envelope: ExportEnvelopeV2;
+      skipped: number;
+      /**
+       * Reviews whose stored stats snapshot no longer matched the current
+       * schema and were restored without it. Their notes are kept; the numbers
+       * are derived data that a later version can recompute.
+       */
+      snapshotsDropped: number;
+    }
   | { ok: false; error: string };
 
 function reviveDate(value: unknown): Date | null {
@@ -47,6 +58,57 @@ function hasValidDates(row: Record<string, unknown>, fields: string[]): boolean 
     if (v == null) return true;
     return reviveDate(v) != null;
   });
+}
+
+/**
+ * Reviews get their own row mapper because a review carries two kinds of data:
+ * the user's own writing, and a derived stats snapshot whose schema will keep
+ * growing. A snapshot from an older build must never cost the user their notes,
+ * so a row that fails validation only because of `statsSnapshot` is retried
+ * without it. Everything else (a non-Monday week key, notes over the limit, bad
+ * dates) is still skipped and counted.
+ */
+function reviveReviews(rows: unknown): {
+  valid: Review[];
+  skipped: number;
+  snapshotsDropped: number;
+} {
+  if (!Array.isArray(rows)) return { valid: [], skipped: 0, snapshotsDropped: 0 };
+  const valid: Review[] = [];
+  let skipped = 0;
+  let snapshotsDropped = 0;
+  for (const row of rows) {
+    if (typeof row !== 'object' || row === null) {
+      skipped++;
+      continue;
+    }
+    const raw = row as Record<string, unknown>;
+    if (!hasValidDates(raw, REVIEW_DATE_FIELDS)) {
+      skipped++;
+      continue;
+    }
+    const revived = {
+      ...raw,
+      createdAt: reviveDate(raw.createdAt),
+      updatedAt: reviveDate(raw.updatedAt),
+    };
+    const parsed = ReviewSchema.safeParse(revived);
+    if (parsed.success) {
+      valid.push(parsed.data);
+      continue;
+    }
+    if ('statsSnapshot' in revived) {
+      const { statsSnapshot: _dropped, ...withoutSnapshot } = revived;
+      const retried = ReviewSchema.safeParse(withoutSnapshot);
+      if (retried.success) {
+        valid.push(retried.data);
+        snapshotsDropped++;
+        continue;
+      }
+    }
+    skipped++;
+  }
+  return { valid, skipped, snapshotsDropped };
 }
 
 function reviveRows<T>(
@@ -91,6 +153,8 @@ const TASK_DATE_FIELDS = ['dueAt', 'deferUntil', 'createdAt', 'touchedAt', 'done
 const BLOCK_DATE_FIELDS = ['start', 'end', 'createdAt', 'updatedAt'];
 const DAY_PLAN_DATE_FIELDS = ['createdAt', 'updatedAt'];
 const ESTIMATE_DATE_FIELDS = ['createdAt', 'updatedAt'];
+const REVIEW_DATE_FIELDS = ['createdAt', 'updatedAt'];
+const REVIEW_DRAFT_DATE_FIELDS = ['updatedAt'];
 
 export function parseEnvelope(json: string): ParseResult {
   try {
@@ -106,7 +170,7 @@ export function parseEnvelope(json: string): ParseResult {
     if (!Array.isArray(p.sessions)) {
       return { ok: false, error: 'Missing or invalid sessions array.' };
     }
-    for (const field of ['reflections', 'kataTemplates', 'conversations', 'messages', 'habits', 'habitLogs', 'checkIns', 'domains', 'projects', 'tasks', 'blocks', 'dayPlans', 'estimates'] as const) {
+    for (const field of ['reflections', 'kataTemplates', 'conversations', 'messages', 'habits', 'habitLogs', 'checkIns', 'domains', 'projects', 'tasks', 'blocks', 'dayPlans', 'estimates', 'reviews', 'reviewDrafts'] as const) {
       if (p[field] !== undefined && !Array.isArray(p[field])) {
         return { ok: false, error: `Invalid ${field}: expected an array.` };
       }
@@ -335,6 +399,21 @@ export function parseEnvelope(json: string): ParseResult {
     );
     skipped += estimatesResult.skipped;
 
+    const reviewRows = reviveReviews(p.reviews === undefined ? [] : p.reviews);
+    const snapshotsDropped = reviewRows.snapshotsDropped;
+    const reviewsResult = dedupeBy(reviewRows, (review) => review.weekOf);
+    skipped += reviewsResult.skipped;
+
+    const reviewDraftsResult = dedupeBy(
+      reviveRows(
+        p.reviewDrafts === undefined ? [] : p.reviewDrafts,
+        ReviewDraftSchema,
+        (row) => (hasValidDates(row, REVIEW_DRAFT_DATE_FIELDS) ? { ...row, updatedAt: reviveDate(row.updatedAt) } : null)
+      ),
+      (draft) => draft.weekOf
+    );
+    skipped += reviewDraftsResult.skipped;
+
     const streak = reviveStreak(p.streak);
     const settings = reviveSettings(p.settings);
     const llmSettings = reviveLLMSettings(p.llmSettings);
@@ -367,8 +446,10 @@ export function parseEnvelope(json: string): ParseResult {
       ...(p.blocks !== undefined ? { blocks: blocksResult.unique as Block[] } : {}),
       ...(p.dayPlans !== undefined ? { dayPlans: dayPlansResult.unique as DayPlan[] } : {}),
       ...(p.estimates !== undefined ? { estimates: estimatesResult.unique as Estimate[] } : {}),
+      ...(p.reviews !== undefined ? { reviews: reviewsResult.unique as Review[] } : {}),
+      ...(p.reviewDrafts !== undefined ? { reviewDrafts: reviewDraftsResult.unique as ReviewDraft[] } : {}),
     };
-    return { ok: true, envelope, skipped };
+    return { ok: true, envelope, skipped, snapshotsDropped };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -484,6 +565,8 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
       db.blocks,
       db.dayPlans,
       db.estimates,
+      db.reviews,
+      db.reviewDrafts,
     ],
     async () => {
       await Promise.all([
@@ -606,6 +689,16 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
           await db.estimates.bulkAdd(envelope.estimates);
         }
       }
+
+      if (envelope.reviews !== undefined) {
+        await db.reviews.clear();
+        if (envelope.reviews.length > 0) await db.reviews.bulkAdd(envelope.reviews);
+      }
+
+      if (envelope.reviewDrafts !== undefined) {
+        await db.reviewDrafts.clear();
+        if (envelope.reviewDrafts.length > 0) await db.reviewDrafts.bulkAdd(envelope.reviewDrafts);
+      }
     }
   );
 
@@ -615,4 +708,4 @@ export async function replaceAll(envelope: ExportEnvelope): Promise<void> {
 }
 
 // Type re-exports for compatibility with imports in callers
-export type { Session, Reflection, Streak, Settings, LLMSettings, KataTemplate, Conversation, Message, Habit, HabitLog, CheckIn, Domain, Project, Task, Block, DayPlan, Estimate };
+export type { Session, Reflection, Streak, Settings, LLMSettings, KataTemplate, Conversation, Message, Habit, HabitLog, CheckIn, Domain, Project, Task, Block, DayPlan, Estimate, Review, ReviewDraft };

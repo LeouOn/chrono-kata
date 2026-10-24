@@ -15,7 +15,7 @@ import { toLocalDateString } from '@/lib/utils/date';
  * requires re-entering keys).
  */
 export async function collectAll(): Promise<ExportEnvelopeV2> {
-  const [sessions, reflections, streak, settings, llmSettings, kataTemplates, conversations, messages, habits, habitLogs, checkIns, domains, projects, tasks, blocks, dayPlans, estimates] =
+  const [sessions, reflections, streak, settings, llmSettings, kataTemplates, conversations, messages, habits, habitLogs, checkIns, domains, projects, tasks, blocks, dayPlans, estimates, reviews, reviewDrafts] =
     await Promise.all([
       sessionRepo.getAll(),
       reflectionRepo.getAll(),
@@ -34,6 +34,8 @@ export async function collectAll(): Promise<ExportEnvelopeV2> {
       getDb().blocks.toArray(),
       getDb().dayPlans.toArray(),
       getDb().estimates.toArray(),
+      getDb().reviews.toArray(),
+      getDb().reviewDrafts.toArray(),
     ]);
 
   // Strip API keys.
@@ -69,6 +71,8 @@ export async function collectAll(): Promise<ExportEnvelopeV2> {
     blocks,
     dayPlans,
     estimates,
+    reviews,
+    reviewDrafts,
   };
 }
 

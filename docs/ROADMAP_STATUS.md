@@ -48,7 +48,7 @@ actually exists.
 | W8 | Calendar interop (local-first) | partial (ICS UI in review; native later) | M | C | native calendar |
 | W9 | Work block → timed session flow | partial | M | B | outcome + breadcrumb, session links |
 | W10 | Long projects without heroic pushes | missing | M | B | cadence debt, stall detection, project page |
-| W11 | Weekly review wizard | partial | M | B | wizard, Review entity, pause/resume |
+| W11 | Weekly review wizard | partial (data core) | M | B | Review+stats shipped; wizard/AI next |
 | W12 | Journal and domain accountability | missing | M | B | journal, shutdown ritual, markdown export |
 | W13 | Analytics and calibration | partial | M | A | estimate accuracy, calibration, CSV export |
 | W14 | AI coach upgrade (context and tools) | partial | L | C | tool-calling, prompt library, modes |
@@ -421,25 +421,31 @@ where dropping happens, so they must agree).
 
 ## W11 — Weekly review wizard
 
-**Status:** partial · **Size:** M · **Lanes:** B · **Depends on:** W1 (Task/Project), W6
+**Status:** partial (data core shipped 2026-10-24) · **Size:** M · **Lanes:** B · **Depends on:** W1 (Task/Project), W6
 
 **Evidence**
 - Exists: an AI weekly reflection — `generateWeeklyReflection()` in `src/lib/llm/llm-service.ts`,
   `buildWeeklyReflectionUserText()` in `src/lib/llm/prompt-builders.ts`, a `Reflection` table
   (`src/lib/schemas/reflection.ts`: `periodStart`, `periodEnd`, `observations`, `question`,
   `sourceSessionIds`) and the `/reflect` route (`src/app/(main)/reflect/page.tsx` →
-  `src/components/reflection/ReflectionCard.tsx`).
-- Missing: no `Review` entity — `grep -rInE "ReviewSchema" src tests` → 0 hits; the reflection is a
-  generated artifact, not a saved review with stats.
+  `src/components/reflection/ReflectionCard.tsx`). This is the optional AI summary, reused as-is.
+- Shipped (data core, 2026-10-24): `Review` and `ReviewDraft` schemas
+  (`src/lib/schemas/review.ts`), Dexie **v8** tables `reviews`/`reviewDrafts`, `reviewRepo` with a
+  transactional `complete`, local-Monday week keys (`src/lib/review/week.ts`) and pure weekly stats
+  (`src/lib/review/stats.ts`: domain balance, week-scoped estimate vs actual, waiting tasks, cadence
+  debt, moved/stalled). Backup envelope carries both tables as optional fields.
 - Missing: the wizard itself — no guided 6-step flow, no inbox clearing, no sweep list, no domain
   balance, no estimate check, no "shape next week".
-- Missing: pause/resume — no draft/state persistence for a multi-step flow.
+- Missing: the optional AI summary step wired into the review flow (the generator exists; the review
+  does not call it yet).
 
 **Skip / extend / net-new**
 - Skip: nothing, but **reuse** the existing reflection generation as the optional AI summary step
   (step 6) rather than writing a second summarizer.
-- Extend: `Reflection` gains an optional `weekOf`/`statsSnapshot`, or a sibling `Review` table is added.
-- Net-new: the wizard flow with resumable state, the sweep decisions, the cadence targets step.
+- Chosen: a sibling `Review` table keyed by the local Monday (not an extension of `Reflection`, which
+  stays the generated artifact). Pause/resume is a `ReviewDraft` row, deleted inside the same
+  transaction that completes the review.
+- Net-new: the wizard UI, its Playwright spec, and the AI summary step.
 
 **Conflicts:** "review" is already used by `/reflect` (AI reflection) and by W20's "roadmap status
 update". Name the wizard's artifact `Review` and leave "reflection" alone.

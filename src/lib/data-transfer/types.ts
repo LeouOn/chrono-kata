@@ -14,6 +14,7 @@ import type { Task } from '@/lib/schemas/task';
 import type { Block } from '@/lib/schemas/block';
 import type { DayPlan } from '@/lib/schemas/day-plan';
 import type { Estimate } from '@/lib/schemas/estimate';
+import type { Review, ReviewDraft } from '@/lib/schemas/review';
 
 /** Envelope format written by current exports. Older files are upgraded by `migrateEnvelope`. */
 export const CURRENT_ENVELOPE_VERSION = 2;
@@ -42,6 +43,9 @@ export interface ExportEnvelope {
   blocks?: Block[];
   dayPlans?: DayPlan[];
   estimates?: Estimate[];
+  /** Wave 11; absent in older files, so local reviews are preserved. */
+  reviews?: Review[];
+  reviewDrafts?: ReviewDraft[];
 }
 
 export type ExportEnvelopeV2 = ExportEnvelope & { version: 2 };

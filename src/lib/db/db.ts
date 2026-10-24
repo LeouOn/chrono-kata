@@ -18,6 +18,7 @@ import type { Task } from '@/lib/schemas/task';
 import type { Block } from '@/lib/schemas/block';
 import type { DayPlan } from '@/lib/schemas/day-plan';
 import type { Estimate } from '@/lib/schemas/estimate';
+import type { Review, ReviewDraft } from '@/lib/schemas/review';
 import { seedDefaultDomains } from './seed-domains';
 
 export class ChronoKataDB extends Dexie {
@@ -40,6 +41,8 @@ export class ChronoKataDB extends Dexie {
   blocks!: Table<Block, string>;
   dayPlans!: Table<DayPlan, string>;
   estimates!: Table<Estimate, string>;
+  reviews!: Table<Review, string>;
+  reviewDrafts!: Table<ReviewDraft, string>;
 
   constructor() {
     super('chrono-kata');
@@ -166,6 +169,14 @@ export class ChronoKataDB extends Dexie {
         // seed the default domains here too.
         await seedDefaultDomains(tx.table('domains'));
       });
+    // Roadmap Wave 11: weekly reviews plus their resumable drafts. New tables
+    // need no data upgrade; rows written before v8 stay valid. `reviewDrafts`
+    // indexes `updatedAt` so the wizard can resume the most recent draft even
+    // after the current week key has moved on.
+    this.version(8).stores({
+      reviews: 'weekOf',
+      reviewDrafts: 'weekOf, updatedAt',
+    });
     // Fresh installs: seed the four default domains once, at creation.
     this.on('populate', (tx) => {
       seedDefaultDomainsOnPopulate(tx.table('domains'));

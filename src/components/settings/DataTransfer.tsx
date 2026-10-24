@@ -17,6 +17,7 @@ export function DataTransfer() {
   const [pendingImport, setPendingImport] = useState<{ sessions: number; reflections: number } | null>(null);
   const [pendingEnvelope, setPendingEnvelope] = useState<ExportEnvelope | null>(null);
   const [pendingSkipped, setPendingSkipped] = useState(0);
+  const [pendingSnapshotsDropped, setPendingSnapshotsDropped] = useState(0);
   const [storagePersistent, setStoragePersistent] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -46,6 +47,7 @@ export function DataTransfer() {
       }
       setPendingEnvelope(result.envelope);
       setPendingSkipped(result.skipped);
+      setPendingSnapshotsDropped(result.snapshotsDropped);
       setPendingImport({
         sessions: result.envelope.sessions.length,
         reflections: result.envelope.reflections.length,
@@ -113,7 +115,7 @@ export function DataTransfer() {
         title="Replace all data?"
         message={
           pendingImport
-            ? `This will WIPE all existing data and restore ${pendingImport.sessions} session${pendingImport.sessions === 1 ? '' : 's'} and ${pendingImport.reflections} reflection${pendingImport.reflections === 1 ? '' : 's'} from the file.${pendingSkipped > 0 ? ` ${pendingSkipped} invalid or duplicate record${pendingSkipped === 1 ? '' : 's'} in the file will be skipped.` : ''} Any queued calendar-sync ops will also be discarded. Cannot be undone.`
+            ? `This will WIPE all existing data and restore ${pendingImport.sessions} session${pendingImport.sessions === 1 ? '' : 's'} and ${pendingImport.reflections} reflection${pendingImport.reflections === 1 ? '' : 's'} from the file.${pendingSkipped > 0 ? ` ${pendingSkipped} invalid or duplicate record${pendingSkipped === 1 ? '' : 's'} in the file will be skipped.` : ''}${pendingSnapshotsDropped > 0 ? ` ${pendingSnapshotsDropped} review${pendingSnapshotsDropped === 1 ? '' : 's'} in the file had a summary this version cannot read; the review notes are kept and only the summary is left out.` : ''} Any queued calendar-sync ops will also be discarded. Cannot be undone.`
             : ''
         }
         confirmLabel="Replace all"
