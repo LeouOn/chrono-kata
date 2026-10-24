@@ -162,6 +162,167 @@ describe('planShutdown', () => {
     expect(DayPlanSchema.safeParse(result.value.plan).success).toBe(true);
   });
 
+  /** The tasks as the first shutdown left them (statuses + cleared defer days). */
+  function afterFirst(first: ReturnType<typeof run>): Task[] {
+    return TASKS.map((row) => {
+      const patch = first.taskPatches.find((entry) => entry.id === row.id);
+      if (!patch) return row;
+      return {
+        ...row,
+        status: patch.status,
+        ...(patch.clearDeferUntil ? { deferUntil: null } : {}),
+      };
+    });
+  }
+
+  it('a later call that only edits the note keeps the recorded decisions', () => {
+    const first = run(DECISIONS);
+    const tasks = afterFirst(first);
+
+    const noteOnly = planShutdown({
+      plan: first.plan,
+      date: PLAN.date,
+      tasks,
+      decisions: [],
+      shutdownNote: 'Quiet evening after all.',
+      now: new Date('2026-06-15T22:10:00'),
+    });
+    if (!noteOnly.ok) throw new Error(noteOnly.error);
+
+    expect(noteOnly.value.plan.picksDone).toEqual(first.plan.picksDone);
+    expect(noteOnly.value.plan.picksBack).toEqual(first.plan.picksBack);
+    expect(noteOnly.value.plan.shutdownNote).toBe('Quiet evening after all.');
+    expect(noteOnly.value.taskPatches).toEqual([]);
+  });
+
+  it('a later call naming one task moves it and keeps the rest of the record', () => {
+    const first = run(DECISIONS);
+    const tasks = afterFirst(first);
+
+    const second = planShutdown({
+      plan: first.plan,
+      date: PLAN.date,
+      tasks,
+      decisions: [{ taskId: BACK_TASK, outcome: 'done' }],
+      now: new Date('2026-06-15T22:20:00'),
+    });
+    if (!second.ok) throw new Error(second.error);
+
+    // BACK_TASK moved from the back list to the done list; nothing else was lost.
+    expect(second.value.plan.picksBack).not.toContain(BACK_TASK);
+    expect(second.value.plan.picksDone).toEqual(
+      [DONE_TASK, BACK_TASK, ...(first.plan.picksDone ?? [])].filter((id, index, all) => all.indexOf(id) === index).sort(),
+    );
+    expect(second.value.plan.picksBack).toEqual(
+      (first.plan.picksBack ?? []).filter((id) => id !== BACK_TASK),
+    );
+  });
+
+  it('never lets a task be in both lists, whatever order the calls come in', () => {
+    const first = run([
+      { taskId: BACK_TASK, outcome: 'back' },
+      { taskId: BACK_TASK, outcome: 'done' },
+    ]);
+    expect(first.plan.picksBack ?? []).not.toContain(BACK_TASK);
+    expect(first.plan.picksDone).toContain(BACK_TASK);
+  });
+
+  it('keeps the record consistent across random sequences of calls (oracle)', () => {
+    // Seeded PRNG, so a failure is reproducible.
+    let state = 987654321;
+    const random = () => {
+      state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return state / 2_147_483_648;
+    };
+
+    let plan = PLAN;
+    let tasks = [...TASKS];
+    let now = NOW.getTime();
+    const recorded = new Set<string>();
+    const deleted = new Set<string>();
+
+    for (let call = 0; call < 12; call += 1) {
+      now += 60_000;
+      const live = tasks.filter((row) => !deleted.has(row.id));
+      const decisions: ShutdownDecision[] = live
+        .filter(() => random() < 0.5)
+        .map((row) => ({ taskId: row.id, outcome: random() < 0.5 ? 'done' : 'back' }));
+      const result = planShutdown({
+        plan,
+        date: PLAN.date,
+        tasks: live,
+        decisions,
+        shutdownNote: random() < 0.3 ? `note ${call}` : undefined,
+        now: new Date(now),
+      });
+      if (!result.ok) throw new Error(result.error);
+      plan = result.value.plan;
+      for (const id of [...(plan.picksDone ?? []), ...(plan.picksBack ?? [])]) recorded.add(id);
+      for (const decision of decisions) recorded.add(decision.taskId);
+
+      // Apply the status patches the way the repository would.
+      tasks = tasks.map((row) => {
+        const patch = result.value.taskPatches.find((entry) => entry.id === row.id);
+        if (!patch) return row;
+        return {
+          ...row,
+          status: patch.status,
+          ...(patch.clearDeferUntil ? { deferUntil: null } : {}),
+        };
+      });
+
+      const done = plan.picksDone ?? [];
+      const back = plan.picksBack ?? [];
+      // Invariants after every call.
+      expect(done.filter((id) => back.includes(id))).toEqual([]);
+      expect([...done].sort()).toEqual(done);
+      expect([...back].sort()).toEqual(back);
+      for (const id of done) {
+        const row = tasks.find((entry) => entry.id === id);
+        expect(row, `done id ${id} has no task`).toBeDefined();
+        expect(row?.status).toBe('done');
+      }
+      for (const id of back) {
+        const row = tasks.find((entry) => entry.id === id);
+        expect(row, `back id ${id} has no task`).toBeDefined();
+        expect(row?.status).toBe('next');
+        expect(row?.deferUntil ?? null).toBeNull();
+      }
+      // Repeating the same call changes nothing, and never moves the timestamp.
+      const repeat = planShutdown({
+        plan,
+        date: PLAN.date,
+        tasks,
+        decisions,
+        now: new Date(now + 30_000),
+      });
+      if (!repeat.ok) throw new Error(repeat.error);
+      expect(repeat.value.changed).toBe(false);
+      expect(repeat.value.plan.updatedAt.getTime()).toBe(plan.updatedAt.getTime());
+    }
+
+    // A deleted task disappears from the record; nothing else can vanish.
+    const withoutBack = tasks.filter((row) => row.id !== BACK_TASK);
+    deleted.add(BACK_TASK);
+    const afterDelete = planShutdown({
+      plan,
+      date: PLAN.date,
+      tasks: withoutBack,
+      decisions: [],
+      now: new Date(now + 60_000),
+    });
+    if (!afterDelete.ok) throw new Error(afterDelete.error);
+    expect(afterDelete.value.plan.picksDone ?? []).not.toContain(BACK_TASK);
+    expect(afterDelete.value.plan.picksBack ?? []).not.toContain(BACK_TASK);
+    for (const id of recorded) {
+      if (id === BACK_TASK) continue;
+      const stillThere =
+        (afterDelete.value.plan.picksDone ?? []).includes(id) ||
+        (afterDelete.value.plan.picksBack ?? []).includes(id);
+      expect(stillThere || tasks.find((row) => row.id === id) === undefined).toBe(true);
+    }
+  });
+
   it('leaves a field it was not given exactly as it was', () => {
     const withNote = { ...PLAN, shutdownNote: 'from yesterday' } as DayPlan;
     const result = planShutdown({

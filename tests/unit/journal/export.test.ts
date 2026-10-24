@@ -10,6 +10,7 @@ import {
 } from '@/lib/journal/export';
 import { addDays } from '@/lib/pacing/days';
 import { formatWeekLabel } from '@/lib/review/week';
+import { renderJournalTemplate } from '@/lib/journal/template';
 import type { DayPlan } from '@/lib/schemas/day-plan';
 import type { Domain } from '@/lib/schemas/domain';
 import type { Task } from '@/lib/schemas/task';
@@ -203,6 +204,80 @@ describe('week and month exports', () => {
     expect(out).toContain('## Tuesday 29 February 2028');
     expect(out).not.toContain('january');
     expect(out).not.toContain('march');
+  });
+});
+
+describe('inline escaping: titles and domain names are external text', () => {
+  const HOSTILE = [
+    '# Big heading',
+    '```js',
+    '> quote',
+    '---',
+    '<b onclick=x>hi</b>',
+    '1. numbered',
+    '[click](javascript:alert(1))',
+    '* * *',
+    '+ plus',
+    '= equals',
+    'tab\there',
+    'zero\u200bwidth',
+    'trailing backslash\\',
+    `long ${'x'.repeat(300)}`,
+    '& &amp; &lt;',
+  ];
+
+  /** The inverse of escapeInline, for the round-trip assertion. */
+  function unescapeInline(escaped: string): string {
+    return escaped
+      .replace(/\\([\\`*_{}[\]()#+.!|~-])/g, '$1')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  }
+
+  it('cannot turn a task title into structure, and the text survives the round trip', () => {
+    for (const title of HOSTILE) {
+      const row = task('aaaaaaaa-1111-4111-8111-111111111111', title, 'done');
+      const out = exportDayMarkdown('2026-06-15', {
+        plans: [plan({ date: '2026-06-15', picks: [row.id], picksDone: [row.id] })],
+        tasks: [row],
+        domains: [],
+      });
+
+      // Every line is one of the shapes this module writes; nothing else can
+      // appear because the title lives inside a list item.
+      for (const line of out.split('\n')) {
+        expect(line, `unexpected line shape for ${JSON.stringify(title)}`).toMatch(
+          /^(# .+|## .+|### .+|> .*|>|- \[[ x]\] .*)?$/,
+        );
+      }
+      const item = out.split('\n').find((line) => line.startsWith('- [x] '))!;
+      // Flattened onto one line, and no raw HTML can pass through.
+      // No raw HTML can pass through, and the visible text is recoverable.
+      expect(item).not.toContain('<');
+      expect(unescapeInline(item.slice('- [x] '.length))).toBe(title.replace(/\s+/g, ' ').trim());
+    }
+  });
+
+  it('escapes domain names in the export and in the rendered template', () => {
+    const hostileDomain = { ...TRADING, name: '# Trading ```' };
+    const row = plan({
+      date: '2026-06-15',
+      journal: 'A normal day.',
+      domainChecks: { [hostileDomain.id]: true },
+    });
+    const out = exportDayMarkdown('2026-06-15', { plans: [row], tasks: [], domains: [hostileDomain] });
+    const domainLine = out.split('\n').find((line) => line.startsWith('- [x] Trading') || line.startsWith('- [x] \\#'));
+    expect(domainLine).toBeDefined();
+    expect(domainLine!.startsWith('- [x] \\#')).toBe(true);
+    expect(out).not.toContain('```');
+
+    const rendered = renderJournalTemplate('- [ ] {{domains}}', {
+      date: '2026-06-15',
+      weekday: 'Monday',
+      domains: [hostileDomain],
+    });
+    expect(rendered).toContain('\\# Trading');
   });
 });
 

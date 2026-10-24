@@ -12,9 +12,11 @@ import { normaliseJournalText, SHUTDOWN_NOTE_MAX, FIRST_ACTION_MAX, JOURNAL_TEXT
  * is "overdue", "late" or "rolled over", nothing is deleted, and nothing is
  * duplicated — the task keeps its id and becomes `next` again.
  *
- * Running the same shutdown twice changes nothing the second time: the stored
- * decision arrays are sorted, so a re-run with the same decisions (in any order)
- * produces the same row, and `changed` is false so the caller can skip the write.
+ * The stored decisions MERGE: the shutdown is edited more than once in an
+ * evening (the note first, the picks later, or a single pick changed), and a
+ * later, smaller call must not erase what was recorded earlier. Arrays are kept
+ * sorted, so a re-run with the same decisions in any order produces the same
+ * row and `changed` is false, which lets the caller skip the write.
  */
 
 export type ShutdownOutcome = 'done' | 'back';
@@ -113,8 +115,27 @@ export function planShutdown(input: PlanShutdownInput): ShutdownResult {
   // Only decisions that name a task that still exists are recorded, so a task
   // deleted between the plan and the shutdown cannot leave a dangling id.
   const existing = [...resolved.entries()].filter(([taskId]) => taskById.has(taskId));
-  const picksDone = sortedUnique(existing.filter(([, outcome]) => outcome === 'done').map(([id]) => id));
-  const picksBack = sortedUnique(existing.filter(([, outcome]) => outcome === 'back').map(([id]) => id));
+
+  // The stored lists are a RECORD the person can edit more than once in an
+  // evening: a later call that names fewer tasks (or only the note) must merge,
+  // never rebuild. Start from what is already recorded, apply this call's
+  // decisions (a task moves between the lists, never sits in both), and drop
+  // only ids whose task no longer exists.
+  const previousDone = (input.plan?.picksDone ?? []).filter((id) => taskById.has(id));
+  const previousBack = (input.plan?.picksBack ?? []).filter((id) => taskById.has(id));
+  const doneSet = new Set(previousDone);
+  const backSet = new Set(previousBack);
+  for (const [taskId, outcome] of existing) {
+    if (outcome === 'done') {
+      doneSet.add(taskId);
+      backSet.delete(taskId);
+    } else {
+      backSet.add(taskId);
+      doneSet.delete(taskId);
+    }
+  }
+  const picksDone = [...doneSet].sort();
+  const picksBack = [...backSet].sort();
 
   const taskPatches: TaskStatusPatch[] = [];
   for (const [taskId, outcome] of existing) {

@@ -29,6 +29,16 @@ export function normaliseSearchQuery(query: string): string {
   return query.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+/**
+ * The haystack, normalised exactly like the query: whitespace collapsed and
+ * lowercased. Journal entries are multi-line, so matching the raw text would
+ * miss "position sizing" in "position\nsizing" — the ordinary case for a
+ * multi-word search.
+ */
+function flatten(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 function fieldText(entry: SearchableEntry): { field: JournalSearchField; text: string }[] {
   return [
     { field: 'journal', text: entry.journal ?? '' },
@@ -60,7 +70,7 @@ export function searchJournalEntries(
 
   const hits: JournalSearchHit[] = [];
   for (const entry of entries) {
-    const matched = fieldText(entry).filter(({ text }) => text.toLowerCase().includes(needle));
+    const matched = fieldText(entry).filter(({ text }) => flatten(text).includes(needle));
     if (matched.length === 0) continue;
     hits.push({
       date: entry.date,

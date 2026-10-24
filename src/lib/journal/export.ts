@@ -4,6 +4,11 @@ import { formatWeekLabel, mondayOf } from '@/lib/review/week';
 import type { DayPlan } from '@/lib/schemas/day-plan';
 import type { Domain } from '@/lib/schemas/domain';
 import type { Task } from '@/lib/schemas/task';
+import { escapeInline, quoteBlock } from './markdown';
+
+// `quoteBlock` is part of this module's contract for callers that build a
+// journal export; it lives in `markdown.ts` so the template can share it.
+export { quoteBlock } from './markdown';
 
 /**
  * Markdown export of journal entries (roadmap Wave 12), per day, week and month.
@@ -14,9 +19,12 @@ import type { Task } from '@/lib/schemas/task';
  *    only what the person wrote — their journal, shutdown note, tomorrow's
  *    first move, the tasks they planned, the domains they ticked. No AI text
  *    and no derived commentary ever enters it.
- * 2. **Safe**: every line of user text is rendered inside a blockquote (`> `),
- *    so a journal line like `# not a heading` or a backtick run cannot open a
- *    heading, list, table or code fence in the surrounding document.
+ * 2. **Safe**: multi-line user text is blockquoted and inline user text (task
+ *    titles, domain names — which also arrive from the share target, the calendar
+ *    import and AI decomposition) is flattened and escaped, so nothing
+ *    user-controlled can open a heading, list, table, quote, rule or code fence,
+ *    and no raw HTML survives. The document's line shapes are exactly the ones
+ *    this module writes.
  * 3. **Deterministic**: the same rows produce the same bytes. Plans are ordered
  *    by date, domains by their display order then id, tasks by id.
  *
@@ -65,20 +73,6 @@ export function formatMonthLabel(monthKey: string): string {
   return `${MONTH_NAMES[m - 1] ?? ''} ${y}`;
 }
 
-/** Every line of user text, quoted so it cannot change the document structure. */
-export function quoteBlock(text: string): string {
-  return text
-    .replace(/\r\n?/g, '\n')
-    .split('\n')
-    .map((line) => (line.trim() === '' ? '>' : `> ${line}`))
-    .join('\n');
-}
-
-/** One line of user text (a task title), flattened so it stays a single list item. */
-function inline(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
-
 function sortedDomains(domains: readonly Domain[]): Domain[] {
   return [...domains].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 }
@@ -107,15 +101,15 @@ function dayBody(plan: DayPlan, taskById: Map<string, Task>, domains: readonly D
   const planned = picked.filter((task) => !done.includes(task) && !back.includes(task));
 
   if (done.length > 0) {
-    lines.push(...section('What moved', done.sort(byId).map((task) => `- [x] ${inline(task.title)}`)));
+    lines.push(...section('What moved', done.sort(byId).map((task) => `- [x] ${escapeInline(task.title)}`)));
   }
   if (back.length > 0) {
     lines.push(
-      ...section('Back on the list', back.sort(byId).map((task) => `- [ ] ${inline(task.title)}`)),
+      ...section('Back on the list', back.sort(byId).map((task) => `- [ ] ${escapeInline(task.title)}`)),
     );
   }
   if (planned.length > 0) {
-    lines.push(...section('Planned', planned.sort(byId).map((task) => `- [ ] ${inline(task.title)}`)));
+    lines.push(...section('Planned', planned.sort(byId).map((task) => `- [ ] ${escapeInline(task.title)}`)));
   }
 
   const checks = plan.domainChecks ?? {};
@@ -124,7 +118,7 @@ function dayBody(plan: DayPlan, taskById: Map<string, Task>, domains: readonly D
     lines.push(
       ...section(
         'Domains',
-        ticked.map((domain) => `- [${checks[domain.id] ? 'x' : ' '}] ${inline(domain.name)}`),
+        ticked.map((domain) => `- [${checks[domain.id] ? 'x' : ' '}] ${escapeInline(domain.name)}`),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { escapeInline } from './markdown';
 
 /**
  * The daily journal template (roadmap Wave 12).
@@ -69,8 +70,10 @@ export function normaliseMultiline(value: string): string {
  * caller sorts them), so the same context always produces the same bytes.
  */
 export function renderJournalTemplate(template: string, context: JournalTemplateContext): string {
+  // Domain names are user text too, and these lines land in markdown: escape
+  // them the same way the export does, so a name like "# Trading" stays a name.
   const domains = context.domains
-    .map((domain) => `- [ ] ${domain.name}`)
+    .map((domain) => `- [ ] ${escapeInline(domain.name)}`)
     .join('\n');
   return normaliseMultiline(
     template
