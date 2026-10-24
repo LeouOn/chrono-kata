@@ -1,9 +1,9 @@
 # Wave 7 — Time blocking and the day timeline
 
-**Status:** part 1 (pure layout core) complete · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 7
+**Status:** parts 1–2 complete (layout core + day timeline) · **Roadmap:** [`chrono-kata-roadmap.md`](../../chrono-kata-roadmap.md) Wave 7
 **Status map:** `docs/ROADMAP_STATUS.md` W7
 
-Three PRs: 1) this one, the pure layout core; 2) the day timeline (read, add
+Three PRs: 1) the pure layout core; 2) the day timeline (read, add
 commitments, apply a proposal); 3) drag/resize, conflicts and replan-from-now.
 No UI, no DB writes and no LLM in this part.
 
@@ -84,6 +84,60 @@ The oracle is adopted as `tests/unit/planning/layout-oracle.test.ts` (60 cases �
 7 zones including Auckland/Chatham/Lord Howe, completeness and replan-partition
 checks), credited to dev-lead. Mutations for each fix turn the intended test red.
 
+## Shipped (part 2 — the day timeline)
+
+- **`/timeline`** (flag-gated like the rest of planning): one column from the
+  waking window to its end, **local** hour lines (not UTC hours: India and Nepal
+  would otherwise get :30/:45 lines), a ticking now line, fixed commitments,
+  anchors (read-only, tapping one points to Settings > Planning), focus blocks,
+  and a plain "nothing fits" state. A proposed layout renders above the day as
+  dashed ghosts until Apply; Cancel writes nothing.
+- **Nothing is hidden or silently moved**: a clock outside the waking span
+  stays on the window's own local date (07:30 in a 09:00-17:00 day is today,
+  not tomorrow), and commitments outside the window are listed in an "Outside
+  your waking hours" section below the timeline, tappable to edit/remove, with
+  a calm note after saving one.
+- **Overnight windows are real**: the block sheet maps a clock to the first
+  instant at or after the window start with that local clock, so in a
+  20:00–02:00 day "00:30" belongs to the next date and 23:00–01:00 saves;
+  block queries use the waking window, not the calendar day. A daytime
+  11:00–10:00 is still refused.
+- **Adding and editing is never drag-only**: "Add a commitment" and tapping any
+  block open a labelled sheet (Title/From/Until) with inline validation
+  ("The end time needs to be after the start"), a double-submit guard and a
+  two-step remove. Fixed-commitment create/update/delete go through
+  `blockRepo`; a focus block keeps its task link when its times move.
+- **Apply is one action**: `blockRepo.replaceFutureFocus` replaces only the
+  day's **not-yet-started** focus blocks with the proposal inside a single Dexie
+  transaction; blocks that already started are history and survive a replan,
+  and a failure rolls the whole write back. Picks that do not fit are not
+  written and stay on the task list. Nothing is written before Apply.
+- **A focus block wears its task's name**: the timeline and the sheet read the
+  task title through `taskId`, so a rename shows up without rewriting blocks.
+  The edit sheet heading is "Focus block for <task>".
+- **Today card** gained a Now/Next line with until/at clock and Start (the
+  block's duration becomes the session estimate) linked to the same session
+  launcher, plus a Timeline link. The strip only considers focus blocks that
+  overlap TODAY'S waking window (so tomorrow 09:00 is never shown as Next,
+  while an overnight window's after-midnight block still is). One shared
+  `useNow()` hook (30 s tick plus
+  focus/visibility) drives both that strip and the timeline's now line, so a
+  block ending stops reading "Now" without needing another render.
+- Tests: `timeline-screen` (flag gate, add once under a double submit, empty
+  title and end-before-start write nothing, edit, confirm-remove),
+  `timeline-proposal` (ghost then Apply, cancel writes nothing, single Apply),
+  `timeline-apply` (two Apply clicks in one act write once),
+  `timeline-overnight` (00:30 lands next day, 23:00–01:00 saves),
+  `timeline-hours` (Kolkata/Kathmandu local hours, 25/23-hour DST days),
+  `timeline-display` (task title on a focus block, anchor note, now-line
+  window), `today-now-next` (Now/Next and the block length as Start's
+  estimate, never stale after the end), `use-now` (tick and focus),
+  `block-replace-future` (started blocks kept, atomic rollback),
+  `clock-at-or-after` (DST nights in LA/Helsinki), and
+  `tests/e2e/w7-timeline.spec.ts` at 390×844. Hand-rolled geometry stays
+  dependency-free; PR 3 adds pointer drag/resize on the same geometry and a
+  keyboard/tap path for every move.
+
 ## Known gaps
 
 - The step is **5 or 15 minutes**: the grid is anchored at the Unix epoch, which
@@ -94,9 +148,17 @@ checks), credited to dev-lead. Mutations for each fix turn the intended test red
   (v1 behaviour).
 - The 5-minute gap is enforced between proposed blocks and after kept blocks,
   not next to fixed commitments or anchors. By design.
+- **Propose after the morning blocks have happened lays the same picks
+  again** later in the day (3 morning + 3 afternoon blocks for 3 tasks). PR 3's
+  Replan button must call `replanFromNow`, and plain Propose should use the same
+  rule when focus blocks already exist.
+- **Overlapping blocks are drawn on top of each other** (all full-width), so
+  the covered block cannot be tapped. PR 2 lets a commitment be added over a
+  focus block, so this is reachable today. **PR 3 must lay overlaps out in
+  side-by-side lanes (interval-graph colouring in `layout.ts`, unit-tested) and
+  add the conflict UI.**
 
 ## Not in this part
 
-The timeline UI, fixed-commitment CRUD, applying a proposal, drag/resize,
-conflict UI, replan UI, week view (PRs 2–3), calendar-fed blocks (W8 part 2),
-notifications.
+Drag/resize (PR 3), conflict and replan UI (PR 3), week view, calendar-fed
+blocks (W8 part 2), notifications.

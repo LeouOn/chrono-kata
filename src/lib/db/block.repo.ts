@@ -11,6 +11,16 @@ export interface BlockRepository {
   create(input: BlockInput): Promise<Block>;
   update(id: string, patch: Partial<BlockInput>): Promise<Block>;
   delete(id: string): Promise<void>;
+  /**
+   * Replace the not-yet-started focus blocks inside a waking window with a
+   * proposed layout, atomically. Blocks whose start is at or before `now`
+   * already happened and are kept, so a replan never rewrites history.
+   */
+  replaceFutureFocus(
+    window: { start: Date; end: Date },
+    now: Date,
+    blocks: readonly { taskId: string; start: number; end: number }[],
+  ): Promise<void>;
 }
 
 export class DexieBlockRepository implements BlockRepository {
@@ -68,6 +78,37 @@ export class DexieBlockRepository implements BlockRepository {
 
   async delete(id: string): Promise<void> {
     await getDb().blocks.delete(id);
+  }
+
+  async replaceFutureFocus(
+    window: { start: Date; end: Date },
+    now: Date,
+    blocks: readonly { taskId: string; start: number; end: number }[],
+  ): Promise<void> {
+    const db = getDb();
+    await db.transaction('rw', db.blocks, async () => {
+      const candidates = await db.blocks.where('start').below(window.end).toArray();
+      for (const block of candidates) {
+        if (block.kind !== 'focus') continue;
+        if (block.end <= window.start) continue;
+        if (block.start.getTime() <= now.getTime()) continue;
+        await db.blocks.delete(block.id);
+      }
+      const timestamp = new Date();
+      for (const proposed of blocks) {
+        const block: Block = BlockSchema.parse({
+          id: newId(),
+          start: new Date(proposed.start),
+          end: new Date(proposed.end),
+          kind: 'focus',
+          title: 'Focus',
+          taskId: proposed.taskId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+        await db.blocks.add(block);
+      }
+    });
   }
 }
 

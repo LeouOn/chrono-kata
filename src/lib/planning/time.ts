@@ -151,3 +151,42 @@ export function wakingWindow(
   const end = localWallClockToEpoch(endDay, wakingHours.end);
   return { start, end };
 }
+
+/**
+ * The first instant at or after `windowStart` (or strictly after it) whose
+ * local wall clock equals `clock`. This is what the block sheet needs on an
+ * overnight window: in a 20:00-02:00 day the clock 00:30 belongs to the NEXT
+ * calendar date, and 23:00-01:00 must end after it starts. Tries up to three
+ * local dates, so DST transitions and skipped wall clocks stay truthful.
+ */
+export function clockAtOrAfter(windowStart: number, clock: string, strictAfter = false): number {
+  const { dayKey } = epochToLocalClock(windowStart);
+  for (let offset = 0; offset < 4; offset += 1) {
+    const candidate = localWallClockToEpoch(addDays(dayKey, offset), clock);
+    if (strictAfter ? candidate > windowStart : candidate >= windowStart) return candidate;
+  }
+  return localWallClockToEpoch(addDays(dayKey, 4), clock);
+}
+
+/**
+ * Map a wall clock to an instant for a waking window. A clock inside the
+ * window's local span resolves to the next occurrence at/after the window start
+ * (so 00:30 in a 20:00-02:00 day is after midnight). A clock OUTSIDE the span
+ * stays on the window start's own local date: "Commute 07:30" added to a
+ * 09:00-17:00 day is today 07:30, not tomorrow.
+ */
+export function clockInWakingWindow(
+  windowStart: number,
+  windowEnd: number,
+  clock: string,
+  strictAfter = false,
+): number {
+  const { dayKey, clock: startClock } = epochToLocalClock(windowStart);
+  const endClock = epochToLocalClock(windowEnd).clock;
+  const crossesMidnight = endClock <= startClock;
+  const inside = crossesMidnight
+    ? clock >= startClock || clock <= endClock
+    : clock >= startClock && clock <= endClock;
+  if (inside) return clockAtOrAfter(windowStart, clock, strictAfter);
+  return localWallClockToEpoch(dayKey, clock);
+}
